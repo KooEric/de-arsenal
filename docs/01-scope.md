@@ -37,7 +37,7 @@
 **포함 (arsenal-core):**
 - 파이프라인 YAML 스펙 로더 (Pydantic 스키마 검증, 명확한 에러 메시지)
 - 결정적 Unit ID: `unit_id = sha256("{pipeline}:{source}:{unit_key}")[:16]`
-- StateStore: SQLite(WAL) 기반 unit 상태 기록 — pending/running/done/failed/quarantined
+- StateStore: SQLite(WAL) 기반 unit 상태 기록 — pending/running/done/failed/quarantined + 단위 지표(행 수·바이트·소요 시간) 기록 ([07-cost-efficiency.md](07-cost-efficiency.md) 비용 가시성의 원료 — 나중에 소급 불가하므로 P0부터)
 - 에러 분류 체계: `RetryableError` / `AuthExpiredError` / `FatalError`
 - backoff 재시도 래퍼 (retryable만 재시도)
 
@@ -94,9 +94,9 @@
 | 도구 | 항목 |
 |---|---|
 | Pugio | 스키마 드리프트 감지 + 정책(통과·경고·차단) |
-| Gladius | SQL 탈출구(steps 안 `sql:` step), Python 탈출구(UDF) |
+| Gladius | SQL 탈출구(steps 안 `sql:` step), Python 탈출구(UDF), **증분 변환**(`incremental: by_unit/by_key` — 신규분만 재계산, [07](07-cost-efficiency.md) 참조), **쿼리 모드**(`gladius query "SELECT ..."` — Parquet 레이크 즉석 쿼리, 미니 DWH) |
 | Spatha | 독립 패키지 분리: 데이터 준비 신호 기반 의존성 DAG, 우선순위 큐·실행 윈도우 |
-| Scorpio | 신규: lineage 자동 기록, freshness·지연 메트릭, 알림 |
+| Scorpio | 신규: lineage 자동 기록, freshness·지연 메트릭, 알림, `--cost` 요약(P0에 기록한 단위 지표 노출) |
 | Onager | 신규: 백필 격리 실행, Small File compaction(후보 자동 선정·dry_run·안전장치) |
 | Scutum | 독립 패키지 분리: data contract, lock 충돌 retry/backoff 흡수 |
 | Ballista | 처리 한계선 문서화 지속 갱신 |
@@ -105,9 +105,11 @@
 
 - Hasta: 폴링 마이크로배치 스트리밍, CDC 1급 시민화
 - Pilum: reverse ETL(sink의 외부 끝점 일반화), 디스패치 재시도+DLQ
-- Scorpio: 비용 추적
+- Scorpio: 비용 추적(단위 지표 × 단가 환산, 무거운 파이프라인 랭킹)
 - Ballista: Executor 인터페이스로 분산 백엔드 교체(로컬→Spark/Flink), 사용자 YAML 불변
 - Onager: 스키마 마이그레이션(버전 관리된 변환)
+- **Aquila(신규 제안, 카탈로그·거버넌스)**: Unity Catalog의 미니 대응. 파일 기반(SQLite) 경량 카탈로그 — 데이터셋 등록·검색, 스키마 버전 레지스트리, Scorpio가 수집한 lineage와 Scutum data contract의 저장·조회 계층. 서버 없이 저장소 파일 하나로 시작
+- 오픈 테이블 포맷 sink: Iceberg(우선)·Delta Lake — plain Parquet에서 자연 상향 경로, DuckDB 확장 활용. 락인 없는 lakehouse 완성
 
 ## Out of Scope (명시적 제외)
 
@@ -116,3 +118,6 @@
 - **자체 실행 엔진** — 벡터화·분산 엔진을 직접 만들지 않는다 (설계 원칙 1)
 - **스케줄러 데몬** — P0의 스케줄링은 외부 cron/CI에 위임. Spatha P1에서 신호 기반 트리거 도입
 - **클라우드 매니지드 서비스** — OSS 도구 완성이 먼저
+- **트랜잭션 DB (Lakebase 대응)** — OLTP는 만들지 않는다. 기존 Postgres 등은 Pugio의 source/sink로 연결만
+- **AI/모델 거버넌스 (Unity AI Gateway 대응)** — 데이터 도구에 집중. AI 자산 카탈로그는 범위 밖
+- **BI/시각화 레이어** — 쿼리 모드(P1)까지가 경계. 대시보드는 기존 도구(Metabase 등)가 Parquet/DuckDB를 직접 읽게 한다

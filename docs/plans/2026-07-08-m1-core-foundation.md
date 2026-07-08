@@ -350,6 +350,16 @@ def test_mark_failed_records_error_and_attempts(tmp_path: Path) -> None:
     assert rec.status == "failed"
     assert rec.attempts == 2
     assert rec.last_error == "boom again"
+
+
+def test_mark_done_records_unit_metrics(tmp_path: Path) -> None:
+    """단위 지표는 비용 가시성의 원료 — P0부터 기록한다 (docs/07 참조)."""
+    store = StateStore(tmp_path / "state.db")
+    u = make_unit("offset=0")
+    store.register(u)
+    store.mark_done(u.unit_id, row_count=100, byte_count=2048, duration_ms=350)
+    m = store.metrics(u.unit_id)
+    assert (m.row_count, m.byte_count, m.duration_ms) == (100, 2048, 350)
 ```
 
 - [ ] **Step 2: 실패 확인** — Run: `uv run pytest packages/arsenal-core/tests/test_state_store.py -v` / Expected: FAIL
@@ -358,9 +368,9 @@ def test_mark_failed_records_error_and_attempts(tmp_path: Path) -> None:
 
 `state/__init__.py`:
 ```python
-from arsenal_core.state.store import StateStore, UnitRecord, UnitSpec
+from arsenal_core.state.store import StateStore, UnitMetrics, UnitRecord, UnitSpec
 
-__all__ = ["StateStore", "UnitRecord", "UnitSpec"]
+__all__ = ["StateStore", "UnitMetrics", "UnitRecord", "UnitSpec"]
 ```
 
 `state/store.py`:
@@ -385,6 +395,9 @@ CREATE TABLE IF NOT EXISTS units (
     status     TEXT NOT NULL,
     attempts   INTEGER NOT NULL DEFAULT 0,
     last_error TEXT,
+    row_count   INTEGER,
+    byte_count  INTEGER,
+    duration_ms INTEGER,
     created_at TEXT NOT NULL,
     updated_at TEXT NOT NULL
 );
@@ -428,6 +441,13 @@ class UnitRecord:
     last_error: str | None
 
 
+@dataclass(frozen=True)
+class UnitMetrics:
+    row_count: int | None
+    byte_count: int | None
+    duration_ms: int | None
+
+
 class StateStore:
     def __init__(self, db_path: Path) -> None:
         db_path.parent.mkdir(parents=True, exist_ok=True)
@@ -456,11 +476,31 @@ class StateStore:
     def mark_running(self, uid: str) -> None:
         self._set_status(uid, "running")
 
-    def mark_done(self, uid: str) -> None:
-        self._set_status(uid, "done")
+    def mark_done(
+        self,
+        uid: str,
+        *,
+        row_count: int | None = None,
+        byte_count: int | None = None,
+        duration_ms: int | None = None,
+    ) -> None:
+        self._conn.execute(
+            "UPDATE units SET status='done', row_count=?, byte_count=?, duration_ms=?, "
+            "updated_at=? WHERE unit_id=?",
+            (row_count, byte_count, duration_ms, _now(), uid),
+        )
+        self._conn.commit()
 
     def mark_failed(self, uid: str, error: str) -> None:
         self._set_status(uid, "failed", error)
+
+    def metrics(self, uid: str) -> UnitMetrics:
+        row = self._conn.execute(
+            "SELECT row_count, byte_count, duration_ms FROM units WHERE unit_id=?", (uid,)
+        ).fetchone()
+        if row is None:
+            raise KeyError(uid)
+        return UnitMetrics(*row)
 
     def status(self, uid: str) -> str | None:
         row = self._conn.execute("SELECT status FROM units WHERE unit_id=?", (uid,)).fetchone()
@@ -487,8 +527,8 @@ class StateStore:
         self._conn.close()
 ```
 
-- [ ] **Step 4: 통과 확인** — Expected: 4 PASS
-- [ ] **Step 5: Commit** — `git commit -am "feat: sqlite wal state store with idempotent registration"`
+- [ ] **Step 4: 통과 확인** — Expected: 5 PASS
+- [ ] **Step 5: Commit** — `git commit -am "feat: sqlite wal state store with idempotent registration and unit metrics"`
 
 ---
 
@@ -1122,6 +1162,7 @@ def test_crash_and_resume_no_dup_no_loss(tmp_path: Path) -> None:
 """수집 루프. 사용자가 보는 것은 선언뿐 — 재시도·체크포인트·재개는 여기가 흡수한다."""
 
 import functools
+import time
 from collections.abc import Callable
 from dataclasses import dataclass
 
@@ -1159,6 +1200,7 @@ def run_pipeline(
                 skipped += 1
                 continue
             store.mark_running(unit.unit_id)
+            started = time.monotonic()
             try:
                 result = with_retry(
                     functools.partial(source.fetch, unit), max_attempts=max_attempts
@@ -1170,7 +1212,12 @@ def run_pipeline(
             if result.batch is not None:
                 sink.write(unit, result.batch)  # 멱등 쓰기 먼저,
                 written += 1
-            store.mark_done(unit.unit_id)  # done 마킹은 그 다음 (핵심 불변식)
+            store.mark_done(  # done 마킹은 그 다음 (핵심 불변식)
+                unit.unit_id,
+                row_count=result.batch.num_rows if result.batch is not None else 0,
+                byte_count=result.batch.nbytes if result.batch is not None else 0,
+                duration_ms=int((time.monotonic() - started) * 1000),
+            )
             done_count += 1
             if on_unit_complete is not None:
                 on_unit_complete(done_count)

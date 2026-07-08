@@ -24,6 +24,29 @@
 - **vs Airflow/Dagster (오케스트레이션)**: DAG 코드 없음. 데이터 준비 신호 기반 선언형 의존성. 멱등 재실행이 정상 동작.
 - **vs Great Expectations (품질)**: 별도 프레임워크가 아니라 적재 직전 검증 게이트로 파이프라인에 내장.
 
+## Databricks 미니 버전으로서의 대응 관계
+
+DE Arsenal은 Databricks 데이터 제품군의 **저비용 고효율 미니 버전**을 지향한다. 그들의 기능 목록을 따라가는 게 아니라, 각 제품이 푸는 **문제**에 구조적으로 싼 해법을 대응시킨다. 비용 구조 비교는 [07-cost-efficiency.md](07-cost-efficiency.md) 참조.
+
+| Databricks | 푸는 문제 | Arsenal 대응 | 시기 |
+|---|---|---|---|
+| Lakeflow Connect (100+ 커넥터) | 수집 | **Pugio** — 커넥터 수 대신 신뢰성 코어 + 낮은 커넥터 추가 비용 | P0 |
+| Spark Declarative Pipelines | 선언형 변환 | **Gladius** — map/steps→SQL, DuckDB 벡터화 | P0 |
+| Lakeflow Jobs | 오케스트레이션 | **Spatha** — 신호 기반 의존성, 멱등 재실행 | P0~P1 |
+| DLT Expectations | 품질 게이트 | **Scutum** — 적재 직전 검증·DLQ·data contract | P0~P1 |
+| Lakehouse 모니터링 / lineage | 관측성 | **Scorpio** — lineage·freshness·단위 비용 지표 | P1 |
+| Predictive Optimization (OPTIMIZE/VACUUM) | 스토리지 유지보수 | **Onager** — 후보 자동 선정 compaction, 백필 격리 | P1 |
+| Databricks SQL (DWH) | 쿼리·서빙 | **Gladius 쿼리 모드** — Parquet 레이크에 DuckDB 즉석 쿼리(미니 DWH) | P1 |
+| Zerobus / Real-Time Mode | 스트리밍 | **Hasta** — 폴링 마이크로배치부터 정직하게 | P2 |
+| (파트너 영역: Census/Hightouch) | reverse ETL | **Pilum** | P2 |
+| 대규모 Spark 클러스터 | 분산 처리 | **Ballista** — Executor 백엔드 교체, 선언 불변 | P2 |
+| Unity Catalog | 카탈로그·거버넌스 | **Aquila(신규 제안)** — 파일 기반 경량 카탈로그. Scorpio(lineage)·Scutum(contract)의 저장소를 묶는다 | P2 |
+| LTAP 단일 스토리지 복사본 | 복사본 난립 방지 | **Arrow/Parquet 허브** — 모든 도구가 같은 파일을 읽는다. 도구 간 데이터 복사 없음 | P0 (구조) |
+| Lakebase (서버리스 Postgres) | 트랜잭션 DB | **의도적 제외** — OLTP는 만들지 않는다. 기존 Postgres의 sink/source로 연결만 | — |
+| Unity AI Gateway | AI 자산 거버넌스 | **의도적 제외** — 데이터 도구에 집중 | — |
+
+미니 버전의 원칙: **그들의 기능 하나가 우리의 제품 하나와 대응할 필요는 없다.** 구조(오픈 포맷 단일 복사본, in-process 엔진, 선언형)가 같은 문제를 더 싸게 풀면 된다.
+
 ## 제품 철학 — 모든 판단의 기준
 
 기능을 더할 때마다 "이게 넷을 다 지키나?"를 되묻는다. 하나를 위해 나머지를 희생하지 않는다.
@@ -32,6 +55,8 @@
 2. **빠르게** — 벌크·벡터화·병렬. 작다고 느리지 않다.
 3. **정확하게** — 멱등·재개·검증이 기본값. 끊겨도 중복·누락 없음.
 4. **누구나 쉽게** — 선언형(YAML + 가끔 SQL). 분석가도 바로 쓴다.
+
+이 네 가지를 비용 언어로 번역하면 그대로 **저비용 고효율**이 된다: 가볍게=인프라 비용 0에서 시작, 빠르게=컴퓨트 시간 최소, 정확하게=재작업(재수집·재처리) 낭비 제거, 쉽게=엔지니어 병목 비용 제거. 비용은 부가 기능이 아니라 이 철학의 구조적 결과다 — 상세는 [07-cost-efficiency.md](07-cost-efficiency.md).
 
 ## 설계 원칙 (전 무기 공통)
 

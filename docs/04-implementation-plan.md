@@ -31,7 +31,7 @@
 |---|---|---|---|
 | 1.1 | 에러 분류 체계 | core | `errors.py`: `FatalError`/`RetryableError`/`AuthExpiredError` |
 | 1.2 | 결정적 Unit ID | core | `identity.py`: `unit_id(pipeline, source, unit_key)` — hypothesis 속성 테스트 포함 |
-| 1.3 | StateStore | core | `state/store.py`: SQLite WAL, upsert/claim/mark_done/mark_failed/pending 조회 |
+| 1.3 | StateStore | core | `state/store.py`: SQLite WAL, upsert/claim/mark_done/mark_failed/pending 조회 + 단위 지표(row_count/byte_count/duration_ms) 기록 |
 | 1.4 | YAML 스펙 로더 | core | `spec/`: Pydantic 모델(P0 필드), env 치환(`${VAR}`), 친절한 검증 에러 |
 | 1.5 | 재시도 래퍼 | core | `retry.py`: tenacity 기반, RetryableError만 재시도 |
 | 1.6 | Source 프로토콜 + REST(offset) | pugio | `sources/base.py`, `sources/rest.py`: plan()이 offset unit 열거, fetch()가 RecordBatch 반환, HTTP 상태→예외 매핑 |

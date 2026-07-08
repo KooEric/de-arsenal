@@ -17,6 +17,9 @@ Databricks·Snowflake 수준의 **완성도**를, 그들과 정반대의 **형�
 | **Hasta** | 스트리밍·CDC | P2 | 📋 계획 |
 | **Pilum** | 디스패치·reverse ETL | P2 | 📋 계획 |
 | **Ballista** | 대규모 분산 처리 | P2 | 📋 계획 |
+| **Aquila** | 카탈로그·거버넌스 (군단기 — 자산의 기준점) | P2 | 💡 제안 |
+
+> Databricks 제품군의 저비용 고효율 미니 버전을 지향한다 — 대응표는 [docs/00-overview.md](docs/00-overview.md), 비용 구조는 [docs/07-cost-efficiency.md](docs/07-cost-efficiency.md).
 
 ## 제품 철학
 
@@ -38,6 +41,7 @@ Databricks·Snowflake 수준의 **완성도**를, 그들과 정반대의 **형�
 | [docs/04-implementation-plan.md](docs/04-implementation-plan.md) | 마일스톤별 작업 분해(WBS)와 완료 기준 |
 | [docs/05-testing-plan.md](docs/05-testing-plan.md) | 테스트 전략 — 단위/통합/E2E, 신뢰성 시나리오 |
 | [docs/06-conventions.md](docs/06-conventions.md) | 코딩·커밋·브랜치·PR·CI 컨벤션 |
+| [docs/07-cost-efficiency.md](docs/07-cost-efficiency.md) | 저비용 고효율 설계 — 비용 구조, 증분 처리, 효율 목표치 |
 | [docs/plans/](docs/plans/) | 마일스톤별 상세 TDD 구현 계획 |
 | [docs/roadmap.md](docs/roadmap.md) | 원본 로드맵 (문제 정의 전체) |
 
