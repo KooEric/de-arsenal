@@ -12,7 +12,7 @@
 |---|---|---|---|---|
 | **M0** | 부트스트랩 | 모노레포·CI·품질 도구 | 빈 패키지 3개 + 초록 CI | 2~3일 |
 | **M1** | 신뢰성 코어 + 수집 수직 슬라이스 | StateStore, 결정적 ID, 에러 분류, REST→Parquet 재개 수집 | `pugio run`으로 끊겨도 재개되는 수집 데모 | 2주 |
-| **M2** | Pugio P0 완성 | 페이지네이션 전 모드, 인증 갱신, rate limit, 인코딩, **파일 소스(csv/jsonl/excel)**, DB sink 멱등, 검증 게이트, DLQ | 실전 투입 가능한 Pugio v0.1 | 3주 |
+| **M2** | Pugio P0 완성 | 페이지네이션 4종, 인증 갱신, rate limit, 인코딩, **파일·DB 소스, Python 탈출구**, DB sink 멱등, 검증 게이트, DLQ, 실전 API 5종 검증 | 실전 투입 가능한 Pugio v0.1 | 3.5주 |
 | **M3** | Gladius P0 | map/steps→SQL 트랜스파일러, DuckDB 실행, **즉석 쿼리(`gladius query`)** | `gladius run`으로 선언형 변환 + 미니 DWH | 2주 |
 | **M4** | 통합·릴리스 | **`arsenal` 우산 CLI + 원클릭 레시피 3종**, 연계 예제, 문서, 벤치마크, v0.1 태그 | "10분의 마법"이 성립하는 v0.1 | 1.5주 |
 
@@ -54,8 +54,11 @@
 로드맵 대응: Pugio 문제 1(인증 만료)·문제 3(페이지네이션·인코딩·rate limit), Scutum 문제 1(검증 게이트)·문제 3(DB 멱등 전략).
 
 **포함:**
-- 페이지네이션: `mode: offset | page | cursor` 3종
+- 페이지네이션: `mode: offset | page | cursor | link` 4종 (link = RFC 5988 `Link` 헤더 — GitHub/Shopify/GitLab의 표준 방식)
 - **FileSource: 로컬 파일 수집(csv/jsonl/excel → Arrow)** — 파일 하나=unit 하나(멱등 공짜). 분석가의 1번 고통("CSV 뭉치를 쿼리 가능하게")의 입구
+- **DatabaseSource: 운영 DB → 웨어하우스 동기화** — DE의 1번 수집 작업. DuckDB scanner 차용([09](09-oss-leverage.md) 수 1), 키 범위 분할 = unit
+- **Python 커스텀 소스 탈출구** (`type: python`) — YAML로 표현 안 되는 API를 만나도 절벽이 없다. P1 dlt 래퍼의 기반 메커니즘
+- **실전 API 5종 스펙 검증** — GitHub(Link 헤더)·Stripe(cursor)·공공데이터포털(euc-kr+page)·Notion(rate limit) 등을 실제 YAML로 작성, 표현 불가 지점을 스펙에 역반영
 - `encoding` 필드 (euc-kr 등 비UTF-8 소스)
 - 토큰 버킷 rate limiter (`rate_limit.rps`, 429 응답 시 적응적 감속)
 - Auth Refresh Hook: 401/만료 → `AuthExpiredError` → 갱신 콜백 → 그 unit부터 재개
@@ -65,7 +68,7 @@
 - DLQ: 격리 unit 보관(`pugio dlq list/retry`)
 - 스키마 스냅샷 기록 (드리프트 **감지·정책은 P1**, 기록만 P0)
 
-**완료 기준(DoD):** 3종 페이지네이션 + 토큰 만료 시나리오 + 검증 위반 격리가 통합 테스트로 커버. 실제 공개 API(GitHub) 대상 E2E 1개.
+**완료 기준(DoD):** 4종 페이지네이션 + 토큰 만료 시나리오 + 검증 위반 격리가 통합 테스트로 커버. 실전 API 5종이 YAML로 표현됨(불가 지점은 탈출구 판정 기록). 실제 공개 API(GitHub) 대상 E2E 1개.
 
 ### M3 — Gladius P0
 
@@ -98,7 +101,8 @@
 
 | 도구 | 항목 |
 |---|---|
-| Pugio | 스키마 드리프트 감지 + 정책(통과·경고·차단) |
+| Pugio | 스키마 드리프트 감지 + 정책(통과·경고·차단), **dlt 소스 래퍼**(`type: dlt` — 검증된 커넥터 수백 개 흡수, [09](09-oss-leverage.md) 수 2), **S3/GCS sink**(DuckDB httpfs 차용) |
+| Arsenal | **dbt 인터롭** — `arsenal.yaml`의 `- dbt: ./project` 실행 단계(dbt-duckdb 차용, [09](09-oss-leverage.md) 수 3) |
 | Gladius | SQL 탈출구(steps 안 `sql:` step), Python 탈출구(UDF), **증분 변환**(`incremental: by_unit/by_key` — 신규분만 재계산, [07](07-cost-efficiency.md) 참조) — 쿼리 모드는 M3로 앞당겨짐 |
 | Spatha | 독립 패키지 분리: 데이터 준비 신호 기반 의존성 DAG, 우선순위 큐·실행 윈도우 |
 | Scorpio | 신규: lineage 자동 기록, freshness·지연 메트릭, 알림, `--cost` 요약(P0에 기록한 단위 지표 노출) |

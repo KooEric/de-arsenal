@@ -47,6 +47,29 @@ class FileSourceSpec(_Frozen):
     encoding: str = "utf-8"
 
 
+class SplitSpec(_Frozen):
+    key: str  # 단조 증가 키 (PK/serial/타임스탬프)
+    chunk: int = 100_000
+
+
+class DatabaseSourceSpec(_Frozen):
+    """운영 DB 소스 — DuckDB scanner 차용 (M2 Task 2.12, docs/09 수 1)."""
+
+    type: Literal["database"]
+    dialect: Literal["postgres", "mysql", "sqlite"]
+    dsn_env: str  # DSN은 환경변수로만 (비밀 원칙)
+    table: str
+    split: SplitSpec
+
+
+class PythonSourceSpec(_Frozen):
+    """커스텀 Python 소스 탈출구 (M2 Task 2.13). P1 dlt 래퍼의 기반 메커니즘."""
+
+    type: Literal["python"]
+    target: str  # "pkg.module:ClassName" — Source 프로토콜 구현체
+    options: dict[str, str] = {}  # 생성자 첫 인자 (M2에서 Any 값 허용으로 확장)
+
+
 class SinkSpec(_Frozen):
     type: Literal["parquet"]  # M2: "duckdb", "postgres" 추가 (temp→MERGE 멱등)
     path: Path

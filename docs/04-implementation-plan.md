@@ -9,6 +9,8 @@
 
 - **TDD 필수**: 실패 테스트 → 최소 구현 → 통과 → 리팩터 → 커밋. 커버리지 80%+.
 - **수직 슬라이스 우선**: 패키지를 완성하고 넘어가는 게 아니라, 매 마일스톤 끝에 실행 가능한 데모가 나온다.
+- **도그푸딩 게이트**: M1 완료 직후, 자신의 실제 반복 데이터 작업 1개를 pugio로 이관해 매주 실행한다. M2~M3의 우선순위 조정은 이 실사용의 고통에서 나온다. "우리가 안 쓰는 도구는 남도 안 쓴다" ([09](09-oss-leverage.md) 쓸만함 판정 기준).
+- **빌드-vs-차용**: 새 기능은 [09-oss-leverage.md](09-oss-leverage.md) 차용 지도를 먼저 확인 — 지도에 없는 직접 구현은 그 문서를 반박한 뒤에만.
 - **작은 커밋**: 태스크당 1~3 커밋. conventional commit(`feat:`, `fix:`, `test:`, `chore:`).
 - **브랜치**: `feat/m1-state-store`처럼 마일스톤-태스크 단위. main은 항상 초록.
 
@@ -47,7 +49,7 @@
 
 | # | 태스크 | 내용 |
 |---|---|---|
-| 2.1 | 페이지네이션 확장 | `mode: page`(파라미터 이름 변형), `mode: cursor`(응답에서 다음 커서 추출 — JSONPath 계열 표현식, cursors 테이블 연동) |
+| 2.1 | 페이지네이션 확장 | `mode: page`, `mode: cursor`(응답에서 다음 커서 추출, cursors 테이블 연동), `mode: link`(RFC 5988 Link 헤더 — cursor 메커니즘 재사용) |
 | 2.2 | 인코딩 | `encoding` 필드 — euc-kr 응답 디코딩, 테스트 픽스처 포함 |
 | 2.3 | Rate limiter | 토큰 버킷(`rps`), 429 수신 시 `Retry-After` 존중 + 적응 감속 |
 | 2.4 | Auth 계층 | `AuthProvider` 프로토콜: static token / oauth2 client credentials(만료 전 선제 갱신) / 401→`AuthExpiredError`→refresh→동일 unit 재시도 |
@@ -57,7 +59,10 @@
 | 2.8 | DLQ | quarantined unit 저장(`.arsenal/dlq/` parquet + 사유), `pugio dlq list/retry` |
 | 2.9 | 스키마 스냅샷 | 수집 시 Arrow 스키마를 schema_snapshots에 기록 (감지·정책은 P1) |
 | 2.10 | FileSource | 로컬 파일 소스(csv/jsonl/excel → Arrow) — 파일 하나=unit 하나, 글롭 열거 |
-| 2.11 | 실 API E2E | GitHub API 대상 스모크 (CI에선 opt-in) |
+| 2.11 | DatabaseSource | 운영 DB 동기화 — DuckDB scanner 차용, 키 범위 분할=unit ([09](09-oss-leverage.md) 수 1) |
+| 2.12 | Python 탈출구 | `type: python` — Source 프로토콜 구현체를 동적 로드. 절벽 제거 |
+| 2.13 | 실전 API 5종 검증 | GitHub·Stripe·공공데이터포털·Notion 등을 실제 YAML로 — 표현 불가 지점을 스펙에 역반영 |
+| 2.14 | 실 API E2E | GitHub API 대상 스모크 (CI에선 opt-in) |
 
 **DoD**: 시나리오 B(재개)·C(토큰 갱신) + 검증 격리가 통합 테스트로 자동 검증.
 

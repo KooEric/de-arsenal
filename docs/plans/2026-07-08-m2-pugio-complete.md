@@ -58,7 +58,7 @@ def test_validate_rule_shape() -> None:
 
 ```python
 class PaginationSpec(_Frozen):
-    mode: Literal["offset", "page", "cursor"]
+    mode: Literal["offset", "page", "cursor", "link"]  # link = RFC 5988 Link 헤더
     # offset/page 공용
     param: str = "offset"           # page 모드에선 페이지 번호 파라미터명
     size_param: str = "limit"
@@ -260,7 +260,19 @@ def test_cursor_mode_follows_next_and_resumes() -> None:
 
 - [ ] **Step 6: 러너 구현** — cursor 모드일 때: `initial = store.get_cursor(...)`로 소스 생성, `mark_done` 후 `store.set_cursor(pipeline, url, result.next_cursor)` (None이면 미갱신).
 
-- [ ] **Step 7: 커밋** — `git commit -m "feat: cursor pagination with persistent resume"`
+- [ ] **Step 7: link 모드 — cursor 메커니즘 재사용** — GitHub·Shopify·GitLab의 표준(RFC 5988). "커서 값 = 다음 페이지 전체 URL"인 cursor 모드로 취급한다. 차이는 추출 위치뿐: 응답 본문(`cursor_path`)이 아니라 `Link` 헤더의 `rel="next"`.
+
+```python
+_LINK_NEXT = re.compile(r'<([^>]+)>\s*;\s*rel="next"')
+
+def _next_from_link_header(resp: httpx.Response) -> str | None:
+    m = _LINK_NEXT.search(resp.headers.get("link", ""))
+    return m.group(1) if m else None
+```
+
+fetch()는 link 모드에서 unit.payload["cursor"]가 있으면 그 URL로 직접 GET(파라미터 재구성 없음). 테스트: GitHub 스타일 Link 헤더 3페이지 목 + 재개 검증.
+
+- [ ] **Step 8: 커밋** — `git commit -m "feat: cursor and link pagination with persistent resume"`
 
 ---
 
@@ -731,7 +743,174 @@ excel은 `fastexcel` 미설치 시 `FatalError("install pugio[excel]")` — 의�
 
 ---
 
-### Task 2.12: 실 API E2E (opt-in) + M2 마무리
+### Task 2.12: DatabaseSource — 운영 DB → 웨어하우스 동기화
+
+DE의 1번 수집 작업. **커넥터를 만들지 않는다** — DuckDB scanner(ATTACH)가 드라이버·타입 매핑·전송을 전부 담당하고([09](../09-oss-leverage.md) 수 1), 우리는 키 범위 unit 분할과 상태만 얹는다.
+
+**Files:**
+- Create: `packages/pugio/src/pugio/sources/database.py` (스켈레톤 있음)
+- Modify: `packages/arsenal-core/src/arsenal_core/spec/models.py` (DatabaseSourceSpec — 스켈레톤 있음)
+- Modify: `packages/pugio/pyproject.toml` — dependencies에 `duckdb>=1.0` 추가
+- Test: `packages/pugio/tests/test_database_source.py`
+
+- [ ] **Step 1: 테스트** — SQLite dialect로 빠르게 (PG는 testcontainers 1케이스):
+
+```python
+def test_units_are_key_ranges(tmp_path: Path) -> None:
+    db = tmp_path / "src.db"
+    con = sqlite3.connect(db)
+    con.execute("CREATE TABLE orders (id INTEGER PRIMARY KEY, v TEXT)")
+    con.executemany("INSERT INTO orders VALUES (?, ?)", [(i, "x") for i in range(1, 251)])
+    con.commit()
+    spec = DatabaseSourceSpec(type="database", dialect="sqlite", dsn_env="SRC_DB",
+                              table="orders", split=SplitSpec(key="id", chunk=100))
+    src = DatabaseSource(spec, pipeline="p")           # dsn은 env에서
+    units = list(src.units())
+    assert [u.unit_key for u in units] == ["id=1..101", "id=101..201", "id=201..301"]
+
+
+def test_fetch_range_returns_arrow(tmp_path: Path) -> None:
+    ...  # 첫 unit fetch → 100행, batch.num_rows == 100
+
+
+def test_rerun_with_grown_table_only_adds_new_ranges(tmp_path: Path) -> None:
+    ...  # 300행 추가 후 재실행 → 기존 done 범위는 skip, 새 범위만 unit 추가
+```
+
+- [ ] **Step 2: 스펙**
+
+```python
+class SplitSpec(_Frozen):
+    key: str            # 단조 증가 키 (PK/serial/타임스탬프)
+    chunk: int = 100_000
+
+
+class DatabaseSourceSpec(_Frozen):
+    type: Literal["database"]
+    dialect: Literal["postgres", "mysql", "sqlite"]
+    dsn_env: str        # DSN은 환경변수로만 (비밀 원칙)
+    table: str
+    split: SplitSpec
+```
+
+- [ ] **Step 3: 구현** — units(): `SELECT min(key), max(key)`로 경계 조회 후 chunk 단위 범위 생성(`unit_key = "id=lo..hi"` — 결정적). fetch():
+
+```python
+def fetch(self, unit: UnitSpec) -> FetchResult:
+    con = duckdb.connect()
+    try:
+        con.execute(f"ATTACH '{self._dsn}' AS src (TYPE {self._spec.dialect.upper()}, READ_ONLY)")
+        lo, hi = unit.payload["lo"], unit.payload["hi"]
+        table = con.execute(
+            f"SELECT * FROM src.{_qi(self._spec.table)} "
+            f"WHERE {_qi(self._spec.split.key)} >= ? AND {_qi(self._spec.split.key)} < ?",
+            [lo, hi],
+        ).arrow()
+    except duckdb.Error as e:
+        raise RetryableError(f"database fetch failed: {e}") from e
+    finally:
+        con.close()
+    batches = table.to_batches()
+    return FetchResult(batch=batches[0] if batches else None, exhausted=False)
+```
+
+주의: 마지막 범위 이후 **새로 늘어난 행**은 재실행 시 max(key) 재조회로 새 unit이 생긴다 — 증분 동기화가 구조에서 공짜로 나온다. UPDATE된 기존 행은 P0 범위 밖(스냅샷 의미론) — 한계선 문서에 명시.
+
+- [ ] **Step 4: 커밋** — `git commit -m "feat: database source via duckdb scanner with key-range units"`
+
+---
+
+### Task 2.13: Python 커스텀 소스 탈출구
+
+YAML로 표현 안 되는 API를 만나도 절벽이 없다. Source 프로토콜 구현체를 동적 로드 — P1 dlt 래퍼도 이 메커니즘 위에 선다.
+
+**Files:**
+- Create: `packages/pugio/src/pugio/sources/python_source.py` (스켈레톤 있음)
+- Modify: `packages/arsenal-core/src/arsenal_core/spec/models.py` (PythonSourceSpec — 스켈레톤 있음)
+- Test: `packages/pugio/tests/test_python_source.py`
+
+- [ ] **Step 1: 테스트**
+
+```python
+def test_loads_user_source_and_runs(tmp_path: Path, monkeypatch) -> None:
+    (tmp_path / "my_source.py").write_text(textwrap.dedent("""
+        import pyarrow as pa
+        from arsenal_core.state import UnitSpec
+        from pugio.sources.base import FetchResult
+
+        class MySource:
+            def __init__(self, options, *, pipeline): self._p = pipeline
+            def units(self):
+                yield UnitSpec.create(pipeline=self._p, source="my", unit_key="only", payload={})
+            def fetch(self, unit):
+                return FetchResult(pa.RecordBatch.from_pylist([{"id": 1}]), exhausted=True)
+    """))
+    monkeypatch.syspath_prepend(tmp_path)
+    src = load_python_source(
+        PythonSourceSpec(type="python", target="my_source:MySource"), pipeline="p"
+    )
+    assert next(iter(src.units())).unit_key == "only"
+
+
+def test_missing_protocol_method_is_fatal() -> None:
+    ...  # fetch 없는 클래스 → FatalError("does not implement Source protocol: fetch")
+
+
+def test_import_error_is_fatal_with_hint() -> None:
+    ...  # 없는 모듈 → FatalError에 target 문자열과 검색 경로 포함
+```
+
+- [ ] **Step 2: 스펙 + 로더**
+
+```python
+class PythonSourceSpec(_Frozen):
+    type: Literal["python"]
+    target: str                          # "pkg.module:ClassName"
+    options: dict[str, Any] = {}         # 생성자 첫 인자로 전달
+
+
+def load_python_source(spec: PythonSourceSpec, *, pipeline: str) -> Source:
+    module_name, _, cls_name = spec.target.partition(":")
+    try:
+        cls = getattr(importlib.import_module(module_name), cls_name)
+    except (ImportError, AttributeError) as e:
+        raise FatalError(f"cannot load python source {spec.target!r}: {e}") from e
+    for method in ("units", "fetch"):
+        if not callable(getattr(cls, method, None)):
+            raise FatalError(f"{spec.target} does not implement Source protocol: {method}")
+    return cls(spec.options, pipeline=pipeline)
+```
+
+보안 명시: target은 사용자 자신의 코드다(dbt 매크로와 같은 신뢰 모델). 원격/서드파티 target을 받는 서비스화는 이 설계의 범위 밖.
+
+- [ ] **Step 3: 커밋** — `git commit -m "feat: python source escape hatch"`
+
+---
+
+### Task 2.14: 실전 API 5종 스펙 검증
+
+페이지네이션 4종이 탁상 설계인지 실전인지 여기서 판명한다. **코드가 아니라 스펙 작성 훈련** — 각 API를 실제 YAML로 작성하고, 표현 불가 지점을 스펙에 역반영한다.
+
+**Files:**
+- Create: `examples/real-world/{github,stripe,data-go-kr,notion,slack}.yaml`
+- Create: `docs/reference/api-coverage.md` (검증 결과 기록)
+
+- [ ] 대상과 검증 포인트:
+
+| API | 검증 포인트 |
+|---|---|
+| GitHub | `mode: link` (Link 헤더), 시간당 rate limit |
+| Stripe | `mode: cursor` (`starting_after`), envelope(`record_path: data`) |
+| 공공데이터포털 | euc-kr 인코딩, `mode: page`, 키 쿼리 파라미터 인증 |
+| Notion | cursor + 초당 3req rate limit, POST 검색 API(→ method 필드 필요성 판정) |
+| Slack | cursor(`next_cursor`), 429 Retry-After |
+
+- [ ] 각 YAML은 respx 목으로 계약 테스트(실 계정 불필요). 표현 불가 항목은 (a) 스펙 필드 추가 또는 (b) "Python 탈출구 사용" 판정을 `api-coverage.md`에 기록 — 숨기지 않는다.
+- [ ] Commit: `test: real-world api coverage verification`
+
+---
+
+### Task 2.15: 실 API E2E (opt-in) + M2 마무리
 
 - [ ] `tests/e2e/test_live_github.py` — `RUN_LIVE=1`일 때만: GitHub API 3페이지 수집, 중단·재개 1회. CI 기본 제외.
 - [ ] `examples/`에 cursor·duckdb sink·validate 예제 YAML 추가.
@@ -740,7 +919,11 @@ excel은 `fastexcel` 미설치 시 `FatalError("install pugio[excel]")` — 의�
 
 ## M2 DoD
 
-- [ ] 페이지네이션 3종이 각각 재개 시나리오까지 통합 테스트로 커버
+- [ ] 페이지네이션 4종(offset/page/cursor/link)이 각각 재개 시나리오까지 통합 테스트로 커버
 - [ ] 시나리오 C(토큰 만료 → 갱신 → 완주) 자동 검증
 - [ ] 모든 sink가 공통 계약 스위트(멱등·원자성) 통과
 - [ ] 검증 위반 unit이 격리돼도 파이프라인이 완주하고, DLQ 재투입이 동작
+- [ ] 실전 API 5종의 YAML 표현 검증 완료 — `docs/reference/api-coverage.md`에 결과 기록
+- [ ] DatabaseSource로 SQLite→parquet 동기화 + 증분(늘어난 행) 재실행 검증
+- [ ] Python 탈출구로 커스텀 소스 1개가 파이프라인 완주
+- [ ] **도그푸딩 개시 확인**: 실제 반복 작업 1개가 pugio로 매주 실행 중 (M1 직후 시작 — 04 진행 방식)

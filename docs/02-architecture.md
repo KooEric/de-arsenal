@@ -19,7 +19,7 @@ de-arsenal/
 │   │       └── io/             # Arrow/Parquet 허브 유틸
 │   ├── pugio/                  # 수집·전송
 │   │   └── src/pugio/
-│   │       ├── sources/        # Source 프로토콜 + rest.py, file.py
+│   │       ├── sources/        # Source 프로토콜 + rest.py, file.py, database.py, python_source.py
 │   │       ├── sinks/          # Sink 프로토콜 + parquet.py, duckdb.py, postgres.py
 │   │       ├── auth/           # AuthProvider + refresh hook
 │   │       ├── validate/       # 검증 게이트 (P1에서 Scutum으로 분리)
@@ -240,3 +240,5 @@ SELECT number, title, opened_at, "user" FROM s3                              -- 
 | 3 | 벡터화 엔진 = DuckDB | in-process·무서버, SQL 표준, 수백 GB 단일 노드 | Polars(SQL 탈출구와 이원화), 자체 엔진(원칙 1 위반) |
 | 4 | at-least-once 실행 + 멱등 쓰기 | exactly-once "전송"은 분산 환경에서 비용이 크고 깨지기 쉬움. 결과의 exactly-once만 보장 | 2PC/트랜잭셔널 아웃박스(무거움) |
 | 5 | 모노레포 + 독립 패키지 | 공통 계약의 원자적 변경 + 도구별 독립 배포 양립 | 멀티레포(계약 변경 시 N개 PR), 단일 패키지(락인) |
+| 6 | 빌드-vs-차용: 차용 우선 | 우리 소유 코드는 신뢰성 코어·UX·게이트·글루 4가지뿐. DB 소스=DuckDB scanner, 커넥터 롱테일=dlt 래핑, SQL 생태계=dbt 인터롭 — [09-oss-leverage.md](09-oss-leverage.md) | 자체 커넥터 양산(시간 낭비), 전부 자작(NIH) |
+| 7 | 탈출구는 P0부터 (`type: python`) | YAML 표현 한계에서 사용자가 절벽에 떨어지지 않게. dbt가 이긴 이유가 Jinja 탈출구였음 | 선언만 고집(실전 API 커버리지 실패 시 이탈) |
