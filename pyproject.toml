@@ -1,0 +1,46 @@
+[project]
+name = "de-arsenal-workspace"
+version = "0.0.0"
+description = "DE Arsenal workspace root (not published)"
+requires-python = ">=3.11"
+dependencies = ["arsenal-core", "pugio", "gladius"]
+
+[tool.uv.workspace]
+members = ["packages/*"]
+
+[tool.uv.sources]
+arsenal-core = { workspace = true }
+pugio = { workspace = true }
+gladius = { workspace = true }
+
+[dependency-groups]
+dev = [
+    "pytest>=8",
+    "pytest-cov>=5",
+    "respx>=0.21",
+    "hypothesis>=6",
+    "ruff>=0.6",
+    "pyright>=1.1",
+]
+
+[tool.ruff]
+line-length = 100
+target-version = "py311"
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "UP", "B", "SIM"]
+
+[tool.ruff.lint.isort]
+known-first-party = ["arsenal_core", "pugio", "gladius"]
+
+[tool.pyright]
+include = ["packages"]
+typeCheckingMode = "strict"
+
+[tool.pytest.ini_options]
+testpaths = ["packages", "tests"]
+# NOTE: 스켈레톤 단계라 커버리지 게이트 0. M1 Task 1 착수 시 80으로 올린다 (docs/05-testing-plan.md)
+addopts = "--cov=packages --cov-report=term-missing --cov-fail-under=0"
+
+[tool.coverage.run]
+omit = ["*/tests/*"]

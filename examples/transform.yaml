@@ -1,0 +1,10 @@
+# 시나리오 D — 분석가의 변환 (docs/00-overview.md)
+# 실행: gladius run examples/transform.yaml   (M3 완료 후 동작)
+name: clean-issues
+input: ./data/issues
+steps:
+  - filter: "state = 'open'"
+  - rename: { created_at: opened_at }
+  - cast: { number: bigint }
+  - select: [number, title, opened_at, user]
+output: ./data/issues_clean

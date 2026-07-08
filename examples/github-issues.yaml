@@ -1,0 +1,11 @@
+# 시나리오 A — 분석가의 첫 수집 (docs/00-overview.md)
+# 실행: pugio run examples/github-issues.yaml   (M1 완료 후 동작)
+name: github-issues
+source:
+  type: rest
+  url: https://api.github.com/repos/duckdb/duckdb/issues
+  headers: { Authorization: "Bearer ${GITHUB_TOKEN}" }
+  pagination: { mode: offset, param: page, size_param: per_page, size: 100 }
+sink:
+  type: parquet
+  path: ./data/issues
