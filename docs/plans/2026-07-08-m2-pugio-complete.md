@@ -643,7 +643,95 @@ def pg_dsn() -> Iterator[str]:
 
 ---
 
-### Task 2.11: 실 API E2E (opt-in) + M2 마무리
+### Task 2.11: FileSource — 로컬 파일 수집 (csv/jsonl/excel)
+
+분석가의 1번 고통 "CSV 뭉치를 쿼리 가능하게"의 입구. 페이지네이션·인증 없음 — 파일 하나=unit 하나라 멱등이 공짜다. units()가 **유한** generator이므로 러너는 exhausted 없이 generator 종료로 끝난다(M1 러너가 이미 지원하는 경로 — for 루프 자연 종료).
+
+**Files:**
+- Create: `packages/pugio/src/pugio/sources/file.py`
+- Modify: `packages/arsenal-core/src/arsenal_core/spec/models.py` (SourceSpec union화)
+- Modify: `packages/pugio/pyproject.toml` — `[project.optional-dependencies] excel = ["fastexcel>=0.11"]`
+- Test: `packages/pugio/tests/test_file_source.py`
+
+- [ ] **Step 1: 스펙** — SourceSpec을 sink처럼 discriminated union으로:
+
+```python
+class RestSourceSpec(_Frozen):
+    type: Literal["rest"]
+    ...  # 기존 SourceSpec 필드 그대로 이동
+
+class FileSourceSpec(_Frozen):
+    type: Literal["file"]
+    path: str                                  # 글롭 (예: "./raw/**/*.csv")
+    format: Literal["auto", "csv", "jsonl", "excel"] = "auto"   # auto = 확장자로 판별
+    encoding: str = "utf-8"
+
+SourceSpec = Annotated[RestSourceSpec | FileSourceSpec, Field(discriminator="type")]
+```
+
+기존 이름 `SourceSpec`을 union 별칭으로 유지해 M1 코드의 import가 깨지지 않게 한다(러너·소스 팩토리만 분기 추가).
+
+- [ ] **Step 2: 테스트**
+
+```python
+def test_each_file_is_one_unit_sorted(tmp_path: Path) -> None:
+    for name in ["b.csv", "a.csv"]:
+        (tmp_path / name).write_text("id,v\n1,x\n")
+    src = FileSource(FileSourceSpec(type="file", path=str(tmp_path / "*.csv")), pipeline="p")
+    units = list(src.units())
+    assert [u.unit_key for u in units] == ["a.csv", "b.csv"]   # 정렬 = 결정적 순서
+
+
+def test_csv_fetch_returns_arrow(tmp_path: Path) -> None:
+    (tmp_path / "a.csv").write_text("id,v\n1,x\n2,y\n")
+    src = FileSource(FileSourceSpec(type="file", path=str(tmp_path / "*.csv")), pipeline="p")
+    result = src.fetch(next(iter(src.units())))
+    assert result.batch.num_rows == 2
+    assert result.exhausted is False           # 종료는 generator 소진이 담당
+
+
+def test_jsonl_and_euc_kr_csv(tmp_path: Path) -> None: ...
+def test_unreadable_file_is_fatal(tmp_path: Path) -> None: ...  # 파싱 불가 → FatalError
+```
+
+- [ ] **Step 3: 구현**
+
+```python
+class FileSource:
+    def __init__(self, spec: FileSourceSpec, *, pipeline: str) -> None: ...
+
+    def units(self) -> Iterator[UnitSpec]:
+        base = Path(self._spec.path)
+        root = _glob_root(self._spec.path)      # 글롭 시작 디렉터리 — unit_key의 기준
+        for p in sorted(glob.glob(self._spec.path, recursive=True)):
+            rel = str(Path(p).relative_to(root))
+            yield UnitSpec.create(pipeline=self._pipeline, source=self._spec.path,
+                                  unit_key=rel, payload={"path": p})
+
+    def fetch(self, unit: UnitSpec) -> FetchResult:
+        p = Path(unit.payload["path"])
+        fmt = self._spec.format if self._spec.format != "auto" else _detect(p.suffix)
+        try:
+            if fmt == "csv":
+                table = pa_csv.read_csv(p, read_options=pa_csv.ReadOptions(
+                    encoding=self._spec.encoding))
+            elif fmt == "jsonl":
+                table = pa_json.read_json(p)
+            else:  # excel — optional extra
+                table = _read_excel(p)          # fastexcel: Arrow 네이티브 반환
+        except Exception as e:
+            raise FatalError(f"cannot parse {p}: {e}") from e
+        batches = table.combine_chunks().to_batches()
+        return FetchResult(batch=batches[0] if batches else None, exhausted=False)
+```
+
+excel은 `fastexcel` 미설치 시 `FatalError("install pugio[excel]")` — 의존성 정책(코어는 가볍게) 유지.
+
+- [ ] **Step 4: 커밋** — `git commit -m "feat: file source — csv/jsonl/excel to arrow"`
+
+---
+
+### Task 2.12: 실 API E2E (opt-in) + M2 마무리
 
 - [ ] `tests/e2e/test_live_github.py` — `RUN_LIVE=1`일 때만: GitHub API 3페이지 수집, 중단·재개 1회. CI 기본 제외.
 - [ ] `examples/`에 cursor·duckdb sink·validate 예제 YAML 추가.

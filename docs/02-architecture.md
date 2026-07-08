@@ -25,12 +25,17 @@ de-arsenal/
 │   │       ├── validate/       # 검증 게이트 (P1에서 Scutum으로 분리)
 │   │       ├── runner.py       # 수집 루프
 │   │       └── cli.py
-│   └── gladius/                # 변환·쿼리
-│       └── src/gladius/
-│           ├── spec.py         # 변환 YAML 모델
-│           ├── compile/        # map/steps → SQL 트랜스파일러
-│           ├── engine.py       # DuckDB 실행
-│           └── cli.py
+│   ├── gladius/                # 변환·쿼리
+│   │   └── src/gladius/
+│   │       ├── spec.py         # 변환 YAML 모델
+│   │       ├── compile/        # map/steps → SQL 트랜스파일러
+│   │       ├── engine.py       # DuckDB 실행 + 즉석 쿼리
+│   │       └── cli.py
+│   └── arsenal/                # 우산 CLI (배포명 de-arsenal) — 원클릭 진입점
+│       └── src/arsenal/
+│           ├── project.py      # arsenal.yaml 매니페스트 모델
+│           ├── recipes/        # 원클릭 레시피 (패키지 데이터)
+│           └── cli.py          # init / run / query + collect·transform 마운트
 ├── examples/                   # 실행 가능한 예제 YAML
 ├── tests/                      # 크로스 패키지 통합·E2E 테스트
 │   ├── integration/

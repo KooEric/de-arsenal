@@ -12,9 +12,9 @@
 |---|---|---|---|---|
 | **M0** | 부트스트랩 | 모노레포·CI·품질 도구 | 빈 패키지 3개 + 초록 CI | 2~3일 |
 | **M1** | 신뢰성 코어 + 수집 수직 슬라이스 | StateStore, 결정적 ID, 에러 분류, REST→Parquet 재개 수집 | `pugio run`으로 끊겨도 재개되는 수집 데모 | 2주 |
-| **M2** | Pugio P0 완성 | 페이지네이션 전 모드, 인증 갱신, rate limit, 인코딩, DB sink 멱등, 검증 게이트, DLQ | 실전 투입 가능한 Pugio v0.1 | 3주 |
-| **M3** | Gladius P0 | map/steps→SQL 트랜스파일러, DuckDB 실행 | `gladius run`으로 선언형 변환 | 2주 |
-| **M4** | 통합·릴리스 | Pugio→Gladius 연계 예제, 문서, 벤치마크, v0.1 태그 | PyPI 배포 가능 상태 | 1주 |
+| **M2** | Pugio P0 완성 | 페이지네이션 전 모드, 인증 갱신, rate limit, 인코딩, **파일 소스(csv/jsonl/excel)**, DB sink 멱등, 검증 게이트, DLQ | 실전 투입 가능한 Pugio v0.1 | 3주 |
+| **M3** | Gladius P0 | map/steps→SQL 트랜스파일러, DuckDB 실행, **즉석 쿼리(`gladius query`)** | `gladius run`으로 선언형 변환 + 미니 DWH | 2주 |
+| **M4** | 통합·릴리스 | **`arsenal` 우산 CLI + 원클릭 레시피 3종**, 연계 예제, 문서, 벤치마크, v0.1 태그 | "10분의 마법"이 성립하는 v0.1 | 1.5주 |
 
 총 P0 기간: **약 8~9주** (1인 풀타임 기준. AI 에이전트 병행 시 단축 가능)
 
@@ -55,6 +55,7 @@
 
 **포함:**
 - 페이지네이션: `mode: offset | page | cursor` 3종
+- **FileSource: 로컬 파일 수집(csv/jsonl/excel → Arrow)** — 파일 하나=unit 하나(멱등 공짜). 분석가의 1번 고통("CSV 뭉치를 쿼리 가능하게")의 입구
 - `encoding` 필드 (euc-kr 등 비UTF-8 소스)
 - 토큰 버킷 rate limiter (`rate_limit.rps`, 429 응답 시 적응적 감속)
 - Auth Refresh Hook: 401/만료 → `AuthExpiredError` → 갱신 콜백 → 그 unit부터 재개
@@ -76,25 +77,29 @@
 - DuckDB 실행 엔진 (Parquet in → Parquet out, Arrow 경유)
 - `gladius compile <yaml>` — 생성된 SQL을 보여주는 투명성 커맨드
 - `gladius run <yaml>`
+- **`gladius query "SELECT ..."` — 수집한 Parquet에 즉석 SQL(미니 DWH). P1에서 앞당김: 원클릭 경험의 "아하 모먼트"이고 DuckDB 위에서 비용이 거의 0**
 
-**완료 기준(DoD):** map/steps로 작성한 변환이 손으로 쓴 SQL과 동일 결과(golden test). 1GB Parquet 변환이 단일 노드에서 완료되는 벤치마크 기록.
+**완료 기준(DoD):** map/steps로 작성한 변환이 손으로 쓴 SQL과 동일 결과(golden test). 수집 직후 `gladius query`로 결과 확인 가능. 1GB Parquet 변환이 단일 노드에서 완료되는 벤치마크 기록.
 
-### M4 — 통합·릴리스
+### M4 — 통합·릴리스: "원클릭 경험" 완성
 
 **포함:**
+- **`arsenal` 우산 CLI** (신규 패키지 `packages/arsenal`, 배포명 `de-arsenal`): 단일 진입점. `init`(레시피 스캐폴드)/`run`(매니페스트 기반 수집→변환 일괄)/`collect`/`transform`/`query`. pugio·gladius를 감싸는 얇은 위임 계층 — 새 로직 없음, Unix 철학(개별 도구 독립) 유지
+- **원클릭 레시피 3종**: `github-issues`(API→테이블), `csv-cleanup`(CSV 뭉치→정리된 Parquet+쿼리), `api-to-postgres`(API→PG upsert 동기화) — "자주 접하는 문제의 원클릭 솔루션"의 실체
 - Pugio 수집 → Gladius 변환 연계 예제 (Arrow/Parquet 허브 규약 문서화)
+- **설치 경로를 분석가 기준으로**: `uv tool install de-arsenal` / pipx를 공식 1줄 설치로 문서화. **CI에 Windows 추가**
 - README·각 도구 사용 문서·처리 범위 정직한 문서화(Ballista 문제 2의 P0 몫)
 - 벤치마크 스크립트와 수치 기록
 - PyPI 패키징 검증(`uv build`), v0.1.0 태그
 
-**완료 기준(DoD):** 신규 사용자가 README만 보고 10분 안에 시나리오 A~D를 재현 가능.
+**완료 기준(DoD):** 신규 사용자가 `uv tool install` + `arsenal init <recipe>` + `arsenal run` 세 명령으로 10분 안에 시나리오 A~D를 재현 가능.
 
 ## P1 — 확장 (P0 완료 후, 범위만 확정)
 
 | 도구 | 항목 |
 |---|---|
 | Pugio | 스키마 드리프트 감지 + 정책(통과·경고·차단) |
-| Gladius | SQL 탈출구(steps 안 `sql:` step), Python 탈출구(UDF), **증분 변환**(`incremental: by_unit/by_key` — 신규분만 재계산, [07](07-cost-efficiency.md) 참조), **쿼리 모드**(`gladius query "SELECT ..."` — Parquet 레이크 즉석 쿼리, 미니 DWH) |
+| Gladius | SQL 탈출구(steps 안 `sql:` step), Python 탈출구(UDF), **증분 변환**(`incremental: by_unit/by_key` — 신규분만 재계산, [07](07-cost-efficiency.md) 참조) — 쿼리 모드는 M3로 앞당겨짐 |
 | Spatha | 독립 패키지 분리: 데이터 준비 신호 기반 의존성 DAG, 우선순위 큐·실행 윈도우 |
 | Scorpio | 신규: lineage 자동 기록, freshness·지연 메트릭, 알림, `--cost` 요약(P0에 기록한 단위 지표 노출) |
 | Onager | 신규: 백필 격리 실행, Small File compaction(후보 자동 선정·dry_run·안전장치) |

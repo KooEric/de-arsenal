@@ -35,6 +35,18 @@ class SourceSpec(_Frozen):
     encoding: str = "utf-8"  # M2: euc-kr 등 비UTF-8 처리
 
 
+class FileSourceSpec(_Frozen):
+    """로컬 파일 소스 (M2 Task 2.11에서 SourceSpec union에 편입).
+
+    M2 전까지는 독립 모델로만 존재 — FileSource 스켈레톤의 타입 계약용.
+    """
+
+    type: Literal["file"]
+    path: str  # 글롭 (예: "./raw/**/*.csv")
+    format: Literal["auto", "csv", "jsonl", "excel"] = "auto"
+    encoding: str = "utf-8"
+
+
 class SinkSpec(_Frozen):
     type: Literal["parquet"]  # M2: "duckdb", "postgres" 추가 (temp→MERGE 멱등)
     path: Path

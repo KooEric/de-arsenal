@@ -3,7 +3,7 @@ name = "de-arsenal-workspace"
 version = "0.0.0"
 description = "DE Arsenal workspace root (not published)"
 requires-python = ">=3.11"
-dependencies = ["arsenal-core", "pugio", "gladius"]
+dependencies = ["arsenal-core", "pugio", "gladius", "de-arsenal"]
 
 [tool.uv.workspace]
 members = ["packages/*"]
@@ -12,6 +12,7 @@ members = ["packages/*"]
 arsenal-core = { workspace = true }
 pugio = { workspace = true }
 gladius = { workspace = true }
+de-arsenal = { workspace = true }
 
 [dependency-groups]
 dev = [

@@ -1,0 +1,5 @@
+name: github-issues
+pipelines:
+  - collect.yaml
+transforms:
+  - transform.yaml

@@ -28,5 +28,16 @@ def run(spec_path: Path) -> None:
     raise typer.Exit(1)
 
 
+@app.command()
+def query(
+    sql: str,
+    fmt: str = typer.Option("table", "--format", help="table | csv | jsonl"),
+    limit: int = typer.Option(0, help="0 = 제한 없음"),
+) -> None:
+    """수집·변환 결과 Parquet에 즉석 SQL (미니 DWH)."""
+    typer.echo(f"error: {NOT_IMPLEMENTED_MSG} (Task 3.6)", err=True)
+    raise typer.Exit(1)
+
+
 if __name__ == "__main__":
     app()

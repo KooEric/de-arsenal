@@ -56,7 +56,8 @@
 | 2.7 | 검증 게이트 | `validate.rules`(not_null/unique/range/schema) — Arrow 수준 벡터화 검사, 정책 block/quarantine/warn |
 | 2.8 | DLQ | quarantined unit 저장(`.arsenal/dlq/` parquet + 사유), `pugio dlq list/retry` |
 | 2.9 | 스키마 스냅샷 | 수집 시 Arrow 스키마를 schema_snapshots에 기록 (감지·정책은 P1) |
-| 2.10 | 실 API E2E | GitHub API 대상 스모크 (CI에선 opt-in) |
+| 2.10 | FileSource | 로컬 파일 소스(csv/jsonl/excel → Arrow) — 파일 하나=unit 하나, 글롭 열거 |
+| 2.11 | 실 API E2E | GitHub API 대상 스모크 (CI에선 opt-in) |
 
 **DoD**: 시나리오 B(재개)·C(토큰 갱신) + 검증 격리가 통합 테스트로 자동 검증.
 
@@ -68,8 +69,9 @@
 | 3.2 | 트랜스파일러 | Step AST → CTE 체인 SQL. 식별자 인용·인젝션 안전 처리. hypothesis로 라운드트립 검증 |
 | 3.3 | 실행 엔진 | DuckDB로 SQL 실행: `read_parquet` in → `COPY TO` parquet out |
 | 3.4 | CLI | `gladius compile`(SQL 출력), `gladius run` |
-| 3.5 | Golden 테스트 | 각 step 조합 결과를 손으로 쓴 SQL 결과와 대조 |
-| 3.6 | 벤치마크 | 1GB Parquet 변환 시간 측정 스크립트 + 수치 기록 |
+| 3.5 | 즉석 쿼리 | `gladius query "SELECT ..."` — Parquet 레이크 직접 SQL (P1에서 앞당김) |
+| 3.6 | Golden 테스트 | 각 step 조합 결과를 손으로 쓴 SQL 결과와 대조 |
+| 3.7 | 벤치마크 | 1GB Parquet 변환 시간 측정 스크립트 + 수치 기록 |
 
 **DoD**: golden 테스트 전체 통과, `gladius compile` 출력이 문서 예제와 일치.
 
@@ -77,11 +79,13 @@
 
 | # | 태스크 | 내용 |
 |---|---|---|
-| 4.1 | 연계 예제 | Pugio 수집 → Gladius 변환 end-to-end 예제 + Arrow/Parquet 허브 규약 문서 |
-| 4.2 | 사용 문서 | 도구별 README, YAML 레퍼런스(스펙 모델에서 JSON Schema 자동 생성) |
-| 4.3 | 한계선 문서 | 처리 범위 정직하게: 단일 노드 한계, 미지원 케이스 (Ballista 문제 2) |
-| 4.4 | 패키징 | `uv build` 검증, 패키지 메타데이터, 라이선스 |
-| 4.5 | v0.1.0 | CHANGELOG, git tag, (선택) PyPI 배포 |
+| 4.0 | `arsenal` 우산 CLI | 신규 패키지: init(레시피)/run(매니페스트)/collect/transform/query — pugio·gladius 위임 |
+| 4.1 | 원클릭 레시피 3종 | github-issues / csv-cleanup / api-to-postgres — 각각 E2E 검증 포함 |
+| 4.2 | 연계 예제 | Pugio 수집 → Gladius 변환 end-to-end 예제 + Arrow/Parquet 허브 규약 문서 |
+| 4.3 | 사용 문서 | 도구별 README, YAML 레퍼런스(스펙 모델에서 JSON Schema 자동 생성), `uv tool install` 설치 경로 |
+| 4.4 | 한계선 문서 | 처리 범위 정직하게: 단일 노드 한계, 미지원 케이스 (Ballista 문제 2) |
+| 4.5 | 패키징·CI | `uv build` 검증, 패키지 메타데이터, 라이선스, **Windows CI 추가** |
+| 4.6 | v0.1.0 | CHANGELOG, git tag, (선택) PyPI 배포 |
 
 ## 리스크와 대응
 

@@ -1,0 +1,7 @@
+name: clean-issues
+input: ./data/issues
+steps:
+  - filter: "state IS NOT NULL"
+  - cast: { number: bigint }
+  - select: [number, title, state, created_at]
+output: ./data/issues_clean

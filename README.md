@@ -1,13 +1,25 @@
 # DE Arsenal
 
-> 데이터 엔지니어링에서 반복적으로 사람을 괴롭히는 문제들을, 로마 무기 체계에 대응시켜 하나씩 도구화한다.
+> **노트북 한 대가 데이터 플랫폼이 된다.** 설치 하나, 명령 하나로 수집→검증→변환→쿼리.
 
-Databricks·Snowflake 수준의 **완성도**를, 그들과 정반대의 **형태**로. 거대 플랫폼이 백 가지를 80점으로 하는 동안, 우리는 한 가지를 100점으로 — 그런 도구를 여러 개 만든다. 각 도구는 독립 제품이며, 작은 공통 인터페이스(Arrow/Parquet 허브, 공유 상태 규약)로 느슨하게 맞물린다.
+데이터 엔지니어와 분석가가 매일 부딪히는 문제들 — 새벽에 끊긴 수집, 만료된 토큰, 쿼리도 못 하는 CSV 뭉치 — 에 대한 **원클릭 솔루션**. 서버도, 클러스터도, DAG 코드도 없다.
 
-## 무기 체계
+```bash
+uv tool install de-arsenal        # 설치 한 번 (v0.1 예정)
+arsenal init csv-cleanup           # 레시피로 시작
+arsenal run                        # 수집→검증→변환. 끊겨도 재실행하면 이어서
+arsenal query "SELECT * FROM './data/clean/*.parquet' LIMIT 10"
+```
+
+Databricks·Snowflake 수준의 **완성도**를, 그들과 정반대의 **형태**로. 거대 플랫폼이 백 가지를 80점으로 하는 동안, 우리는 한 가지를 100점으로. 신뢰성(멱등·재개·검증)이 기본값이고, 마진 없는 비용 구조([docs/07](docs/07-cost-efficiency.md))가 아키텍처에서 나온다.
+
+## 무기 체계 (내부 아키텍처)
+
+사용자는 `arsenal` 하나만 알면 된다. 그 아래는 문제 영역별 독립 도구들 — 각각 따로 설치·사용 가능하고(락인 없음), Arrow/Parquet 허브로 느슨하게 맞물린다.
 
 | 무기 | 담당 영역 | 우선순위 | 상태 |
 |---|---|---|---|
+| **Arsenal** (우산 CLI) | 단일 진입점 — init/run/query, 원클릭 레시피 | P0 (M4) | 🚧 뼈대 |
 | **Pugio** | 수집·전송 (ETL 엔진) | P0 | 🚧 개발 중 |
 | **Gladius** | 변환·쿼리 (핵심 처리) | P0 | 🚧 개발 중 |
 | **Spatha** | 오케스트레이션 (의존성·스케줄링) | P0(멱등 코어)/P1 | 📋 계획 |
@@ -45,13 +57,14 @@ Databricks·Snowflake 수준의 **완성도**를, 그들과 정반대의 **형�
 | [docs/plans/](docs/plans/) | 마일스톤별 상세 TDD 구현 계획 |
 | [docs/roadmap.md](docs/roadmap.md) | 원본 로드맵 (문제 정의 전체) |
 
-## 시작하기 (예정)
+## 개발 상태에서 시작하기
 
 ```bash
-# M1 완료 후 동작하는 최소 예제
+# M1 완료 후 동작하는 최소 예제 (uv tool 배포는 M4)
 uv sync
 uv run pugio run examples/github-issues.yaml   # 수집 — 중간에 죽여도 재실행하면 이어서
 uv run gladius run examples/transform.yaml     # 변환 — map/steps 선언이 SQL로 컴파일되어 DuckDB에서 실행
+uv run gladius query "SELECT count(*) FROM './data/issues_clean/*.parquet'"   # M3
 ```
 
 ## 라이선스
