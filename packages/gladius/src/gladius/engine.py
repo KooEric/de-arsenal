@@ -6,6 +6,7 @@ query()는 즉석 SQL(미니 DWH) — 원클릭 경험의 "아하 모먼트".
 
 import os
 import shutil
+import typing as t
 from pathlib import Path
 
 import duckdb
@@ -46,4 +47,13 @@ def query(sql: str) -> pa.Table:
 
     in-memory DuckDB, 상태 없음. DuckDB 에러는 FatalError로 변환.
     """
-    raise NotImplementedError("M3 Task 3.6 — docs/plans/2026-07-08-m3-gladius.md")
+    con = duckdb.connect()  # in-memory, 상태 없음
+    try:
+        arrow_table = con.sql(  # pyright: ignore[reportUnknownMemberType, reportUnknownVariableType]
+            sql
+        ).to_arrow_table()
+        return t.cast(pa.Table, arrow_table)
+    except duckdb.Error as e:
+        raise FatalError(str(e)) from e
+    finally:
+        con.close()
