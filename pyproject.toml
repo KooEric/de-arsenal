@@ -40,8 +40,8 @@ typeCheckingMode = "strict"
 
 [tool.pytest.ini_options]
 testpaths = ["packages", "tests"]
-# NOTE: 스켈레톤 단계라 커버리지 게이트 0. M1 Task 1 착수 시 80으로 올린다 (docs/05-testing-plan.md)
-addopts = "--cov=packages --cov-report=term-missing --cov-fail-under=0"
+# M1 Task 1 착수 — 커버리지 게이트 80으로 상향 (docs/05-testing-plan.md)
+addopts = "--cov=packages --cov-report=term-missing --cov-fail-under=80"
 
 [tool.coverage.run]
 omit = ["*/tests/*"]

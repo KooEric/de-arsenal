@@ -26,4 +26,10 @@ def classify_http_status(status: int) -> type[ArsenalError] | None:
 
     401→AuthExpired, 429/5xx→Retryable, 그 외 4xx→Fatal.
     """
-    raise NotImplementedError("M1 Task 1 — docs/plans/2026-07-08-m1-core-foundation.md")
+    if status < 400:
+        return None
+    if status == 401:
+        return AuthExpiredError
+    if status == 429 or status >= 500:
+        return RetryableError
+    return FatalError
