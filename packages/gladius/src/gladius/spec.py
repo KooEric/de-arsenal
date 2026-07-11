@@ -7,7 +7,7 @@
 
 from pathlib import Path
 
-from pydantic import BaseModel, ConfigDict
+from pydantic import BaseModel, ConfigDict, model_validator
 
 
 class _Frozen(BaseModel):
@@ -44,6 +44,13 @@ Step = FilterStep | RenameStep | CastStep | SelectStep | DedupStep | DeriveStep
 class TransformSpec(_Frozen):
     name: str
     input: Path  # Parquet 디렉터리/파일 (Pugio 산출물 — Arrow/Parquet 허브)
-    steps: list[Step]
+    map: dict[str, str] | None = None  # {new_column: source_expr} — steps보다 먼저 적용
+    steps: list[Step] = []
     output: Path
-    # P1 예약: map(필드 매핑표), incremental, sql/python 탈출구
+    # P1 예약: incremental, sql/python 탈출구
+
+    @model_validator(mode="after")
+    def _require_map_or_steps(self) -> "TransformSpec":
+        if not self.map and not self.steps:
+            raise ValueError("transform spec requires at least one of 'map' or 'steps'")
+        return self
