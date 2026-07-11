@@ -11,6 +11,38 @@ draft로 동작"이며, 수집(pugio)·변환(gladius)·우산 CLI(arsenal) 각�
 
 ---
 
+## P1 범위 잠금 재확인 (문서 기준선 — 이 인계서로 고정)
+
+draft 구현(P0)을 이어받기 전, **P1 범위는 아래 세 항목으로 이미 확정·잠금**되어
+있음을 이 인계서로 재확인한다. 이는 구현 대상이 아니라 **범위 계약**이며,
+P0 코드가 P1의 자리(탈출구·discriminated union·sink 추상)를 침범하거나 닫지 않도록
+하는 기준선이다. Task 2.14(실 API E2E 검증)의 "deferred"는 *네트워크 검증의 연기*일
+뿐, 아래 P1 범위 잠금과는 무관하다 — **P1 범위 자체는 잠겨 있다.**
+
+**P1 확정 항목 — `docs/01-scope.md` "P1 — 확장" 표:**
+1. **dlt 소스 래퍼** (`type: dlt`) — 검증된 커넥터 수백 개 흡수 · `01-scope.md:104`.
+   기반 메커니즘은 P0의 `type: python` 탈출구(Batch E에서 구현, `d180350`) 위에 선다.
+2. **dbt 인터롭** — `arsenal.yaml`의 `- dbt: ./project` 실행 단계(dbt-duckdb 차용) ·
+   `01-scope.md:105`. Batch F의 우산 CLI(`arsenal` 실행 파이프라인)가 이 단계 타입을
+   받아들일 자리를 남겨둬야 한다.
+3. **S3/GCS sink** — DuckDB httpfs 차용 · `01-scope.md:104`. P0의 Parquet sink 추상
+   (`pugio/sinks/base.py`의 `Sink` 프로토콜)이 로컬 경로 가정에 하드코딩되지 않게
+   유지할 것 — 이미 프로토콜은 경로 무관하게 설계됨.
+
+**결정 근거 ADR 2건 — `docs/02-architecture.md` "설계 결정 기록" 표:**
+- **ADR #6 「빌드-vs-차용: 차용 우선」** · `02-architecture.md:243` — 우리 소유 코드는
+  신뢰성 코어·UX·게이트·글루 4가지뿐. DB 소스=DuckDB scanner, 커넥터 롱테일=dlt 래핑,
+  SQL 생태계=dbt 인터롭. (위 P1 항목 1·2·3이 모두 이 원칙의 귀결.)
+- **ADR #7 「탈출구는 P0부터 (`type: python`)」** · `02-architecture.md:244` — YAML 표현
+  한계에서 사용자가 절벽에 떨어지지 않게. Batch E의 Python 커스텀 소스(`d180350`)가
+  이 결정의 P0 이행이며, P1 dlt 래퍼의 토대다.
+
+> **재개자 유의:** 위 표 행 번호(01-scope 104–105, 02-architecture 243–244)는 문서
+> 수정 시 이동할 수 있다. 값이 아니라 **표 제목**("P1 — 확장", "설계 결정 기록")과
+> 항목명으로 찾을 것.
+
+---
+
 ## 전체 진행 현황
 
 | # | 배치 | 내용 | 상태 |
@@ -112,6 +144,9 @@ draft 범위 밖 — F에서는 4.0~4.2만.
   `(M1 완료 후 동작)` 주석이 이제 stale.
 - Batch D: (Critical SQL 이스케이프는 fix+재리뷰 완료) — 잔여 Minor 없음.
 - Batch E: **아직 리뷰 안 됨** — G 이전에 E 태스크 리뷰가 선행되어야 함.
+- **P1 경계 확인:** 최종 리뷰는 위 "P1 범위 잠금 재확인" 절을 기준으로, P0 코드가
+  P1 자리(dlt 래퍼용 `type: python` 탈출구, `- dbt: ./project` 단계 타입, httpfs sink용
+  경로-무관 `Sink` 프로토콜)를 닫지 않았는지 확인할 것.
 
 리뷰가 findings를 반환하면 **fix 서브에이전트 1개에 전체 목록을 넘겨** 처리(핑거당 1개
 금지). 통과하면 `superpowers:finishing-a-development-branch`로 병합/PR 결정.
