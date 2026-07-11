@@ -28,8 +28,10 @@ def test_valid_spec_parses(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> N
     monkeypatch.setenv("TEST_TOKEN", "tok123")
     spec = load_pipeline(write(tmp_path, VALID))
     assert spec.name == "github-issues"
-    assert spec.source.pagination.size == 100
-    assert spec.source.headers["Authorization"] == "Bearer tok123"  # env 치환
+    source = spec.source
+    assert source.type == "rest"  # discriminator로 좁혀야 REST 전용 필드에 접근 가능
+    assert source.pagination.size == 100
+    assert source.headers["Authorization"] == "Bearer tok123"  # env 치환
 
 
 def test_missing_required_field_names_the_path(tmp_path: Path) -> None:

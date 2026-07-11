@@ -4,7 +4,7 @@ import httpx
 import pytest
 import respx
 
-from arsenal_core.spec.models import PaginationSpec, PipelineSpec, SinkSpec, SourceSpec
+from arsenal_core.spec.models import PaginationSpec, PipelineSpec, RestSourceSpec, SinkSpec
 from pugio.runner import run_pipeline
 
 
@@ -12,7 +12,7 @@ def make_spec(tmp_path: Path) -> PipelineSpec:
     return PipelineSpec(
         name="t",
         state_dir=tmp_path / ".arsenal",
-        source=SourceSpec(
+        source=RestSourceSpec(
             type="rest",
             url="https://api.test/items",
             pagination=PaginationSpec(mode="offset", size=2),

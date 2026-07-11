@@ -15,10 +15,15 @@ from dataclasses import dataclass
 
 import httpx
 
+from arsenal_core.errors import FatalError
 from arsenal_core.retry import DEFAULT_MAX_ATTEMPTS, with_retry
 from arsenal_core.spec.models import PipelineSpec
 from arsenal_core.state import StateStore
 from pugio.sinks.parquet import ParquetSink
+from pugio.sources.base import Source
+from pugio.sources.database import DatabaseSource
+from pugio.sources.file import FileSource
+from pugio.sources.python_source import load_python_source
 from pugio.sources.rest import RestSource
 
 
@@ -29,6 +34,23 @@ class RunReport:
     skipped: int  # done이라 건너뛴 unit 수 — 재개의 증거
 
 
+def _build_source(spec: PipelineSpec) -> Source:
+    """spec.source.type으로 분기해 알맞은 Source 구현체를 만든다.
+
+    discriminated union이라 spec.source.type이 좁혀지면 pyright도 필드를 좁혀 안다.
+    """
+    src = spec.source
+    if src.type == "rest":
+        return RestSource(src, pipeline=spec.name, client=httpx.Client())
+    if src.type == "file":
+        return FileSource(src, pipeline=spec.name)
+    if src.type == "database":
+        return DatabaseSource(src, pipeline=spec.name)
+    if src.type == "python":
+        return load_python_source(src, pipeline=spec.name)
+    raise FatalError(f"unknown source type: {src.type}")  # pragma: no cover
+
+
 def run_pipeline(
     spec: PipelineSpec,
     *,
@@ -36,7 +58,7 @@ def run_pipeline(
     max_attempts: int = DEFAULT_MAX_ATTEMPTS,
 ) -> RunReport:
     store = StateStore(spec.state_dir / f"{spec.name}.db")
-    source = RestSource(spec.source, pipeline=spec.name, client=httpx.Client())
+    source = _build_source(spec)
     sink = ParquetSink(spec.sink.path)
     fetched = written = skipped = done_count = 0
 

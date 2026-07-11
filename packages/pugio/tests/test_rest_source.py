@@ -3,10 +3,10 @@ import pytest
 import respx
 
 from arsenal_core.errors import FatalError, RetryableError
-from arsenal_core.spec.models import PaginationSpec, SourceSpec
+from arsenal_core.spec.models import PaginationSpec, RestSourceSpec
 from pugio.sources.rest import RestSource
 
-SPEC = SourceSpec(
+SPEC = RestSourceSpec(
     type="rest",
     url="https://api.test/items",
     pagination=PaginationSpec(mode="offset", param="offset", size_param="limit", size=2),

@@ -11,13 +11,13 @@ import httpx
 import pyarrow as pa
 
 from arsenal_core.errors import classify_http_status
-from arsenal_core.spec.models import SourceSpec
+from arsenal_core.spec.models import RestSourceSpec
 from arsenal_core.state import UnitSpec
 from pugio.sources.base import FetchResult
 
 
 class RestSource:
-    def __init__(self, spec: SourceSpec, *, pipeline: str, client: httpx.Client) -> None:
+    def __init__(self, spec: RestSourceSpec, *, pipeline: str, client: httpx.Client) -> None:
         self._spec = spec
         self._pipeline = pipeline
         self._client = client
