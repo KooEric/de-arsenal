@@ -5,9 +5,14 @@
 구현: docs/plans/2026-07-08-m1-core-foundation.md Task 3
 """
 
+import json
+import sqlite3
 from dataclasses import dataclass
+from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
+
+from arsenal_core.identity import unit_id as make_unit_id
 
 _SCHEMA = """
 CREATE TABLE IF NOT EXISTS units (
@@ -38,6 +43,10 @@ CREATE TABLE IF NOT EXISTS schema_snapshots (
 """
 
 
+def _now() -> str:
+    return datetime.now(UTC).isoformat()
+
+
 @dataclass(frozen=True)
 class UnitSpec:
     """수집·처리의 최소 단위. 결정적 ID를 가진다."""
@@ -52,7 +61,12 @@ class UnitSpec:
         cls, *, pipeline: str, source: str, unit_key: str, payload: dict[str, Any]
     ) -> "UnitSpec":
         """identity.unit_id로 결정적 ID를 만들어 생성한다."""
-        raise NotImplementedError("M1 Task 3 — docs/plans/2026-07-08-m1-core-foundation.md")
+        return cls(
+            unit_id=make_unit_id(pipeline, source, unit_key),
+            pipeline=pipeline,
+            unit_key=unit_key,
+            payload=payload,
+        )
 
 
 @dataclass(frozen=True)
@@ -78,14 +92,32 @@ class StateStore:
     """
 
     def __init__(self, db_path: Path) -> None:
-        raise NotImplementedError("M1 Task 3")
+        db_path.parent.mkdir(parents=True, exist_ok=True)
+        self._conn = sqlite3.connect(db_path)
+        self._conn.execute("PRAGMA journal_mode=WAL")
+        self._conn.executescript(_SCHEMA)
 
     def register(self, unit: UnitSpec) -> None:
         """INSERT OR IGNORE — 두 번 등록해도 안전 (멱등)."""
-        raise NotImplementedError("M1 Task 3")
+        self._conn.execute(
+            "INSERT OR IGNORE INTO units "
+            "(unit_id, pipeline, unit_key, payload, status, created_at, updated_at) "
+            "VALUES (?, ?, ?, ?, 'pending', ?, ?)",
+            (unit.unit_id, unit.pipeline, unit.unit_key, json.dumps(unit.payload), _now(), _now()),
+        )
+        self._conn.commit()
+
+    def _set_status(self, uid: str, status: str, error: str | None = None) -> None:
+        bump = 1 if status == "failed" else 0
+        self._conn.execute(
+            "UPDATE units SET status=?, last_error=?, attempts=attempts+?, updated_at=? "
+            "WHERE unit_id=?",
+            (status, error, bump, _now(), uid),
+        )
+        self._conn.commit()
 
     def mark_running(self, uid: str) -> None:
-        raise NotImplementedError("M1 Task 3")
+        self._set_status(uid, "running")
 
     def mark_done(
         self,
@@ -95,27 +127,46 @@ class StateStore:
         byte_count: int | None = None,
         duration_ms: int | None = None,
     ) -> None:
-        raise NotImplementedError("M1 Task 3")
+        self._conn.execute(
+            "UPDATE units SET status='done', row_count=?, byte_count=?, duration_ms=?, "
+            "updated_at=? WHERE unit_id=?",
+            (row_count, byte_count, duration_ms, _now(), uid),
+        )
+        self._conn.commit()
 
     def mark_failed(self, uid: str, error: str) -> None:
         """attempts를 1 올리고 last_error 기록."""
-        raise NotImplementedError("M1 Task 3")
+        self._set_status(uid, "failed", error)
 
     def status(self, uid: str) -> str | None:
-        raise NotImplementedError("M1 Task 3")
+        row = self._conn.execute("SELECT status FROM units WHERE unit_id=?", (uid,)).fetchone()
+        return row[0] if row else None
 
     def is_done(self, uid: str) -> bool:
-        raise NotImplementedError("M1 Task 3")
+        return self.status(uid) == "done"
 
     def get(self, uid: str) -> UnitRecord:
-        raise NotImplementedError("M1 Task 3")
+        row = self._conn.execute(
+            "SELECT unit_id, status, attempts, last_error FROM units WHERE unit_id=?", (uid,)
+        ).fetchone()
+        if row is None:
+            raise KeyError(uid)
+        return UnitRecord(*row)
 
     def metrics(self, uid: str) -> UnitMetrics:
-        raise NotImplementedError("M1 Task 3")
+        row = self._conn.execute(
+            "SELECT row_count, byte_count, duration_ms FROM units WHERE unit_id=?", (uid,)
+        ).fetchone()
+        if row is None:
+            raise KeyError(uid)
+        return UnitMetrics(*row)
 
     def counts(self, pipeline: str) -> dict[str, int]:
         """status → 개수. `pugio status`의 데이터."""
-        raise NotImplementedError("M1 Task 3")
+        rows = self._conn.execute(
+            "SELECT status, count(*) FROM units WHERE pipeline=? GROUP BY status", (pipeline,)
+        ).fetchall()
+        return dict(rows)
 
     def close(self) -> None:
-        raise NotImplementedError("M1 Task 3")
+        self._conn.close()
