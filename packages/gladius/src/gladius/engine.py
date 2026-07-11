@@ -14,6 +14,7 @@ import pyarrow as pa
 
 from arsenal_core.errors import FatalError
 from gladius.compile import compile_sql
+from gladius.compile.ident import quote_str_literal
 from gladius.spec import TransformSpec
 
 
@@ -25,13 +26,12 @@ def run_transform(spec: TransformSpec) -> Path:
     """
     sql = compile_sql(spec)
     con = duckdb.connect()  # in-memory, 상태 없음
-    con.execute(f"PRAGMA threads={os.cpu_count()}")
+    con.execute(f"PRAGMA threads={os.cpu_count() or 1}")
     tmp = spec.output.with_name(spec.output.name + ".tmp")
     tmp.mkdir(parents=True, exist_ok=True)
     try:
-        con.execute(
-            f"COPY ({sql}) TO '{tmp / 'part-0.parquet'}' (FORMAT PARQUET, COMPRESSION ZSTD)"
-        )
+        out_path = quote_str_literal(str(tmp / "part-0.parquet"))
+        con.execute(f"COPY ({sql}) TO {out_path} (FORMAT PARQUET, COMPRESSION ZSTD)")
     except duckdb.Error as e:
         raise FatalError(f"transform failed: {e}\n--- compiled SQL ---\n{sql}") from e
     finally:

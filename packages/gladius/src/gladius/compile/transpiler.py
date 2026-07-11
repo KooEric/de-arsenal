@@ -16,7 +16,7 @@ select step은 CTE가 아니라 최종 SELECT로 처리한다. 마지막 위치�
 집합 위에서 동작하게 한다.
 """
 
-from gladius.compile.ident import normalize_type, quote_ident
+from gladius.compile.ident import normalize_type, quote_ident, quote_str_literal
 from gladius.spec import (
     CastStep,
     DedupStep,
@@ -32,7 +32,8 @@ from gladius.spec import (
 def compile_sql(spec: TransformSpec) -> str:
     """TransformSpec을 실행 가능한 DuckDB SQL 문자열로 컴파일한다."""
     src = str(spec.input).rstrip("/")
-    ctes = [f"s0 AS (SELECT * FROM read_parquet('{src}/**/*.parquet', union_by_name=true))"]
+    src_glob = quote_str_literal(f"{src}/**/*.parquet")
+    ctes = [f"s0 AS (SELECT * FROM read_parquet({src_glob}, union_by_name=true))"]
     idx = 0
     if spec.map:
         idx += 1

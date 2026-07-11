@@ -13,11 +13,13 @@ from gladius.compile.transpiler import compile_sql
 from gladius.spec import TransformSpec
 
 
-def make(steps: list[dict[str, Any]], map_: dict[str, str] | None = None) -> TransformSpec:
+def make(
+    steps: list[dict[str, Any]], map_: dict[str, str] | None = None, input_: str = "./in"
+) -> TransformSpec:
     return TransformSpec.model_validate(
         {
             "name": "t",
-            "input": "./in",
+            "input": input_,
             "output": "./out",
             **({"map": map_} if map_ else {}),
             "steps": steps,
@@ -51,6 +53,51 @@ def test_full_chain_compiles_to_cte_pipeline() -> None:
 def test_map_becomes_first_projection() -> None:
     sql = compile_sql(make(steps=[], map_={"issue_no": "number"}))
     assert 's1 AS (SELECT number AS "issue_no" FROM s0)' in sql
+
+
+def test_single_quote_in_input_path_is_escaped() -> None:
+    # CRITICAL 리뷰 발견 회귀 테스트: input 경로의 작은따옴표는 SQL 리터럴을
+    # 깨뜨릴 수 있으므로 이스케이프(작은따옴표 두 배)되어야 한다.
+    sql = compile_sql(make(steps=[{"filter": "state = 'open'"}], input_="./in'jected"))
+    assert "in''jected" in sql
+    assert "in'jected" not in sql.replace("in''jected", "")
+    # 단일 read_parquet 호출만 존재해야 한다 — 인젝션이 두 번째 호출/UNION을
+    # 만들어내지 않았다는 증거.
+    assert sql.count("read_parquet(") == 1
+
+
+def test_sql_injection_payload_stays_inside_one_string_literal() -> None:
+    # 리뷰에서 지적된 인젝션 페이로드: 문자열을 깨고 괄호를 닫은 뒤 UNION SELECT로
+    # 마커 값을 빼내려는 시도. 이스케이프되면 전체가 하나의 문자열 리터럴 안에
+    # 남아야 하며, 실행해도 마커 값이 노출되지 않아야 한다(DuckDB가 존재하지
+    # 않는 파일 경로로 취급해 IO 에러를 내야 한다).
+    payload = "./in', union_by_name=true)) UNION SELECT 1337 AS pwn --"
+    spec = make(steps=[{"select": ["id"]}], input_=payload)
+    sql = compile_sql(spec)
+
+    escaped_payload = payload.replace("'", "''")
+    assert escaped_payload in sql
+    assert sql.count("read_parquet(") == 1
+
+    # 실행하면 UNION이 성공해 1337 마커가 노출되는 게 아니라, 페이로드 전체가
+    # (존재하지 않는) 파일 glob 패턴 리터럴로 취급되어 IO 에러가 나야 한다 —
+    # 인젝션이 SQL 구조가 아니라 데이터로 남았다는 증거.
+    con = duckdb.connect()
+    try:
+        with pytest.raises(duckdb.Error):
+            con.execute(sql)
+    finally:
+        con.close()
+
+
+def test_non_last_select_narrows_columns_for_later_steps() -> None:
+    # MINOR 리뷰 발견 회귀 테스트: select가 마지막 step이 아니면 그 지점에서
+    # 실제로 projection을 수행하는 CTE가 되어야 한다 (SELECT * 가 아니라
+    # 선택된 컬럼 목록).
+    sql = compile_sql(make(steps=[{"select": ["id", "state"]}, {"filter": "state = 'open'"}]))
+    assert 's1 AS (SELECT "id", "state" FROM s0)' in sql
+    assert "SELECT * FROM s1 WHERE state = 'open'" in sql
+    assert "SELECT * FROM s0)" not in sql  # select CTE 본문에 SELECT * 가 남아있으면 안 된다
 
 
 def test_every_generated_sql_parses_in_duckdb(tmp_path_factory: pytest.TempPathFactory) -> None:
