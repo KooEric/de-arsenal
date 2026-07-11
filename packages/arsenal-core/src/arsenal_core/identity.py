@@ -4,6 +4,8 @@
 구현: docs/plans/2026-07-08-m1-core-foundation.md Task 2
 """
 
+import hashlib
+
 _ID_LEN = 16
 
 
@@ -12,4 +14,5 @@ def unit_id(pipeline: str, source: str, unit_key: str) -> str:
 
     \\x1f 구분자로 경계 모호성 제거. 결정성·충돌 저항은 hypothesis로 검증.
     """
-    raise NotImplementedError("M1 Task 2 — docs/plans/2026-07-08-m1-core-foundation.md")
+    raw = f"{pipeline}\x1f{source}\x1f{unit_key}"
+    return hashlib.sha256(raw.encode()).hexdigest()[:_ID_LEN]
