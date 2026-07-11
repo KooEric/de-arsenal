@@ -34,7 +34,9 @@ def test_valid_spec_parses(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> N
 
 def test_missing_required_field_names_the_path(tmp_path: Path) -> None:
     with pytest.raises(FatalError, match="source.url"):
-        load_pipeline(write(tmp_path, "name: x\nsource: {type: rest}\nsink: {type: parquet, path: d}"))
+        load_pipeline(
+            write(tmp_path, "name: x\nsource: {type: rest}\nsink: {type: parquet, path: d}")
+        )
 
 
 def test_unknown_field_rejected(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
