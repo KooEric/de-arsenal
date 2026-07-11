@@ -74,7 +74,10 @@ def test_crash_and_resume_no_dup_no_loss(tmp_path: Path) -> None:
     report = run_pipeline(spec)  # 같은 명령 그대로 재실행
     assert report.skipped == 1  # 완료했던 1개는 다시 받지 않음
     files = sorted((tmp_path / "out").glob("*.parquet"))
-    all_ids = sorted(
-        row["id"] for f in files for row in pq.read_table(f).to_pylist()
-    )
+    # pyarrow.parquet has no type stubs; read_table()/to_pylist()'s types are Unknown.
+    rows: list[dict[str, int]] = []
+    for f in files:
+        table = pq.read_table(f)  # pyright: ignore[reportUnknownMemberType, reportUnknownVariableType]
+        rows.extend(table.to_pylist())  # pyright: ignore[reportUnknownMemberType, reportUnknownArgumentType]
+    all_ids = sorted(row["id"] for row in rows)
     assert all_ids == [1, 2, 3, 4, 5]  # 중복 0, 누락 0

@@ -22,5 +22,5 @@ class ParquetSink:
         self._dir.mkdir(parents=True, exist_ok=True)
         final = self._dir / f"{unit.unit_id}.parquet"
         tmp = self._dir / f"{unit.unit_id}.parquet.tmp"
-        pq.write_table(pa.Table.from_batches([batch]), tmp)
+        pq.write_table(pa.Table.from_batches([batch]), tmp)  # pyright: ignore[reportUnknownMemberType]
         os.replace(tmp, final)  # POSIX atomic — 부분 쓰기가 결과로 보이지 않음

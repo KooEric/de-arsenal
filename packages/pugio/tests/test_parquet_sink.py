@@ -29,7 +29,9 @@ def test_write_twice_same_unit_is_idempotent(tmp_path: Path) -> None:
     sink.write(u, batch([1, 2]))  # 재실행 시뮬레이션
     files = list((tmp_path / "out").glob("*.parquet"))
     assert len(files) == 1
-    assert pq.read_table(files[0]).num_rows == 2  # 중복 없음
+    # pyarrow.parquet has no type stubs; read_table()'s return type is Unknown.
+    table = pq.read_table(files[0])  # pyright: ignore[reportUnknownMemberType, reportUnknownVariableType]
+    assert table.num_rows == 2  # pyright: ignore[reportUnknownMemberType]  # 중복 없음
 
 
 def test_no_partial_file_visible(tmp_path: Path) -> None:
