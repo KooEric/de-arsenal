@@ -4,9 +4,11 @@
 구현: docs/plans/2026-07-08-m1-core-foundation.md Task 7
 """
 
+import os
 from pathlib import Path
 
 import pyarrow as pa
+import pyarrow.parquet as pq
 
 from arsenal_core.state import UnitSpec
 
@@ -17,4 +19,8 @@ class ParquetSink:
 
     def write(self, unit: UnitSpec, batch: pa.RecordBatch) -> None:
         """{dir}/{unit_id}.parquet.tmp에 쓰고 os.replace로 원자 교체."""
-        raise NotImplementedError("M1 Task 7 — docs/plans/2026-07-08-m1-core-foundation.md")
+        self._dir.mkdir(parents=True, exist_ok=True)
+        final = self._dir / f"{unit.unit_id}.parquet"
+        tmp = self._dir / f"{unit.unit_id}.parquet.tmp"
+        pq.write_table(pa.Table.from_batches([batch]), tmp)
+        os.replace(tmp, final)  # POSIX atomic — 부분 쓰기가 결과로 보이지 않음
