@@ -1,0 +1,6 @@
+order_id,customer,amount,status
+1,Alice,42.50,paid
+2,Bob,17.00,pending
+3,Carol,99.99,paid
+4,Dave,5.25,refunded
+5,Erin,120.00,paid
