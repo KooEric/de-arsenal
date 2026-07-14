@@ -60,13 +60,17 @@ Databricks·Snowflake 수준의 **완성도**를, 그들과 정반대의 **형�
 
 ## 개발 상태에서 시작하기
 
+M1 완료 — REST→Parquet 수집이 재개·멱등 보장과 함께 동작한다 (uv tool 배포는 M4).
+
 ```bash
-# M1 완료 후 동작하는 최소 예제 (uv tool 배포는 M4)
 uv sync
-uv run pugio run examples/github-issues.yaml   # 수집 — 중간에 죽여도 재실행하면 이어서
-uv run gladius run examples/transform.yaml     # 변환 — map/steps 선언이 SQL로 컴파일되어 DuckDB에서 실행
-uv run gladius query "SELECT count(*) FROM './data/issues_clean/*.parquet'"   # M3
+
+export GITHUB_TOKEN=ghp_...                     # examples/github-issues.yaml이 참조하는 시크릿
+uv run pugio run examples/github-issues.yaml    # 수집 — 중간에 죽여도(Ctrl-C) 재실행하면 이어서, 완주 후 재실행은 no-op
+uv run pugio status examples/github-issues.yaml # unit 상태 요약 (done/pending/failed/quarantined 수)
 ```
+
+변환·쿼리(`gladius run` / `gladius query`)는 아직 스텁이다 — M2/M3에서 구현 예정([docs/04-implementation-plan.md](docs/04-implementation-plan.md)).
 
 ## 라이선스
 

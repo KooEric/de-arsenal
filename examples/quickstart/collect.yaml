@@ -1,0 +1,10 @@
+# quickstart — 로컬 CSV를 그대로 수집한다 (계정도, 네트워크도 필요 없다).
+# 실행: pugio run collect.yaml
+name: quickstart
+source:
+  type: file
+  path: ./orders.csv
+  format: csv
+sink:
+  type: parquet
+  path: ./data/orders

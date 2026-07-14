@@ -40,8 +40,11 @@ typeCheckingMode = "strict"
 
 [tool.pytest.ini_options]
 testpaths = ["packages", "tests"]
-# NOTE: 스켈레톤 단계라 커버리지 게이트 0. M1 Task 1 착수 시 80으로 올린다 (docs/05-testing-plan.md)
-addopts = "--cov=packages --cov-report=term-missing --cov-fail-under=0"
+# M1 Task 1 착수 — 커버리지 게이트 80으로 상향 (docs/05-testing-plan.md)
+# M3 Task 3.1/3.5 — gladius/tests에 test_spec.py, test_cli.py 추가되며
+# arsenal-core/pugio의 동명 테스트 모듈과 basename이 충돌 (tests/에 __init__.py
+# 없음). importlib 모드는 파일 경로 기준으로 모듈을 로드해 충돌 없이 공존시킨다.
+addopts = "--import-mode=importlib --cov=packages --cov-report=term-missing --cov-fail-under=80"
 
 [tool.coverage.run]
 omit = ["*/tests/*"]

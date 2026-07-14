@@ -1,0 +1,8 @@
+name: csv-cleanup
+source:
+  type: file
+  path: ./input/*.csv   # <- 정리할 CSV들을 이 디렉터리에 넣으세요
+  format: csv
+sink:
+  type: parquet
+  path: ./data/raw

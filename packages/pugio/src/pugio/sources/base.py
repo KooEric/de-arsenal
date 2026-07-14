@@ -30,3 +30,8 @@ class Source(Protocol):
     def fetch(self, unit: UnitSpec) -> FetchResult:
         """unit 하나를 Arrow로. 실패는 분류된 예외(arsenal_core.errors)로 던진다."""
         ...
+
+    # 선택적 훅: 커넥션 풀 등 리소스를 든 소스(RestSource)만 구현한다. Protocol에
+    # 필수 멤버로 넣으면 file/database/python 소스도 구현을 강제받으므로, 대신
+    # 구조적으로는 선택 사항으로 두고 러너가 getattr(source, "close", None)으로
+    # 방어적으로 호출한다 (pugio.runner.run_pipeline 참조).

@@ -1,0 +1,5 @@
+name: csv-cleanup
+pipelines:
+  - collect.yaml
+transforms:
+  - transform.yaml

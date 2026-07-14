@@ -4,16 +4,44 @@ Parquet in → (compile_sql 결과 실행) → Parquet out. Arrow 경유 zero-co
 query()는 즉석 SQL(미니 DWH) — 원클릭 경험의 "아하 모먼트".
 """
 
+import os
+import shutil
+import typing as t
 from pathlib import Path
 
+import duckdb
 import pyarrow as pa
 
+from arsenal_core.errors import FatalError
+from gladius.compile import compile_sql
+from gladius.compile.ident import quote_str_literal
 from gladius.spec import TransformSpec
 
 
 def run_transform(spec: TransformSpec) -> Path:
-    """변환을 실행하고 output 경로를 반환한다."""
-    raise NotImplementedError("M3 Task 3.3 — docs/plans/2026-07-08-m3-gladius.md")
+    """변환을 실행하고 output 경로를 반환한다.
+
+    전체 재계산 의미론(P0): 매 실행은 output을 통째로 다시 쓴다. 임시 디렉터리에
+    쓰고 os.replace로 원자 교체 — 실패한 실행이 이전 성공 출력을 훼손하지 않는다.
+    """
+    sql = compile_sql(spec)
+    con = duckdb.connect()  # in-memory, 상태 없음
+    con.execute(f"PRAGMA threads={os.cpu_count() or 1}")
+    # spec.output은 str(URI 스킴 보존용) — 파일시스템 연산이 필요한 여기서만 Path로 감싼다.
+    output = Path(spec.output)
+    tmp = output.with_name(output.name + ".tmp")
+    tmp.mkdir(parents=True, exist_ok=True)
+    try:
+        out_path = quote_str_literal(str(tmp / "part-0.parquet"))
+        con.execute(f"COPY ({sql}) TO {out_path} (FORMAT PARQUET, COMPRESSION ZSTD)")
+    except duckdb.Error as e:
+        raise FatalError(f"transform failed: {e}\n--- compiled SQL ---\n{sql}") from e
+    finally:
+        con.close()
+    if output.exists():
+        shutil.rmtree(output)  # 변환 출력은 전체 재계산 의미론 (P0)
+    os.replace(tmp, output)
+    return output
 
 
 def query(sql: str) -> pa.Table:
@@ -21,4 +49,13 @@ def query(sql: str) -> pa.Table:
 
     in-memory DuckDB, 상태 없음. DuckDB 에러는 FatalError로 변환.
     """
-    raise NotImplementedError("M3 Task 3.6 — docs/plans/2026-07-08-m3-gladius.md")
+    con = duckdb.connect()  # in-memory, 상태 없음
+    try:
+        arrow_table = con.sql(  # pyright: ignore[reportUnknownMemberType, reportUnknownVariableType]
+            sql
+        ).to_arrow_table()
+        return t.cast(pa.Table, arrow_table)
+    except duckdb.Error as e:
+        raise FatalError(str(e)) from e
+    finally:
+        con.close()

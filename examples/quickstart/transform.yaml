@@ -1,0 +1,9 @@
+# quickstart — 결제 완료(paid) 주문만 남기고 타입을 정리한다.
+# 실행: gladius run transform.yaml
+name: clean-orders
+input: ./data/orders
+steps:
+  - filter: "status = 'paid'"
+  - cast: { amount: double }
+  - select: [order_id, customer, amount, status]
+output: ./data/orders_clean
