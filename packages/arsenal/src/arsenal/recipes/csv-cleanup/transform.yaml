@@ -1,0 +1,6 @@
+name: clean-rows
+input: ./data/raw
+steps:
+  - dedup: [id]         # <- 중복 판정 키를 데이터에 맞게 바꾸세요
+  - cast: { id: bigint }
+output: ./data/clean
