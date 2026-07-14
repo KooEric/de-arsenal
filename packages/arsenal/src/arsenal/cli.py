@@ -29,6 +29,12 @@ app = typer.Typer(help="Arsenal — 원클릭 데이터 스택. init → run →
 _RECIPES_DIRNAME = "recipes"
 
 
+def _fatal(e: ArsenalError) -> typer.Exit:
+    """ArsenalError → `error: {e}` 출력 + exit(1). 커맨드에서는 `raise _fatal(e) from e`로 사용."""
+    typer.echo(f"error: {e}", err=True)
+    return typer.Exit(1)
+
+
 def _available_recipes() -> list[str]:
     root = resources.files("arsenal") / _RECIPES_DIRNAME
     return sorted(p.name for p in root.iterdir() if p.is_dir())
@@ -43,13 +49,16 @@ def _scaffold_recipe(recipe: str, dest: Path) -> None:
     src_root = resources.files("arsenal") / _RECIPES_DIRNAME / recipe
     entries = [p for p in src_root.iterdir() if p.is_file()]
 
-    dest.mkdir(parents=True, exist_ok=True)
-    for entry in entries:
-        target = dest / entry.name
-        if target.exists():
-            raise FatalError(f"refusing to overwrite existing file: {target}")
-    for entry in entries:
-        (dest / entry.name).write_bytes(entry.read_bytes())
+    try:
+        dest.mkdir(parents=True, exist_ok=True)
+        for entry in entries:
+            target = dest / entry.name
+            if target.exists():
+                raise FatalError(f"refusing to overwrite existing file: {target}")
+        for entry in entries:
+            (dest / entry.name).write_bytes(entry.read_bytes())
+    except OSError as e:
+        raise FatalError(f"cannot scaffold recipe into {dest}: {e}") from e
 
 
 @app.command()
@@ -68,8 +77,7 @@ def init(
             raise FatalError("RECIPE argument required (use --list to see available recipes)")
         _scaffold_recipe(recipe, dest)
     except ArsenalError as e:
-        typer.echo(f"error: {e}", err=True)
-        raise typer.Exit(1) from e
+        raise _fatal(e) from e
     typer.echo(f"done: {recipe} scaffolded into {dest}")
     typer.echo(f"  1. cd {dest}")
     typer.echo("  2. edit collect.yaml / transform.yaml as needed")
@@ -116,8 +124,7 @@ def run(project: Path = Path(".")) -> None:
             for transform_path in proj.transforms:
                 _run_transform(transform_path)
     except ArsenalError as e:
-        typer.echo(f"error: {e}", err=True)
-        raise typer.Exit(1) from e
+        raise _fatal(e) from e
     typer.echo(f"done: {len(proj.pipelines)} pipeline(s), {len(proj.transforms)} transform(s)")
 
 
@@ -127,8 +134,7 @@ def query(sql: str, fmt: str = typer.Option("table", "--format")) -> None:
     try:
         result = gladius_engine.query(sql)
     except ArsenalError as e:
-        typer.echo(f"error: {e}", err=True)
-        raise typer.Exit(1) from e
+        raise _fatal(e) from e
 
     if fmt == "table":
         duckdb.sql("SELECT * FROM result").show()  # pyright: ignore[reportUnknownMemberType]

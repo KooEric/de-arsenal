@@ -28,7 +28,14 @@ def _substitute_env(text: str) -> str:
 
 
 def load_transform(path: Path) -> TransformSpec:
-    raw = yaml.safe_load(_substitute_env(path.read_text()))
+    try:
+        text = path.read_text()
+    except FileNotFoundError as e:
+        raise FatalError(f"spec file not found: {path}") from e
+    except OSError as e:
+        raise FatalError(f"cannot read spec file {path}: {e}") from e
+
+    raw = yaml.safe_load(_substitute_env(text))
     try:
         return TransformSpec.model_validate(raw)
     except ValidationError as e:

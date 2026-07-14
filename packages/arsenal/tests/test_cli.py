@@ -73,6 +73,36 @@ def test_run_bad_manifest_exits_with_clean_error(tmp_path: Path) -> None:
     assert "Traceback" not in result.output
 
 
+def test_run_missing_pipeline_spec_exits_clean_and_names_file(tmp_path: Path) -> None:
+    """valid arsenal.yaml → collect.yaml referenced but absent — no raw traceback."""
+    (tmp_path / "arsenal.yaml").write_text(MANIFEST)
+    # collect.yaml intentionally not created
+    result = runner.invoke(app, ["run", "--project", str(tmp_path)])
+    assert result.exit_code == 1
+    assert result.output.startswith("error:")
+    assert "Traceback" not in result.output
+    assert "collect.yaml" in result.output
+
+
+def test_run_missing_transform_spec_exits_clean_and_names_file(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """valid arsenal.yaml → transform.yaml referenced but absent — no raw traceback."""
+    (tmp_path / "arsenal.yaml").write_text(MANIFEST)
+    (tmp_path / "collect.yaml").write_text("unused")  # pipeline step is stubbed below
+
+    def fake_run_pipeline(p: Path) -> None:
+        pass
+
+    monkeypatch.setattr("arsenal.cli._run_pipeline", fake_run_pipeline)
+    # transform.yaml intentionally not created
+    result = runner.invoke(app, ["run", "--project", str(tmp_path)])
+    assert result.exit_code == 1
+    assert result.output.startswith("error:")
+    assert "Traceback" not in result.output
+    assert "transform.yaml" in result.output
+
+
 def test_init_happy_path_copies_recipe_and_prints_guidance(tmp_path: Path) -> None:
     dest = tmp_path / "proj"
     result = runner.invoke(app, ["init", "csv-cleanup", "--dest", str(dest)])
@@ -136,3 +166,45 @@ def test_query_wraps_arsenal_error_as_clean_exit(monkeypatch: pytest.MonkeyPatch
     result = runner.invoke(app, ["query", "not sql"])
     assert result.exit_code == 1
     assert "error: bad sql" in result.output
+
+
+def test_query_format_table_renders_via_duckdb(monkeypatch: pytest.MonkeyPatch) -> None:
+    table = pa.table({"a": [1, 2]})
+
+    def fake_query(sql: str) -> pa.Table:
+        return table
+
+    monkeypatch.setattr("gladius.engine.query", fake_query)
+    result = runner.invoke(app, ["query", "SELECT 1", "--format", "table"])
+    assert result.exit_code == 0, result.output
+    assert "a" in result.output
+    assert "1" in result.output
+    assert "2" in result.output
+
+
+def test_query_format_csv(monkeypatch: pytest.MonkeyPatch) -> None:
+    table = pa.table({"a": [1, 2]})
+
+    def fake_query(sql: str) -> pa.Table:
+        return table
+
+    monkeypatch.setattr("gladius.engine.query", fake_query)
+    result = runner.invoke(app, ["query", "SELECT 1", "--format", "csv"])
+    assert result.exit_code == 0, result.output
+    lines = result.output.strip().splitlines()
+    assert lines[0].strip('"') == "a"
+    assert lines[1] == "1"
+    assert lines[2] == "2"
+
+
+def test_query_format_unsupported_is_clean_error(monkeypatch: pytest.MonkeyPatch) -> None:
+    table = pa.table({"a": [1, 2]})
+
+    def fake_query(sql: str) -> pa.Table:
+        return table
+
+    monkeypatch.setattr("gladius.engine.query", fake_query)
+    result = runner.invoke(app, ["query", "SELECT 1", "--format", "bogus"])
+    assert result.exit_code == 1
+    assert "error:" in result.output
+    assert "bogus" in result.output

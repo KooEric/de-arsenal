@@ -48,7 +48,14 @@ def _clean_loc(loc: tuple[int | str, ...]) -> tuple[int | str, ...]:
 
 
 def load_pipeline(path: Path) -> PipelineSpec:
-    raw = yaml.safe_load(_substitute_env(path.read_text()))
+    try:
+        text = path.read_text()
+    except FileNotFoundError as e:
+        raise FatalError(f"spec file not found: {path}") from e
+    except OSError as e:
+        raise FatalError(f"cannot read spec file {path}: {e}") from e
+
+    raw = yaml.safe_load(_substitute_env(text))
     try:
         return PipelineSpec.model_validate(raw)
     except ValidationError as e:
