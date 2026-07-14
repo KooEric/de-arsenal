@@ -62,3 +62,12 @@ def test_http_errors_are_classified(status: int, exc: type[Exception]) -> None:
     respx.get("https://api.test/items").respond(status_code=status)
     with pytest.raises(exc):
         make_source().fetch(next(iter(make_source().units())))
+
+
+def test_close_closes_underlying_httpx_client() -> None:
+    """close()는 생성자에 넘긴 httpx.Client의 커넥션 풀을 닫아야 한다 (누수 방지)."""
+    client = httpx.Client()
+    src = RestSource(SPEC, pipeline="p", client=client)
+    assert client.is_closed is False
+    src.close()
+    assert client.is_closed is True

@@ -1,5 +1,5 @@
 # 시나리오 A — 분석가의 첫 수집 (docs/00-overview.md)
-# 실행: pugio run examples/github-issues.yaml   (M1 완료 후 동작)
+# 실행: pugio run examples/github-issues.yaml
 name: github-issues
 source:
   type: rest

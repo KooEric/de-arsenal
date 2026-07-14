@@ -12,6 +12,7 @@ import functools
 import time
 from collections.abc import Callable
 from dataclasses import dataclass
+from pathlib import Path
 
 import httpx
 
@@ -59,7 +60,8 @@ def run_pipeline(
 ) -> RunReport:
     store = StateStore(spec.state_dir / f"{spec.name}.db")
     source = _build_source(spec)
-    sink = ParquetSink(spec.sink.path)
+    # spec.sink.path는 str(URI 스킴 보존용) — 로컬 파일시스템 싱크는 여기서 Path로 감싼다.
+    sink = ParquetSink(Path(spec.sink.path))
     fetched = written = skipped = done_count = 0
 
     try:
@@ -94,4 +96,10 @@ def run_pipeline(
                 break
         return RunReport(fetched=fetched, written=written, skipped=skipped)
     finally:
+        # close()는 Source 프로토콜의 선택적 훅 — httpx.Client 등 커넥션을 든 소스만
+        # 구현한다 (RestSource). file/database/python 소스는 없으므로 getattr로 안전하게
+        # 건너뛴다. 한 프로세스에서 여러 파이프라인을 도는 `arsenal run`에서 누수를 막는다.
+        close = getattr(source, "close", None)
+        if callable(close):
+            close()
         store.close()

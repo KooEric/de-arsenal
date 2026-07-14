@@ -51,3 +51,7 @@ class RestSource:
         exhausted = len(rows) < p.size
         batch = pa.RecordBatch.from_pylist(rows) if rows else None
         return FetchResult(batch=batch, exhausted=exhausted)
+
+    def close(self) -> None:
+        """httpx.Client의 커넥션 풀을 닫는다. run_pipeline이 finally에서 호출한다."""
+        self._client.close()

@@ -27,7 +27,9 @@ def run_transform(spec: TransformSpec) -> Path:
     sql = compile_sql(spec)
     con = duckdb.connect()  # in-memory, 상태 없음
     con.execute(f"PRAGMA threads={os.cpu_count() or 1}")
-    tmp = spec.output.with_name(spec.output.name + ".tmp")
+    # spec.output은 str(URI 스킴 보존용) — 파일시스템 연산이 필요한 여기서만 Path로 감싼다.
+    output = Path(spec.output)
+    tmp = output.with_name(output.name + ".tmp")
     tmp.mkdir(parents=True, exist_ok=True)
     try:
         out_path = quote_str_literal(str(tmp / "part-0.parquet"))
@@ -36,10 +38,10 @@ def run_transform(spec: TransformSpec) -> Path:
         raise FatalError(f"transform failed: {e}\n--- compiled SQL ---\n{sql}") from e
     finally:
         con.close()
-    if spec.output.exists():
-        shutil.rmtree(spec.output)  # 변환 출력은 전체 재계산 의미론 (P0)
-    os.replace(tmp, spec.output)
-    return spec.output
+    if output.exists():
+        shutil.rmtree(output)  # 변환 출력은 전체 재계산 의미론 (P0)
+    os.replace(tmp, output)
+    return output
 
 
 def query(sql: str) -> pa.Table:

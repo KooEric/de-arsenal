@@ -7,6 +7,7 @@ import pyarrow.parquet as pq
 import pytest
 import respx
 
+from arsenal_core.errors import FatalError
 from arsenal_core.spec.models import (
     DatabaseSourceSpec,
     FileSourceSpec,
@@ -17,6 +18,7 @@ from arsenal_core.spec.models import (
     SinkSpec,
     SplitSpec,
 )
+from arsenal_core.state import StateStore, UnitSpec
 from pugio.runner import run_pipeline
 
 
@@ -29,7 +31,7 @@ def make_spec(tmp_path: Path) -> PipelineSpec:
             url="https://api.test/items",
             pagination=PaginationSpec(mode="offset", size=2),
         ),
-        sink=SinkSpec(type="parquet", path=tmp_path / "out"),
+        sink=SinkSpec(type="parquet", path=str(tmp_path / "out")),
     )
 
 
@@ -102,7 +104,7 @@ def test_run_pipeline_dispatches_file_source(tmp_path: Path) -> None:
         name="file-t",
         state_dir=tmp_path / ".arsenal",
         source=FileSourceSpec(type="file", path=str(tmp_path / "*.csv")),
-        sink=SinkSpec(type="parquet", path=tmp_path / "out"),
+        sink=SinkSpec(type="parquet", path=str(tmp_path / "out")),
     )
     report = run_pipeline(spec)
     assert report.fetched == 1
@@ -135,7 +137,7 @@ def test_run_pipeline_dispatches_database_source(
             table="orders",
             split=SplitSpec(key="id", chunk=10),
         ),
-        sink=SinkSpec(type="parquet", path=tmp_path / "out"),
+        sink=SinkSpec(type="parquet", path=str(tmp_path / "out")),
     )
     report = run_pipeline(spec)
     assert report.fetched == 1
@@ -180,7 +182,7 @@ def test_run_pipeline_dispatches_python_source(
         name="py-t",
         state_dir=tmp_path / ".arsenal",
         source=PythonSourceSpec(type="python", target="runner_test_source:RunnerTestSource"),
-        sink=SinkSpec(type="parquet", path=tmp_path / "out"),
+        sink=SinkSpec(type="parquet", path=str(tmp_path / "out")),
     )
     report = run_pipeline(spec)
     assert report.fetched == 1
@@ -190,3 +192,75 @@ def test_run_pipeline_dispatches_python_source(
     table = pq.read_table(files[0])  # pyright: ignore[reportUnknownMemberType, reportUnknownVariableType]
     ids = sorted(row["id"] for row in table.to_pylist())  # pyright: ignore[reportUnknownMemberType, reportUnknownVariableType, reportUnknownArgumentType]
     assert ids == [1, 2]
+
+
+@respx.mock
+def test_run_pipeline_closes_rest_source_client(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """`arsenal run`은 한 프로세스에서 여러 파이프라인을 돈다 — 매 run_pipeline이
+    RestSource용 httpx.Client를 만들므로, finally에서 닫지 않으면 커넥션 풀이 샌다.
+    """
+    mock_pages([[{"id": 1}]])
+    created: list[httpx.Client] = []
+    real_client_cls = httpx.Client
+
+    class TrackingClient(real_client_cls):
+        def __init__(self, *args: object, **kwargs: object) -> None:
+            super().__init__(*args, **kwargs)
+            created.append(self)
+
+    monkeypatch.setattr("pugio.runner.httpx.Client", TrackingClient)
+    run_pipeline(make_spec(tmp_path))
+    assert len(created) == 1
+    assert created[0].is_closed is True
+
+
+def test_fetch_failure_propagates_and_marks_unit_failed(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """source.fetch가 FatalError를 던지면 예외가 전파되고 StateStore에 failed로 기록된다
+    (runner.py의 except → mark_failed → raise 경로, 이전까지 커버리지 없었음).
+    """
+    (tmp_path / "failing_source.py").write_text(
+        textwrap.dedent(
+            """
+            from arsenal_core.errors import FatalError
+            from arsenal_core.state import UnitSpec
+
+            class FailingSource:
+                def __init__(self, options, *, pipeline):
+                    self._pipeline = pipeline
+
+                def units(self):
+                    yield UnitSpec.create(
+                        pipeline=self._pipeline, source="mem", unit_key="only", payload={}
+                    )
+
+                def fetch(self, unit):
+                    raise FatalError("boom")
+            """
+        )
+    )
+    monkeypatch.syspath_prepend(str(tmp_path))  # pyright: ignore[reportUnknownMemberType]
+    spec = PipelineSpec(
+        name="fail-t",
+        state_dir=tmp_path / ".arsenal",
+        source=PythonSourceSpec(type="python", target="failing_source:FailingSource"),
+        sink=SinkSpec(type="parquet", path=str(tmp_path / "out")),
+    )
+
+    with pytest.raises(FatalError, match="boom"):
+        run_pipeline(spec)
+
+    expected_unit_id = UnitSpec.create(
+        pipeline="fail-t", source="mem", unit_key="only", payload={}
+    ).unit_id
+    store = StateStore(spec.state_dir / f"{spec.name}.db")
+    try:
+        rec = store.get(expected_unit_id)
+        assert rec.status == "failed"
+        assert rec.attempts == 1
+        assert rec.last_error is not None and "boom" in rec.last_error
+    finally:
+        store.close()

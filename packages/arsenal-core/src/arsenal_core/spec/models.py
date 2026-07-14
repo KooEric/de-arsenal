@@ -13,7 +13,7 @@ auth, validate 블록 추가. P1 필드는 이름을 미리 예약해 하위 호
 from pathlib import Path
 from typing import Annotated, Any, Literal
 
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, field_validator
 
 
 class _Frozen(BaseModel):
@@ -86,7 +86,17 @@ SourceSpec = Annotated[
 
 class SinkSpec(_Frozen):
     type: Literal["parquet"]  # M2: "duckdb", "postgres" 추가 (temp→MERGE 멱등)
-    path: Path
+    # str로 보관 — Path로 파싱하면 "s3://bucket/x" 같은 URI 스킴이 "s3:/bucket/x"로
+    # 정규화되어 훼손된다 (P1 httpfs/S3 싱크가 이 필드를 그대로 쓴다). sink/엔진이
+    # 파일시스템 연산이 필요한 지점에서 Path(...)로 감싸 해석한다.
+    path: str
+
+    @field_validator("path", mode="before")
+    @classmethod
+    def _coerce_path_to_str(cls, v: object) -> object:
+        if isinstance(v, Path):
+            return str(v)
+        return v
 
 
 class PipelineSpec(_Frozen):

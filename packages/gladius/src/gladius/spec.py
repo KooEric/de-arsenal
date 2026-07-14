@@ -49,12 +49,16 @@ class TransformSpec(_Frozen):
     input: str
     map: dict[str, str] | None = None  # {new_column: source_expr} — steps보다 먼저 적용
     steps: list[Step] = []
-    output: Path
+    # 출력 디렉터리. str로 보관 — Path로 파싱하면 "s3://bucket/x" 같은 URI 스킴이
+    # "s3:/bucket/x"로 정규화되어 훼손된다 (P1 httpfs/S3 싱크가 이 필드를 그대로
+    # 쓴다). 엔진이 mkdir/os.replace/rmtree 같은 파일시스템 연산이 필요한 지점에서
+    # Path(...)로 감싸 해석한다.
+    output: str
     # P1 예약: incremental, sql/python 탈출구
 
-    @field_validator("input", mode="before")
+    @field_validator("input", "output", mode="before")
     @classmethod
-    def _coerce_input_to_str(cls, v: object) -> object:
+    def _coerce_path_fields_to_str(cls, v: object) -> object:
         if isinstance(v, Path):
             return str(v)
         return v
