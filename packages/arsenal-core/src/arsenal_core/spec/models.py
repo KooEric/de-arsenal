@@ -53,7 +53,7 @@ class FileSourceSpec(_Frozen):
 
 class SplitSpec(_Frozen):
     key: str  # 단조 증가 키 (PK/serial/타임스탬프)
-    chunk: int = 100_000
+    chunk: int = Field(default=100_000, gt=0)  # 0/음수는 무한 루프로 이어져 검증 단계에서 차단
 
 
 class DatabaseSourceSpec(_Frozen):

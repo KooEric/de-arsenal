@@ -17,7 +17,9 @@ from pugio.sources.base import Source
 def load_python_source(spec: PythonSourceSpec, *, pipeline: str) -> Source:
     """ "pkg.module:ClassName"을 import → 프로토콜(units/fetch) 검사 → 인스턴스화.
 
-    import 실패·프로토콜 미구현은 FatalError (설정 오류 — 재시도 무의미).
+    import 실패·프로토콜 미구현·생성자 예외 모두 FatalError (설정/사용자 코드 오류 —
+    재시도 무의미). 사용자 코드 import·인스턴스화는 임의 예외를 던질 수 있으므로
+    Exception 전체를 잡아 target을 이름으로 문 FatalError로 재포장한다.
     """
     module_name, sep, cls_name = spec.target.partition(":")
     if not sep:
@@ -27,9 +29,11 @@ def load_python_source(spec: PythonSourceSpec, *, pipeline: str) -> Source:
     try:
         module = importlib.import_module(module_name)
         cls: Any = getattr(module, cls_name)
-    except (ImportError, AttributeError) as e:
+        for method in ("units", "fetch"):
+            if not callable(getattr(cls, method, None)):
+                raise FatalError(f"{spec.target} does not implement Source protocol: {method}")
+        return cls(spec.options, pipeline=pipeline)
+    except FatalError:
+        raise
+    except Exception as e:
         raise FatalError(f"cannot load python source {spec.target!r}: {e}") from e
-    for method in ("units", "fetch"):
-        if not callable(getattr(cls, method, None)):
-            raise FatalError(f"{spec.target} does not implement Source protocol: {method}")
-    return cls(spec.options, pipeline=pipeline)

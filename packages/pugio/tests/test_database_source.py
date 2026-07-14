@@ -8,8 +8,9 @@ import sqlite3
 from pathlib import Path
 
 import pytest
+from pydantic import ValidationError
 
-from arsenal_core.errors import FatalError
+from arsenal_core.errors import FatalError, RetryableError
 from arsenal_core.spec.models import DatabaseSourceSpec, SplitSpec
 from arsenal_core.state import UnitSpec
 from pugio.sources.database import DatabaseSource
@@ -143,3 +144,95 @@ def test_malicious_split_key_is_rejected_as_invalid_identifier(
     src = DatabaseSource(spec, pipeline="p")
     with pytest.raises(FatalError, match="invalid identifier"):
         list(src.units())
+
+
+def test_zero_chunk_is_rejected_at_spec_validation() -> None:
+    """chunk<=0은 units()의 무한 루프로 이어지므로 모델 검증 단계에서 막는다."""
+    with pytest.raises(ValidationError, match="greater than 0"):
+        SplitSpec(key="id", chunk=0)
+
+
+def test_negative_chunk_is_rejected_at_spec_validation() -> None:
+    with pytest.raises(ValidationError, match="greater than 0"):
+        SplitSpec(key="id", chunk=-1)
+
+
+def test_missing_table_during_units_query_is_fatal_not_retryable(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """no such table은 설정 오류 — lock 충돌과 달리 재시도해도 해결되지 않는다."""
+    db = make_db(tmp_path, 10)
+    monkeypatch.setenv("SRC_DB", str(db))
+    spec = DatabaseSourceSpec(
+        type="database",
+        dialect="sqlite",
+        dsn_env="SRC_DB",
+        table="nonexistent_table",
+        split=SplitSpec(key="id", chunk=100),
+    )
+    src = DatabaseSource(spec, pipeline="p")
+    with pytest.raises(FatalError, match="min/max query failed for table 'nonexistent_table'"):
+        list(src.units())
+
+
+def test_missing_table_during_fetch_is_fatal_not_retryable(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """no such table은 설정 오류 — FatalError로 분류되고 table 컨텍스트를 담는다.
+
+    (sqlite는 존재하지 않는 큰따옴표 식별자를 컬럼 자리에서는 문자열 리터럴로
+    묵인해 넘어가지만, FROM 절의 테이블 자리에서는 그대로 에러를 낸다.)
+    """
+    db = make_db(tmp_path, 10)
+    monkeypatch.setenv("SRC_DB", str(db))
+    spec = DatabaseSourceSpec(
+        type="database",
+        dialect="sqlite",
+        dsn_env="SRC_DB",
+        table="nonexistent_table",
+        split=SplitSpec(key="id", chunk=100),
+    )
+    src = DatabaseSource(spec, pipeline="p")
+    unit = UnitSpec.create(
+        pipeline="p",
+        source="nonexistent_table",
+        unit_key="id=1..10",
+        payload={"lo": 1, "hi": 10},
+    )
+    with pytest.raises(FatalError, match="fetch failed for table 'nonexistent_table'"):
+        src.fetch(unit)
+
+
+class _LockedConnection:
+    """sqlite3.Connection은 C 확장 타입이라 monkeypatch로 execute를 바꿔치기할 수 없다 —
+    대신 최소 인터페이스만 흉내 낸 가짜 커넥션으로 lock 충돌을 결정적으로 재현한다."""
+
+    def execute(self, *args: object, **kwargs: object) -> sqlite3.Cursor:
+        raise sqlite3.OperationalError("database is locked")
+
+    def close(self) -> None:
+        pass
+
+
+def test_locked_database_during_units_query_is_retryable(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """database is locked은 일시적 충돌 — RetryableError로 분류되어 backoff 재시도 대상."""
+    db = make_db(tmp_path, 10)
+    monkeypatch.setenv("SRC_DB", str(db))
+    src = DatabaseSource(make_spec(), pipeline="p")
+    monkeypatch.setattr(src, "_connect", lambda: _LockedConnection())
+    with pytest.raises(RetryableError, match="database is locked"):
+        list(src.units())
+
+
+def test_locked_database_during_fetch_is_retryable(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    db = make_db(tmp_path, 10)
+    monkeypatch.setenv("SRC_DB", str(db))
+    src = DatabaseSource(make_spec(), pipeline="p")
+    unit = next(iter(src.units()))
+    monkeypatch.setattr(src, "_connect", lambda: _LockedConnection())
+    with pytest.raises(RetryableError, match="database is locked"):
+        src.fetch(unit)

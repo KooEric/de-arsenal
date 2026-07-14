@@ -51,3 +51,23 @@ def test_missing_env_var_is_fatal(tmp_path: Path, monkeypatch: pytest.MonkeyPatc
     monkeypatch.delenv("TEST_TOKEN", raising=False)
     with pytest.raises(FatalError, match="TEST_TOKEN"):
         load_pipeline(write(tmp_path, VALID))
+
+
+def test_unknown_source_type_names_source_and_lists_expected_tags(tmp_path: Path) -> None:
+    """discriminator 값이 태그 목록에 없으면 source에 앵커된 친절한 에러(_clean_loc 경로)."""
+    with pytest.raises(FatalError) as exc_info:
+        load_pipeline(
+            write(tmp_path, "name: x\nsource: {type: bogus}\nsink: {type: parquet, path: d}")
+        )
+    message = str(exc_info.value)
+    assert "source:" in message
+    for tag in ("rest", "file", "database", "python"):
+        assert tag in message
+
+
+def test_source_without_type_reports_discriminator_error_at_source(tmp_path: Path) -> None:
+    """type 키 자체가 없으면 discriminator를 못 뽑는다는 에러가 source에 앵커된다."""
+    with pytest.raises(FatalError, match="source: Unable to extract tag using discriminator"):
+        load_pipeline(
+            write(tmp_path, "name: x\nsource: {url: https://x}\nsink: {type: parquet, path: d}")
+        )

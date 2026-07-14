@@ -15,6 +15,7 @@ import os
 import re
 import sqlite3
 from collections.abc import Iterator
+from typing import NoReturn
 
 import pyarrow as pa
 
@@ -24,6 +25,7 @@ from arsenal_core.state import UnitSpec
 from pugio.sources.base import FetchResult
 
 _IDENT_RE = re.compile(r"^[A-Za-z_][A-Za-z0-9_]*$")
+_TRANSIENT_MARKERS = ("database is locked", "database is busy")
 
 
 def _qi(name: str) -> str:
@@ -31,6 +33,19 @@ def _qi(name: str) -> str:
     if not _IDENT_RE.match(name):
         raise FatalError(f"invalid identifier: {name!r}")
     return f'"{name}"'
+
+
+def _raise_classified(e: sqlite3.Error, *, context: str) -> NoReturn:
+    """sqlite3 에러를 재시도 가능 여부로 분류해 던진다.
+
+    OperationalError이면서 "database is locked/busy"인 경우만 일시적(RetryableError).
+    테이블/컬럼 없음, SQL 오류 등은 설정 오류라 재시도해도 해결되지 않는다(FatalError).
+    """
+    if isinstance(e, sqlite3.OperationalError) and any(
+        marker in str(e).lower() for marker in _TRANSIENT_MARKERS
+    ):
+        raise RetryableError(f"{context}: {e}") from e
+    raise FatalError(f"{context}: {e}") from e
 
 
 class DatabaseSource:
@@ -61,6 +76,8 @@ class DatabaseSource:
             row = con.execute(
                 f"SELECT min({_qi(key)}), max({_qi(key)}) FROM {_qi(self._spec.table)}"
             ).fetchone()
+        except sqlite3.Error as e:
+            _raise_classified(e, context=f"min/max query failed for table {self._spec.table!r}")
         finally:
             con.close()
         if row is None or row[0] is None or row[1] is None:
@@ -77,7 +94,7 @@ class DatabaseSource:
             lo = hi
 
     def fetch(self, unit: UnitSpec) -> FetchResult:
-        """sqlite3 SELECT 범위 조회 → Arrow. 실패는 RetryableError로 분류."""
+        """sqlite3 SELECT 범위 조회 → Arrow. lock 충돌만 RetryableError, 나머지는 FatalError."""
         key = self._spec.split.key
         lo, hi = unit.payload["lo"], unit.payload["hi"]
         con = self._connect()
@@ -89,7 +106,7 @@ class DatabaseSource:
             columns = [d[0] for d in cur.description] if cur.description else []
             rows = cur.fetchall()
         except sqlite3.Error as e:
-            raise RetryableError(f"database fetch failed: {e}") from e
+            _raise_classified(e, context=f"fetch failed for table {self._spec.table!r}")
         finally:
             con.close()
         if not rows:
