@@ -2,9 +2,9 @@
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 >
-> **초안 상태**: M1 완료 전에 전체 틀을 잡기 위해 작성됨. 시그니처는 스켈레톤(커밋 c05de04) 기준. **M2 착수 시 M1의 실제 구현과 대조해 갱신 후 실행한다.** 갱신 시 이 블록을 제거.
+> **갱신 상태 (2026-07-14):** P0 draft 뼈대(브랜치 `feat/m1-draft`, PR #1) 산출물 기준으로 대조·갱신했다. 시그니처는 **실제 M1/draft 구현** 기준이다. draft가 이미 구현한 항목(2.11·2.13·2.0 일부·2.12 sqlite draft)은 아래 "진행 현황"에 반영했고, 각 태스크 본문 앞에 상태 배지를 달았다.
 
-**Goal:** Pugio를 실전 투입 가능하게 — 페이지네이션 3종, 인코딩, rate limit, 인증 자동 갱신, DB 멱등 sink, 검증 게이트, DLQ.
+**Goal:** Pugio를 실전 투입 가능하게 — 페이지네이션 4종, 인코딩, rate limit, 인증 자동 갱신, DB 멱등 sink, 검증 게이트, DLQ. (draft에서 파일·DB(sqlite)·Python 소스는 이미 착지)
 
 **Architecture:** M1의 units()/fetch() 계약을 유지하며 확장한다. cursor 모드는 `FetchResult.next_cursor` + StateStore cursors 테이블로 재개를 지원. 인증 만료는 러너가 `AuthExpiredError`를 잡아 refresh 후 같은 unit을 재시도. DB sink는 "staging 적재 → 키 기준 delete+insert"를 한 트랜잭션으로 묶어 멱등을 보장.
 
@@ -12,7 +12,42 @@
 
 ---
 
+## 진행 현황 (draft 대조)
+
+draft 뼈대가 아래 항목을 이미 착지시켰다. **이 표가 원장(source of truth)이며, 각 태스크 본문의 배지와 일치한다.**
+
+| Task | 항목 | 상태 | 근거 커밋 / 비고 |
+|---|---|---|---|
+| 2.0 | 스펙 확장 | 🟡 **부분** | `SourceSpec` 4-way discriminated union(rest\|file\|database\|python) ✅. `RestSourceSpec.encoding`·`rate_limit` **필드 선언됨**(구현 미완). **미완:** `SinkSpec` union화(+DuckDB/Postgres), `PaginationSpec` 모드 확장, `AuthSpec`, `ValidateSpec`, `PipelineSpec.validation`, `RestSourceSpec.auth`, `FetchResult.next_cursor` |
+| 2.1 | page 페이지네이션 | ⬜ 미착수 | |
+| 2.2 | cursor+link+영속 | ⬜ 미착수 | |
+| 2.3 | 인코딩 | 🟡 스펙만 | `RestSourceSpec.encoding` 필드 존재, `rest.py` 디코딩 로직 미구현. FileSource는 csv 인코딩 적용됨 |
+| 2.4 | rate limiter | 🟡 스펙만 | `RateLimitSpec.rps` 필드 존재, `TokenBucket` 구현체 없음 |
+| 2.5 | 인증 갱신 | ⬜ 미착수 | `auth/__init__.py`는 빈 스텁 |
+| 2.6 | 검증 게이트 | ⬜ 미착수 | `validate/__init__.py`는 docstring만 |
+| 2.7 | DLQ | ⬜ 미착수 | StateStore에 `quarantined` 상태 enum만 예약 |
+| 2.8 | DuckDB sink | ⬜ 미착수 | 러너가 `ParquetSink` 직접 생성(팩토리 없음) |
+| 2.9 | Postgres sink | ⬜ 미착수 | |
+| 2.10 | 스키마 스냅샷 | ⬜ 미착수 | |
+| **2.11** | **FileSource** | ✅ **완료** | `0f89150` + 하드닝 `8cedeff`. csv/jsonl 구현·테스트, excel은 `fastexcel` extra 미설치 시 FatalError |
+| **2.12** | **DatabaseSource** | 🟡 **draft 완료** | `aaac33f` + 하드닝 `8cedeff`. **⚠️ 접근 상이:** 플랜은 DuckDB scanner(ATTACH), draft는 **Python 표준 `sqlite3` 드라이버**로 구현. sqlite dialect만 동작. **미완:** postgres/mysql 실 커넥터 |
+| **2.13** | **Python 탈출구** | ✅ **완료** | `d180350` + 하드닝 `8cedeff`. `module:ClassName` 동적 import, 프로토콜 미구현·import 실패는 FatalError |
+| 2.14 | 실전 API 5종 | ⬜ 미착수(deferred) | 네트워크 불요, respx 계약 테스트 |
+| 2.15 | 실 API E2E + 마무리 | ⬜ 미착수 | |
+
+**현행 시그니처 주의 (draft 이후 바뀐 것 — 플랜 본문 코드조각은 이 기준으로 읽을 것):**
+- `SourceSpec`은 union 별칭 — **직접 생성자 호출 불가.** REST는 `RestSourceSpec(type="rest", ...)`, 파이프라인 전체는 `PipelineSpec.model_validate({...})`로 만든다. (플랜 본문의 `SourceSpec(type="rest", ...)` 스니펫은 전부 `RestSourceSpec(...)`으로 대체.)
+- `SinkSpec.path`·`TransformSpec.output`는 **`str`**(Path 아님) — `s3://` URI 스킴 훼손 방지(Batch G). 새 `DuckDBSinkSpec`/`PostgresSinkSpec`도 파일 경로는 `str`로, 필요 시 소비 지점에서 `Path(...)`로 감싼다.
+- `SplitSpec.chunk`는 `Field(default=100_000, gt=0)` — 0/음수는 검증 단계에서 차단됨.
+- 러너는 `_build_source(spec)` 팩토리로 소스를 분기하고, `finally`에서 `getattr(source, "close", None)`로 리소스를 정리한다(2.8에서 `build_sink` 팩토리를 같은 방식으로 추가).
+
+> **배치 분해와 착수 순서는 문서 맨 아래 "배치 분해 및 착수 순서" 절을 볼 것.** 태스크 번호 순서 ≠ 실행 순서다.
+
+---
+
 ### Task 2.0: 스펙 확장 — M2 필드 전체를 모델에 선언
+
+> 🟡 **부분 완료.** draft가 `SourceSpec` 4-way union과 `RestSourceSpec.encoding`/`rate_limit` **필드**를 이미 선언했다. 아래 코드조각 중 `PaginationSpec` 확장·`AuthSpec`·`ValidateSpec`·`SinkSpec` union화·`PipelineSpec.validation`·`RestSourceSpec.auth`·`FetchResult.next_cursor`만 **남은 작업**이다. **정정:** `SinkSpec`은 이미 존재하는 클래스(parquet, str path)이므로 union으로 **전환**하고, `ParquetSinkSpec.path`·`DuckDBSinkSpec.path`는 `Path`가 아니라 **`str`**로(+기존 `_coerce_path_to_str` 밸리데이터 패턴 유지). `SourceSpec.auth`가 아니라 **`RestSourceSpec.auth`**에 붙인다(union base엔 공통 필드를 못 붙임).
 
 **Files:**
 - Modify: `packages/arsenal-core/src/arsenal_core/spec/models.py`
@@ -278,6 +313,8 @@ fetch()는 link 모드에서 unit.payload["cursor"]가 있으면 그 URL로 직�
 
 ### Task 2.3: 인코딩 (euc-kr 등)
 
+> 🟡 **스펙만 존재.** `RestSourceSpec.encoding` 필드는 이미 선언됨 — 아래 Step 2(rest.py 디코딩 구현)만 하면 된다. FileSource는 이미 csv 인코딩을 적용 중.
+
 **Files:**
 - Modify: `packages/pugio/src/pugio/sources/rest.py`
 - Test: `packages/pugio/tests/test_rest_encoding.py` (+ `tests/fixtures/euc_kr_body.py`)
@@ -304,6 +341,8 @@ def test_euc_kr_response_decoded() -> None:
 ---
 
 ### Task 2.4: Rate limiter — 토큰 버킷 + 429 적응
+
+> 🟡 **스펙만 존재.** `RateLimitSpec.rps` 필드는 이미 선언됨 — `TokenBucket` 구현체와 rest.py 연동만 남았다.
 
 **Files:**
 - Create: `packages/arsenal-core/src/arsenal_core/ratelimit.py`
@@ -657,6 +696,8 @@ def pg_dsn() -> Iterator[str]:
 
 ### Task 2.11: FileSource — 로컬 파일 수집 (csv/jsonl/excel)
 
+> ✅ **완료** (`0f89150` + 하드닝 `8cedeff`). csv/jsonl 구현·테스트 완료, excel은 `fastexcel` extra 미설치 시 FatalError. **남은 다듬기(비차단, 백로그):** jsonl 경로에서 `encoding` 필드가 무시됨(pyarrow.json 한계) — 비UTF-8 jsonl 조합 시 문서 경고 또는 명시적 거부. 아래 본문은 이력 보존용.
+
 분석가의 1번 고통 "CSV 뭉치를 쿼리 가능하게"의 입구. 페이지네이션·인증 없음 — 파일 하나=unit 하나라 멱등이 공짜다. units()가 **유한** generator이므로 러너는 exhausted 없이 generator 종료로 끝난다(M1 러너가 이미 지원하는 경로 — for 루프 자연 종료).
 
 **Files:**
@@ -745,6 +786,8 @@ excel은 `fastexcel` 미설치 시 `FatalError("install pugio[excel]")` — 의�
 
 ### Task 2.12: DatabaseSource — 운영 DB → 웨어하우스 동기화
 
+> 🟡 **draft 완료 (sqlite만)** — `aaac33f` + 하드닝 `8cedeff`. **⚠️ 접근이 플랜과 다르다:** 아래 본문 Step 3은 DuckDB scanner(ATTACH) 방식이지만, draft는 **Python 표준 `sqlite3` 드라이버**로 키 범위 unit 분할을 구현했다(에러 분류: locked/busy만 Retryable, 나머지 Fatal). sqlite dialect만 동작하고 postgres/mysql은 생성 시 FatalError. **남은 작업 = postgres/mysql 실 커넥터.** 재개 시 결정할 것: (a) 기존 sqlite3 경로는 그대로 두고 postgres/mysql만 DuckDB scanner로 추가할지, (b) 전부 DuckDB scanner로 통일할지. **권장 (a)** — sqlite3 경로는 이미 테스트·하드닝됐고 의존성이 가볍다. → Batch M2-G에서 처리.
+
 DE의 1번 수집 작업. **커넥터를 만들지 않는다** — DuckDB scanner(ATTACH)가 드라이버·타입 매핑·전송을 전부 담당하고([09](../09-oss-leverage.md) 수 1), 우리는 키 범위 unit 분할과 상태만 얹는다.
 
 **Files:**
@@ -821,6 +864,8 @@ def fetch(self, unit: UnitSpec) -> FetchResult:
 ---
 
 ### Task 2.13: Python 커스텀 소스 탈출구
+
+> ✅ **완료** (`d180350` + 하드닝 `8cedeff`). `module:ClassName` 동적 import, 프로토콜 미구현·import/생성 실패는 모두 FatalError로 래핑. 아래 본문은 이력 보존용.
 
 YAML로 표현 안 되는 API를 만나도 절벽이 없다. Source 프로토콜 구현체를 동적 로드 — P1 dlt 래퍼도 이 메커니즘 위에 선다.
 
@@ -927,3 +972,53 @@ def load_python_source(spec: PythonSourceSpec, *, pipeline: str) -> Source:
 - [ ] DatabaseSource로 SQLite→parquet 동기화 + 증분(늘어난 행) 재실행 검증
 - [ ] Python 탈출구로 커스텀 소스 1개가 파이프라인 완주
 - [ ] **도그푸딩 개시 확인**: 실제 반복 작업 1개가 pugio로 매주 실행 중 (M1 직후 시작 — 04 진행 방식)
+
+---
+
+## 배치 분해 및 착수 순서
+
+draft의 SDD 흐름(구현자 서브에이전트 → 태스크 리뷰 → fix → 배치 완료)을 그대로 잇는다. 태스크 번호 순서가 아니라 **의존성과 가치 순**으로 배치를 묶었다. 각 배치는 독립적으로 리뷰·병합 가능한 수직 슬라이스다.
+
+| 배치 | 포함 태스크 | 내용 | 선행 의존 | 착수 순위 |
+|---|---|---|---|---|
+| **M2-A** 스펙 확장 | 2.0 잔여 | PaginationSpec 모드 확장, SinkSpec→union(+DuckDB/Postgres), AuthSpec, ValidateSpec, PipelineSpec.validation, RestSourceSpec.auth, FetchResult.next_cursor | — | **1 (먼저)** |
+| **M2-B** 페이지네이션 | 2.1, 2.2 | page / cursor / link 3종 + StateStore 커서 영속 + 러너 재개 | A | **2** |
+| **M2-C** 요청 잡일 | 2.3, 2.4 | encoding 디코딩 + TokenBucket rate limiter | A (필드는 이미 존재) | **2 (B와 병렬 가능)** |
+| **M2-D** 인증 갱신 | 2.5 | static/oauth2 provider + 401→refresh→재시도 루프 | A | 3 |
+| **M2-E** 검증 게이트+DLQ | 2.6, 2.7 | 벡터화 검증 + quarantine 정책 + DLQ list/retry (Scutum 코어) | A | 3 |
+| **M2-F** DB 멱등 sink | 2.8, 2.9 | DuckDB temp→MERGE + Postgres on-conflict + `build_sink` 팩토리 | A | 3 (→ api-to-postgres 레시피 부활 가능) |
+| **M2-G** DB소스 실커넥터+스냅샷 | 2.12 잔여, 2.10 | postgres/mysql DuckDB scanner + 스키마 스냅샷 기록 | A | 4 |
+| **M2-H** 실전검증+마무리 | 2.14, 2.15 | 실전 API 5종 YAML 계약 테스트 + live E2E(opt-in) + 예제 + 최종 게이트 | B·C·D·F | **5 (마지막)** |
+
+### 권장 실행 경로
+
+```
+M2-A (스펙 토대 — 이게 없으면 나머지가 못 나감)
+  ├─► M2-B (페이지네이션)   ┐
+  ├─► M2-C (encoding+rate)  ├─ A 이후 병렬 가능 (파일 충돌 적음: B=rest.py+runner+store, C=rest.py+새 ratelimit.py)
+  ├─► M2-D (인증)           │   └ 주의: B·C·D가 모두 rest.py를 건드리므로, 한 배치씩 순차 머지 후 다음 배치가 rebase하는 편이 안전
+  ├─► M2-E (검증+DLQ)       │
+  └─► M2-F (DB sink)        ┘
+         │
+         ▼
+       M2-G (DB 실커넥터 + 스냅샷)
+         │
+         ▼
+       M2-H (실전 API 검증 + M2 마무리 + DoD)
+```
+
+### 왜 이 순서인가
+
+1. **M2-A 먼저** — PaginationSpec 모드·AuthSpec·ValidateSpec·SinkSpec union·FetchResult.next_cursor가 나머지 전 배치의 입력이다. 순수 모델 확장이라 하위 호환만 지키면 리스크가 낮고, 기존 M1 테스트가 전부 통과하는 것이 완료 증거.
+2. **M2-B를 그다음 최우선** — 페이지네이션 4종 완성이 "실전 Pugio"의 핵심 가치이자 M2 DoD의 첫 항목. cursor/link의 재개 영속화가 신뢰성 코어의 실전 확장이다.
+3. **C·D·E·F는 A 이후 서로 독립** — 가치·리스크에 따라 순서 조정 가능. 단 B·C·D가 `rest.py`를 공유하므로 병렬로 띄우기보다 **한 배치 머지 → 다음 배치 rebase**가 충돌 비용이 낮다. E(검증/DLQ)·F(sink)는 rest.py를 안 건드려 B와 진짜 병렬 가능.
+4. **M2-F 완료 시 보너스** — DuckDB/Postgres sink가 생기면 M4에서 P1로 이연했던 `api-to-postgres` 레시피를 부활시킬 수 있다(단 검증 게이트가 필요하면 E도 선행).
+5. **M2-H는 반드시 마지막** — 실전 API 5종 YAML은 페이지네이션·rate limit·인증·sink가 다 있어야 표현 가능. 표현 불가 지점을 `docs/reference/api-coverage.md`에 정직하게 기록하는 것이 이 배치의 산출물.
+
+### 모델 라우팅 (draft 세션 규칙 계승)
+
+구현·리뷰는 sonnet 서브에이전트, 막히거나 고난도 문제는 fable로 에스컬레이션. 각 배치 완료 시 태스크 리뷰 1회 → Critical/Important는 fix 서브에이전트 1개에 일괄 → 재리뷰 → `.superpowers/sdd/progress.md` 원장 갱신. M2 전체 완료 후 whole-branch 최종 리뷰는 가장 강한 모델로.
+
+### 착수 시 첫 행동
+
+`docs/plans/2026-07-08-m2-pugio-complete.md`(이 문서)를 진행 원장으로 삼아 **M2-A부터** superpowers:subagent-driven-development로 시작한다. 첫 배치 브리핑에 넣을 것: 위 "현행 시그니처 주의" 4개 항목 + "기존 M1/draft 테스트 전부 통과(하위 호환 증명)"를 완료 기준으로 명시.
