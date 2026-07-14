@@ -1,0 +1,138 @@
+"""Arsenal 우산 CLI 테스트 (M4 Task 4.0) — init/run/query, 위임만 하고 로직은 없다."""
+
+import json
+from pathlib import Path
+
+import pyarrow as pa
+import pytest
+from arsenal.cli import app
+from arsenal.project import load_project
+from typer.testing import CliRunner
+
+from arsenal_core.errors import FatalError
+
+runner = CliRunner()
+
+MANIFEST = """\
+name: my-project
+pipelines:
+  - collect.yaml
+transforms:
+  - transform.yaml
+"""
+
+
+def test_manifest_parses_and_paths_resolve_relative_to_file(tmp_path: Path) -> None:
+    (tmp_path / "arsenal.yaml").write_text(MANIFEST)
+    proj = load_project(tmp_path / "arsenal.yaml")
+    assert proj.name == "my-project"
+    assert proj.pipelines[0] == tmp_path / "collect.yaml"
+    assert proj.transforms[0] == tmp_path / "transform.yaml"
+
+
+def test_load_project_missing_manifest_raises_fatal_error(tmp_path: Path) -> None:
+    with pytest.raises(FatalError):
+        load_project(tmp_path / "arsenal.yaml")
+
+
+def test_load_project_bad_yaml_raises_fatal_error(tmp_path: Path) -> None:
+    (tmp_path / "arsenal.yaml").write_text("name: [unterminated")
+    with pytest.raises(FatalError):
+        load_project(tmp_path / "arsenal.yaml")
+
+
+def test_load_project_missing_required_field_raises_fatal_error(tmp_path: Path) -> None:
+    (tmp_path / "arsenal.yaml").write_text("pipelines: []\n")
+    with pytest.raises(FatalError, match="name"):
+        load_project(tmp_path / "arsenal.yaml")
+
+
+def test_run_executes_pipelines_then_transforms(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    (tmp_path / "arsenal.yaml").write_text(MANIFEST)
+    calls: list[str] = []
+
+    def fake_run_pipeline(p: Path) -> None:
+        calls.append(f"collect:{p.name}")
+
+    def fake_run_transform(p: Path) -> None:
+        calls.append(f"transform:{p.name}")
+
+    monkeypatch.setattr("arsenal.cli._run_pipeline", fake_run_pipeline)
+    monkeypatch.setattr("arsenal.cli._run_transform", fake_run_transform)
+    result = runner.invoke(app, ["run", "--project", str(tmp_path)])
+    assert result.exit_code == 0, result.output
+    assert calls == ["collect:collect.yaml", "transform:transform.yaml"]
+
+
+def test_run_bad_manifest_exits_with_clean_error(tmp_path: Path) -> None:
+    result = runner.invoke(app, ["run", "--project", str(tmp_path)])
+    assert result.exit_code == 1
+    assert "error:" in result.output
+    assert "Traceback" not in result.output
+
+
+def test_init_happy_path_copies_recipe_and_prints_guidance(tmp_path: Path) -> None:
+    dest = tmp_path / "proj"
+    result = runner.invoke(app, ["init", "csv-cleanup", "--dest", str(dest)])
+    assert result.exit_code == 0, result.output
+    assert (dest / "arsenal.yaml").exists()
+    assert (dest / "collect.yaml").exists()
+    assert (dest / "transform.yaml").exists()
+    assert (dest / "README.md").exists()
+    assert "arsenal run" in result.output
+
+
+def test_init_refuses_to_overwrite_existing_files(tmp_path: Path) -> None:
+    dest = tmp_path / "proj"
+    dest.mkdir()
+    (dest / "arsenal.yaml").write_text("keep me")
+    result = runner.invoke(app, ["init", "csv-cleanup", "--dest", str(dest)])
+    assert result.exit_code == 1
+    assert "error:" in result.output
+    assert (dest / "arsenal.yaml").read_text() == "keep me"
+    assert not (dest / "collect.yaml").exists()  # 부분 복사 없음 — 전부 아니면 전무
+
+
+def test_init_list_prints_available_recipes() -> None:
+    result = runner.invoke(app, ["init", "--list"])
+    assert result.exit_code == 0
+    assert "github-issues" in result.output
+    assert "csv-cleanup" in result.output
+
+
+def test_init_unknown_recipe_lists_available(tmp_path: Path) -> None:
+    result = runner.invoke(app, ["init", "does-not-exist", "--dest", str(tmp_path / "x")])
+    assert result.exit_code == 1
+    assert "error:" in result.output
+    assert "github-issues" in result.output
+
+
+def test_init_without_recipe_or_list_is_a_clean_error() -> None:
+    result = runner.invoke(app, ["init"])
+    assert result.exit_code == 1
+    assert "error:" in result.output
+
+
+def test_query_delegates_to_gladius_engine(monkeypatch: pytest.MonkeyPatch) -> None:
+    table = pa.table({"a": [1, 2]})
+
+    def fake_query(sql: str) -> pa.Table:
+        return table
+
+    monkeypatch.setattr("gladius.engine.query", fake_query)
+    result = runner.invoke(app, ["query", "SELECT 1", "--format", "jsonl"])
+    assert result.exit_code == 0, result.output
+    rows = [json.loads(line) for line in result.output.strip().splitlines()]
+    assert rows == [{"a": 1}, {"a": 2}]
+
+
+def test_query_wraps_arsenal_error_as_clean_exit(monkeypatch: pytest.MonkeyPatch) -> None:
+    def boom(sql: str) -> pa.Table:
+        raise FatalError("bad sql")
+
+    monkeypatch.setattr("gladius.engine.query", boom)
+    result = runner.invoke(app, ["query", "not sql"])
+    assert result.exit_code == 1
+    assert "error: bad sql" in result.output
