@@ -3,7 +3,7 @@ name = "de-arsenal-workspace"
 version = "0.0.0"
 description = "DE Arsenal workspace root (not published)"
 requires-python = ">=3.11"
-dependencies = ["arsenal-core", "pugio", "gladius", "de-arsenal"]
+dependencies = ["arsenal-core", "pugio[postgres]", "gladius", "de-arsenal"]
 
 [tool.uv.workspace]
 members = ["packages/*"]
@@ -22,6 +22,7 @@ dev = [
     "hypothesis>=6",
     "ruff>=0.6",
     "pyright>=1.1",
+    "testcontainers[postgres]>=4.7",
 ]
 
 [tool.ruff]

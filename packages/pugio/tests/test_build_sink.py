@@ -1,7 +1,7 @@
 from pathlib import Path
 
-from arsenal_core.spec.models import DuckDBSinkSpec, ParquetSinkSpec
-from pugio.sinks import DuckDBSink, ParquetSink, build_sink
+from arsenal_core.spec.models import DuckDBSinkSpec, ParquetSinkSpec, PostgresSinkSpec
+from pugio.sinks import DuckDBSink, ParquetSink, PostgresSink, build_sink
 
 
 def test_build_sink_returns_parquet(tmp_path: Path) -> None:
@@ -16,3 +16,9 @@ def test_build_sink_returns_duckdb(tmp_path: Path) -> None:
     )
     sink = build_sink(spec)
     assert isinstance(sink, DuckDBSink)
+
+
+def test_build_sink_returns_postgres() -> None:
+    spec = PostgresSinkSpec(type="postgres", dsn_env="PG_DSN_TEST", table="t", merge_key=["id"])
+    sink = build_sink(spec)
+    assert isinstance(sink, PostgresSink)
