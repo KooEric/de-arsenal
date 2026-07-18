@@ -23,6 +23,14 @@ class RestSource:
         self._client = client
 
     def units(self) -> Iterator[UnitSpec]:
+        """모드별로 unit을 lazy하게 열거한다 (offset/page/cursor/link)."""
+        mode = self._spec.pagination.mode
+        if mode == "page":
+            yield from self._page_units()
+        else:
+            yield from self._offset_units()
+
+    def _offset_units(self) -> Iterator[UnitSpec]:
         """offset=0, size, 2*size, … 무한 열거. unit_key = "offset={n}"."""
         size = self._spec.pagination.size
         for offset in itertools.count(0, size):
@@ -33,6 +41,23 @@ class RestSource:
                 payload={"offset": offset, "limit": size},
             )
 
+    def _page_units(self) -> Iterator[UnitSpec]:
+        """start_page부터 1씩 증가. unit_key = "page={n}"."""
+        for n in itertools.count(self._spec.pagination.start_page):
+            yield UnitSpec.create(
+                pipeline=self._pipeline,
+                source=self._spec.url,
+                unit_key=f"page={n}",
+                payload={"page": n},
+            )
+
+    def _request_params(self, unit: UnitSpec) -> dict[str, str | int]:
+        """모드별 쿼리 파라미터. offset/page 공용 — cursor/link는 B4/B7에서 분기."""
+        p = self._spec.pagination
+        if p.mode == "page":
+            return {p.param: unit.payload["page"], p.size_param: p.size}
+        return {p.param: unit.payload["offset"], p.size_param: p.size}
+
     def fetch(self, unit: UnitSpec) -> FetchResult:
         """GET → classify_http_status로 예외 매핑 → RecordBatch.
 
@@ -41,7 +66,7 @@ class RestSource:
         p = self._spec.pagination
         resp = self._client.get(
             self._spec.url,
-            params={p.param: unit.payload["offset"], p.size_param: unit.payload["limit"]},
+            params=self._request_params(unit),
             headers=self._spec.headers,
         )
         exc_type = classify_http_status(resp.status_code)

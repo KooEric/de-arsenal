@@ -64,6 +64,42 @@ def test_http_errors_are_classified(status: int, exc: type[Exception]) -> None:
         make_source().fetch(next(iter(make_source().units())))
 
 
+def test_request_params_offset() -> None:
+    """B1: offset 모드 _request_params는 {param: offset, size_param: size}를 반환한다."""
+    src = make_source()
+    unit = next(iter(src.units()))
+    assert src._request_params(unit) == {"offset": 0, "limit": 2}
+
+
+PAGE_SPEC = RestSourceSpec(
+    type="rest",
+    url="https://api.test/items",
+    pagination=PaginationSpec(mode="page", param="page", size_param="limit", size=2, start_page=1),
+)
+
+
+@respx.mock
+def test_page_mode_sends_incrementing_pages() -> None:
+    """B2: page 모드는 start_page부터 1씩 증가하며 요청하고, 마지막 부분 페이지에서 멈춘다."""
+    seen: list[int] = []
+
+    def responder(request: httpx.Request) -> httpx.Response:
+        page = int(dict(request.url.params)["page"])
+        seen.append(page)
+        start = PAGE_SPEC.pagination.start_page
+        body = [{"id": page}, {"id": page * 100}] if page <= start + 1 else []
+        return httpx.Response(200, json=body)
+
+    respx.get("https://api.test/items").mock(side_effect=responder)
+    src = RestSource(PAGE_SPEC, pipeline="p", client=httpx.Client())
+    start = PAGE_SPEC.pagination.start_page
+    for _, unit in zip(range(3), src.units(), strict=False):
+        result = src.fetch(unit)
+        if result.exhausted:
+            break
+    assert seen == [start, start + 1, start + 2]
+
+
 def test_close_closes_underlying_httpx_client() -> None:
     """close()는 생성자에 넘긴 httpx.Client의 커넥션 풀을 닫아야 한다 (누수 방지)."""
     client = httpx.Client()
