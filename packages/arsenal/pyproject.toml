@@ -3,7 +3,21 @@ name = "de-arsenal"
 version = "0.1.0"
 description = "Arsenal — 원클릭 데이터 스택. 수집→검증→변환→쿼리를 명령 하나로 (pugio+gladius 우산 CLI)"
 requires-python = ">=3.11"
-dependencies = ["arsenal-core", "pugio", "gladius", "typer>=0.12"]
+license = "Apache-2.0"
+dependencies = ["arsenal-core>=0.1,<0.2", "pugio", "gladius", "typer>=0.12"]
+classifiers = [
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "License :: OSI Approved :: Apache Software License",
+    "Operating System :: OS Independent",
+    "Intended Audience :: Developers",
+    "Topic :: Software Development :: Libraries :: Python Modules",
+]
+
+[project.urls]
+Homepage = "https://github.com/KooEric/de-arsenal"
+Repository = "https://github.com/KooEric/de-arsenal"
 
 [project.scripts]
 arsenal = "arsenal.cli:app"

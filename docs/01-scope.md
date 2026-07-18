@@ -91,7 +91,7 @@
 - **원클릭 레시피 3종**: `github-issues`(API→테이블), `csv-cleanup`(CSV 뭉치→정리된 Parquet+쿼리), `api-to-postgres`(API→PG upsert 동기화) — "자주 접하는 문제의 원클릭 솔루션"의 실체
 - Pugio 수집 → Gladius 변환 연계 예제 (Arrow/Parquet 허브 규약 문서화)
 - **설치 경로를 분석가 기준으로**: `uv tool install de-arsenal` / pipx를 공식 1줄 설치로 문서화. **CI에 Windows 추가**
-- README·각 도구 사용 문서·처리 범위 정직한 문서화(Ballista 문제 2의 P0 몫)
+- README·각 도구 사용 문서·처리 범위 정직한 문서화(Ballista 문제 2의 P0 몫) — [08-limits.md](08-limits.md)
 - 벤치마크 스크립트와 수치 기록
 - PyPI 패키징 검증(`uv build`), v0.1.0 태그
 

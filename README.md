@@ -54,6 +54,7 @@ Databricks·Snowflake 수준의 **완성도**를, 그들과 정반대의 **형�
 | [docs/05-testing-plan.md](docs/05-testing-plan.md) | 테스트 전략 — 단위/통합/E2E, 신뢰성 시나리오 |
 | [docs/06-conventions.md](docs/06-conventions.md) | 코딩·커밋·브랜치·PR·CI 컨벤션 |
 | [docs/07-cost-efficiency.md](docs/07-cost-efficiency.md) | 저비용 고효율 설계 — 비용 구조, 증분 처리, 효율 목표치 |
+| [docs/08-limits.md](docs/08-limits.md) | 정직한 한계선 — 단일 노드 처리 envelope, 미지원 범위, sink별 멱등 보장 |
 | [docs/09-oss-leverage.md](docs/09-oss-leverage.md) | 오픈소스 차용 전략 — 차용 지도, dlt·dbt 인터롭, 쓸만함 판정 기준 |
 | [docs/plans/](docs/plans/) | 마일스톤별 상세 TDD 구현 계획 |
 | [docs/roadmap.md](docs/roadmap.md) | 원본 로드맵 (문제 정의 전체) |
