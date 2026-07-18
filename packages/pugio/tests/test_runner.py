@@ -560,6 +560,52 @@ def test_quarantine_isolates_unit_and_run_continues(tmp_path: Path) -> None:
     assert len(dlq_files) == 1
 
 
+@respx.mock
+def test_quarantine_on_last_offset_page_stops_the_run(tmp_path: Path) -> None:
+    """M4 회귀 (api-to-postgres 레시피 E2E에서 발견): offset/page 페이지네이션은
+    `itertools.count`로 무한 열거되므로 루프를 끝내는 유일한 신호는 마지막 fetch의
+    `result.exhausted`(짧은 페이지)뿐이다. quarantine 분기의 `continue`가 그 체크를
+    건너뛰면, 검증 위반이 하필 그 마지막(짧은) 페이지에서 나는 순간 러너가 종료
+    신호를 영영 못 보고 존재하지 않는 다음 페이지를 무한히 요청한다. 이 테스트는
+    request_count로 실제 요청 수를 세어 회귀 시(고쳐지기 전) 3번째 이상 요청이
+    발생하지 않음을 못박는다 — 고쳐지기 전에는 이 테스트가 타임아웃/무한루프로
+    걸렸을 것이다."""
+    request_count = 0
+    # 두 번째(마지막) 페이지가 위반이자 짧은 페이지
+    pages = [[{"id": 1}, {"id": 2}], [{"id": None}]]
+
+    def responder(request: httpx.Request) -> httpx.Response:
+        nonlocal request_count
+        request_count += 1
+        offset = int(dict(request.url.params)["offset"])
+        idx = offset // 2
+        body = pages[idx] if idx < len(pages) else []
+        return httpx.Response(200, json=body)
+
+    respx.get("https://api.test/items").mock(side_effect=responder)
+
+    spec = PipelineSpec(
+        name="quarantine-exhaust",
+        state_dir=tmp_path / ".arsenal",
+        source=RestSourceSpec(
+            type="rest",
+            url="https://api.test/items",
+            pagination=PaginationSpec(mode="offset", size=2),
+        ),
+        sink=ParquetSinkSpec(type="parquet", path=str(tmp_path / "out")),
+        validate=ValidateSpec(
+            rules=[ValidateRule(field="id", not_null=True)], on_violation="quarantine"
+        ),
+    )
+
+    report = run_pipeline(spec)
+
+    assert report.fetched == 2
+    assert report.written == 1
+    assert report.quarantined == 1
+    assert request_count == 2  # 회귀 시 3, 4, 5... 무한 증가
+
+
 def test_block_policy_raises_fatal(tmp_path: Path) -> None:
     """block 정책의 FatalError는 _fetch_with_auth_refresh를 감싼 except 바깥에서
     던져지므로, 명시적으로 mark_failed하지 않으면 unit이 영원히 'running'에 갇힌다

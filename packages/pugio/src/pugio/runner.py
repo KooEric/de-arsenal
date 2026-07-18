@@ -179,6 +179,18 @@ def run_pipeline(
                         quarantined += 1
                         # 쓰기·done 마킹 모두 건너뛰고 다음 unit으로 — 격리된 unit은
                         # 커서를 진전시키지 않는다 (재실행 시 여전히 격리 상태로 재등록됨).
+                        #
+                        # M4 FIX (api-to-postgres 레시피 E2E에서 발견): offset/page
+                        # 페이지네이션은 무한 generator(itertools.count)라 이 루프를 끝내는
+                        # 유일한 신호가 아래쪽의 `if result.exhausted: break`뿐이다. 이
+                        # continue가 그 지점을 건너뛰므로, 검증 실패가 하필 마지막
+                        # 페이지(짧은 행 수로 exhausted를 알리는 바로 그 페이지)에서 나면
+                        # 러너가 종료 신호를 영영 못 보고 존재하지 않는 다음 페이지를
+                        # 무한히 요청한다. cursor/link 모드는 소스 내부 상태로 스스로
+                        # 멈추므로 이 break는 사실상 no-op이지만, offset/page 모드에는
+                        # 필수다.
+                        if result.exhausted:
+                            break
                         continue
             if result.batch is not None:
                 # M2-F FIX 7: sink.write는 fetch와 달리 감싸지지 않아, 실패해도
