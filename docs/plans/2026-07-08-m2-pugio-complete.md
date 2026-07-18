@@ -895,7 +895,7 @@ def load_python_source(spec: PythonSourceSpec, *, pipeline: str) -> Source:
 - Create: `examples/real-world/{github,stripe,data-go-kr,notion,slack}.yaml`
 - Create: `docs/reference/api-coverage.md` (검증 결과 기록)
 
-- [ ] 대상과 검증 포인트:
+- [x] 대상과 검증 포인트:
 
 | API | 검증 포인트 |
 |---|---|
@@ -905,25 +905,28 @@ def load_python_source(spec: PythonSourceSpec, *, pipeline: str) -> Source:
 | Notion | cursor + 초당 3req rate limit, POST 검색 API(→ method 필드 필요성 판정) |
 | Slack | cursor(`next_cursor`), 429 Retry-After |
 
-- [ ] 각 YAML은 respx 목으로 계약 테스트(실 계정 불필요). 표현 불가 항목은 (a) 스펙 필드 추가 또는 (b) "Python 탈출구 사용" 판정을 `api-coverage.md`에 기록 — 숨기지 않는다.
-- [ ] Commit: `test: real-world api coverage verification`
+- [x] 각 YAML은 respx 목으로 계약 테스트(실 계정 불필요). 표현 불가 항목은 (a) 스펙 필드 추가 또는 (b) "Python 탈출구 사용" 판정을 `api-coverage.md`에 기록 — 숨기지 않는다.
+  - method/body 필드를 `RestSourceSpec`에 추가(Notion POST 검색이 필요로 함, GET 기본값이라 하위 호환).
+  - Stripe는 표현 불가로 판정(last-item-id 커서) → Python 탈출구가 의도된 경로. `docs/reference/api-coverage.md` 참고.
+  - 검증 과정에서 실제 버그 2건 발견·수정: url에 심은 정적 쿼리 파라미터가 페이지네이션 파라미터에 의해 드롭되는 문제, Slack의 빈 문자열(`""`) 커서를 종료 신호로 인식하지 못해 무한루프에 빠지는 문제. 둘 다 회귀 테스트로 고정.
+- [x] Commit: `test: real-world api coverage verification`
 
 ---
 
 ### Task 2.15: 실 API E2E (opt-in) + M2 마무리
 
-- [ ] `tests/e2e/test_live_github.py` — `RUN_LIVE=1`일 때만: GitHub API 3페이지 수집, 중단·재개 1회. CI 기본 제외.
-- [ ] `examples/`에 cursor·duckdb sink·validate 예제 YAML 추가.
-- [ ] 전체 게이트: `uv run ruff check . && uv run pyright && uv run pytest` + 커버리지 ≥ 80 확인.
-- [ ] `git commit -m "feat: m2 complete — production-ready pugio"`
+- [x] `packages/pugio/tests/test_live_github.py` — `RUN_LIVE=1`일 때만: GitHub API 3페이지 수집, 중단·재개 1회. CI 기본 제외(스킵, 토큰 불필요). (계획 문서의 `tests/e2e/` 경로 대신 기존 패키지 테스트 디렉터리 `packages/pugio/tests/`에 배치 — 다른 pugio 테스트와 동일한 위치.)
+- [x] `examples/`에 cursor·duckdb sink·validate 예제 YAML 추가.
+- [x] 전체 게이트: `uv run ruff check . && uv run pyright && uv run pytest` + 커버리지 ≥ 80 확인.
+- [x] `git commit`(M2-H 배치 — 커밋 메시지는 `docs: quickstart-adjacent examples + m2 wrap + live e2e opt-in`, 계획 문서 초안의 문구와 다르게 실제로는 두 개 커밋으로 분리됨(H1/H3)).
 
 ## M2 DoD
 
-- [ ] 페이지네이션 4종(offset/page/cursor/link)이 각각 재개 시나리오까지 통합 테스트로 커버
-- [ ] 시나리오 C(토큰 만료 → 갱신 → 완주) 자동 검증
-- [ ] 모든 sink가 공통 계약 스위트(멱등·원자성) 통과
-- [ ] 검증 위반 unit이 격리돼도 파이프라인이 완주하고, DLQ 재투입이 동작
-- [ ] 실전 API 5종의 YAML 표현 검증 완료 — `docs/reference/api-coverage.md`에 결과 기록
-- [ ] DatabaseSource로 SQLite→parquet 동기화 + 증분(늘어난 행) 재실행 검증
-- [ ] Python 탈출구로 커스텀 소스 1개가 파이프라인 완주
-- [ ] **도그푸딩 개시 확인**: 실제 반복 작업 1개가 pugio로 매주 실행 중 (M1 직후 시작 — 04 진행 방식)
+- [x] 페이지네이션 4종(offset/page/cursor/link)이 각각 재개 시나리오까지 통합 테스트로 커버
+- [x] 시나리오 C(토큰 만료 → 갱신 → 완주) 자동 검증
+- [x] 모든 sink가 공통 계약 스위트(멱등·원자성) 통과
+- [x] 검증 위반 unit이 격리돼도 파이프라인이 완주하고, DLQ 재투입이 동작
+- [x] 실전 API 5종의 YAML 표현 검증 완료 — `docs/reference/api-coverage.md`에 결과 기록
+- [x] DatabaseSource로 SQLite→parquet 동기화 + 증분(늘어난 행) 재실행 검증
+- [x] Python 탈출구로 커스텀 소스 1개가 파이프라인 완주
+- [ ] **도그푸딩 개시 확인**: 실제 반복 작업 1개가 pugio로 매주 실행 중 (M1 직후 시작 — 04 진행 방식) — 운영 액션, 코드 배치 범위 밖 (미체크 유지)

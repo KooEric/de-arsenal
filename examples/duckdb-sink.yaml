@@ -1,0 +1,14 @@
+# 예제 — DuckDB 파일 싱크: merge_key(id) 기준으로 temp 테이블 → MERGE 멱등 upsert.
+# quickstart의 orders.csv를 그대로 재사용해 계정/네트워크 없이 돌아간다.
+# 실행: pugio run examples/duckdb-sink.yaml
+# 조회: duckdb ./data/orders.duckdb "SELECT * FROM orders"
+name: duckdb-sink-demo
+source:
+  type: file
+  path: ./examples/quickstart/orders.csv
+  format: csv
+sink:
+  type: duckdb
+  path: ./data/orders.duckdb
+  table: orders
+  merge_key: [order_id]
