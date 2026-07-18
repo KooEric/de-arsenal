@@ -13,7 +13,6 @@ import logging
 import time
 from collections.abc import Callable
 from dataclasses import dataclass
-from pathlib import Path
 
 import httpx
 
@@ -23,7 +22,7 @@ from arsenal_core.spec.models import PipelineSpec
 from arsenal_core.state import SOURCE_EXHAUSTED, StateStore, UnitSpec
 from pugio.auth import AuthProvider, build_auth
 from pugio.dlq import write_dlq
-from pugio.sinks.parquet import ParquetSink
+from pugio.sinks import build_sink
 from pugio.sources.base import FetchResult, Source
 from pugio.sources.database import DatabaseSource
 from pugio.sources.file import FileSource
@@ -117,12 +116,9 @@ def run_pipeline(
 ) -> RunReport:
     store = StateStore(spec.state_dir / f"{spec.name}.db")
     source, auth = _build_source(spec, store)
-    # SinkSpec이 discriminated union이 되며 duckdb/postgres 멤버가 추가됐다 (M2-A).
-    # 구현체는 아직 parquet뿐 — M2-F가 build_sink 팩토리로 이 분기를 대체한다.
-    if spec.sink.type != "parquet":
-        raise FatalError(f"only parquet sink implemented (duckdb/postgres: M2-F): {spec.sink.type}")
-    # spec.sink.path는 str(URI 스킴 보존용) — 로컬 파일시스템 싱크는 여기서 Path로 감싼다.
-    sink = ParquetSink(Path(spec.sink.path))
+    # SinkSpec은 discriminated union(parquet/duckdb/postgres, M2-A) — build_sink가
+    # spec.type으로 알맞은 구현체를 만든다 (M2-F).
+    sink = build_sink(spec.sink)
     fetched = written = skipped = done_count = quarantined = 0
 
     try:
