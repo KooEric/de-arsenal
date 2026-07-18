@@ -94,6 +94,16 @@ def test_pipeline_without_validate_is_none() -> None:
     assert spec.validation is None
 
 
+def test_auth_spec_static_requires_token_env() -> None:
+    with pytest.raises(ValidationError, match="token_env"):
+        AuthSpec(type="static_token")
+
+
+def test_auth_spec_oauth2_requires_endpoints() -> None:
+    with pytest.raises(ValidationError, match="token_url"):
+        AuthSpec(type="oauth2_client_credentials")
+
+
 def test_rate_limit_rps_must_be_positive() -> None:
     # rps=0은 TokenBucket의 1.0/rps에서 ZeroDivisionError, 음수는 역방향 스로틀로
     # 이어진다 — SplitSpec.chunk와 동일하게 생성 시점에 gt=0으로 차단한다.

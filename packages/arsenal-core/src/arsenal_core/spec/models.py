@@ -53,6 +53,24 @@ class AuthSpec(_Frozen):
     client_secret_env: str | None = None
     expiry_buffer_s: int = 60
 
+    @model_validator(mode="after")
+    def _required_fields_for_type(self) -> "AuthSpec":
+        if self.type == "static_token" and not self.token_env:
+            raise ValueError("static_token auth requires token_env")
+        if self.type == "oauth2_client_credentials":
+            missing = [
+                name
+                for name, value in (
+                    ("token_url", self.token_url),
+                    ("client_id_env", self.client_id_env),
+                    ("client_secret_env", self.client_secret_env),
+                )
+                if not value
+            ]
+            if missing:
+                raise ValueError(f"oauth2_client_credentials auth requires {', '.join(missing)}")
+        return self
+
 
 class RestSourceSpec(_Frozen):
     """REST API 소스 — M1 SourceSpec의 필드를 그대로 옮긴 것 (하위 호환)."""

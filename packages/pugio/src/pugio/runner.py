@@ -20,7 +20,7 @@ from arsenal_core.errors import AuthExpiredError, FatalError
 from arsenal_core.retry import DEFAULT_MAX_ATTEMPTS, with_retry
 from arsenal_core.spec.models import PipelineSpec
 from arsenal_core.state import SOURCE_EXHAUSTED, StateStore, UnitSpec
-from pugio.auth import build_auth
+from pugio.auth import AuthProvider, build_auth
 from pugio.sinks.parquet import ParquetSink
 from pugio.sources.base import FetchResult, Source
 from pugio.sources.database import DatabaseSource
@@ -42,7 +42,7 @@ def _fetch_with_retry(source: Source, unit: UnitSpec, max_attempts: int) -> Fetc
     return with_retry(functools.partial(source.fetch, unit), max_attempts=max_attempts)
 
 
-def _build_source(spec: PipelineSpec, store: StateStore) -> Source:
+def _build_source(spec: PipelineSpec, store: StateStore) -> tuple[Source, AuthProvider | None]:
     """spec.source.type으로 분기해 알맞은 Source 구현체를 만든다.
 
     discriminated union이라 spec.source.type이 좁혀지면 pyright도 필드를 좁혀 안다.
@@ -52,6 +52,11 @@ def _build_source(spec: PipelineSpec, store: StateStore) -> Source:
     그대로 전달하면 _cursor_units()가 즉시 return해 unit을 하나도 내지 않는다.
     (재실행이 clean no-op이 되는 지점. 처음부터 다시 긁으려면 사용자가 state를
     지워야 한다 — DatabaseSource의 스냅샷 재개 시맨틱과 동일, P1 스코프 밖.)
+
+    반환값의 AuthProvider는 러너의 refresh 루프가 명시적으로 쓴다 — RestSource의
+    private _auth를 getattr로 훔쳐보는 대신, 이 함수가 만든 시점의 값을 그대로
+    돌려준다 (rest가 아니면 None). Any-typed reflection을 없애 pyright가
+    auth.refresh() 호출을 실제로 타입체크하게 한다.
     """
     src = spec.source
     if src.type == "rest":
@@ -62,20 +67,40 @@ def _build_source(spec: PipelineSpec, store: StateStore) -> Source:
         # M2-D: auth가 None이면 build_auth도 None을 돌려준다 — RestSource는 그대로
         # spec.headers만 사용해 기존 호출부(무인증 스펙)를 깨지 않는다.
         auth = build_auth(src.auth, client)
-        return RestSource(
+        source = RestSource(
             src,
             pipeline=spec.name,
             client=client,
             initial_cursor=initial_cursor,
             auth=auth,
         )
+        return source, auth
     if src.type == "file":
-        return FileSource(src, pipeline=spec.name)
+        return FileSource(src, pipeline=spec.name), None
     if src.type == "database":
-        return DatabaseSource(src, pipeline=spec.name)
+        return DatabaseSource(src, pipeline=spec.name), None
     if src.type == "python":
-        return load_python_source(src, pipeline=spec.name)
+        return load_python_source(src, pipeline=spec.name), None
     raise FatalError(f"unknown source type: {src.type}")  # pragma: no cover
+
+
+def _fetch_with_auth_refresh(
+    source: Source,
+    unit: UnitSpec,
+    auth: AuthProvider | None,
+    max_attempts: int,
+) -> FetchResult:
+    """with_retry는 AuthExpiredError를 blind하게 재시도하지 않고 즉시 전파한다
+    (retry.py M2-D) — 여기서 정확히 한 번 refresh() 후 같은 unit을 한 번 더
+    시도한다. 그마저 401이면 AuthExpiredError가 다시 escape해 호출부(run_pipeline)의
+    바깥 except가 failed로 기록한다."""
+    try:
+        return _fetch_with_retry(source, unit, max_attempts)
+    except AuthExpiredError:
+        if auth is None:
+            raise
+        auth.refresh()
+        return _fetch_with_retry(source, unit, max_attempts)
 
 
 def run_pipeline(
@@ -85,11 +110,7 @@ def run_pipeline(
     max_attempts: int = DEFAULT_MAX_ATTEMPTS,
 ) -> RunReport:
     store = StateStore(spec.state_dir / f"{spec.name}.db")
-    source = _build_source(spec, store)
-    # M2-D: RestSource는 self._auth에 AuthProvider를 들고 있다 (auth 미설정 스펙이면
-    # None) — file/database/python 소스엔 이 속성이 없으므로 getattr로 안전하게
-    # 읽는다 (close()와 동일한 duck-typing 패턴).
-    auth = getattr(source, "_auth", None)
+    source, auth = _build_source(spec, store)
     # SinkSpec이 discriminated union이 되며 duckdb/postgres 멤버가 추가됐다 (M2-A).
     # 구현체는 아직 parquet뿐 — M2-F가 build_sink 팩토리로 이 분기를 대체한다.
     if spec.sink.type != "parquet":
@@ -107,17 +128,7 @@ def run_pipeline(
             store.mark_running(unit.unit_id)
             started = time.monotonic()
             try:
-                try:
-                    result = _fetch_with_retry(source, unit, max_attempts)
-                except AuthExpiredError:
-                    # with_retry는 AuthExpiredError를 blind하게 재시도하지 않고 즉시
-                    # 전파한다 (retry.py M2-D) — 여기서 정확히 한 번 refresh() 후
-                    # 같은 unit을 한 번 더 시도한다. 그마저 401이면 AuthExpiredError가
-                    # 다시 escape해 바깥 except가 failed로 기록한다.
-                    if auth is None:
-                        raise
-                    auth.refresh()
-                    result = _fetch_with_retry(source, unit, max_attempts)
+                result = _fetch_with_auth_refresh(source, unit, auth, max_attempts)
             except Exception as e:
                 store.mark_failed(unit.unit_id, str(e))
                 raise

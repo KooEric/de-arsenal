@@ -5,8 +5,10 @@ Authorization 헤더가 실려 나가야 한다.
 """
 
 import httpx
+import pytest
 import respx
 
+from arsenal_core.errors import AuthExpiredError
 from arsenal_core.spec.models import PaginationSpec, RestSourceSpec
 from pugio.sources.rest import RestSource
 
@@ -49,6 +51,25 @@ def test_auth_headers_merged_into_link_request() -> None:
     unit = next(iter(src.units()))
     src.fetch(unit)
     assert route.calls.last.request.headers["Authorization"] == "Bearer tok-y"
+
+
+@respx.mock
+def test_401_error_message_excludes_response_body() -> None:
+    """FIX 3 — 401 응답 본문은 state.db에 mark_failed(str(e))로 영속되므로, 인증
+    서버가 요청을 에코백하는 경우 시크릿이 새어나갈 수 있다. 상태코드+URL만 남긴다."""
+    spec = RestSourceSpec(
+        type="rest",
+        url="https://api.test/401-items",
+        pagination=PaginationSpec(mode="offset", size=2),
+    )
+    respx.get("https://api.test/401-items").respond(
+        status_code=401, text="Authorization: Bearer super-secret-value"
+    )
+    src = RestSource(spec, pipeline="p", client=httpx.Client())
+    unit = next(iter(src.units()))
+    with pytest.raises(AuthExpiredError) as exc_info:
+        src.fetch(unit)
+    assert "super-secret-value" not in str(exc_info.value)
 
 
 @respx.mock

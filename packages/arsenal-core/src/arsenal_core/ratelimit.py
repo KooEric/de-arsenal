@@ -14,12 +14,20 @@ class Clock(Protocol):
     def sleep(self, seconds: float) -> None: ...
 
 
-class _MonotonicClock:
+class SystemClock:
+    """실제 time.monotonic()/time.sleep()을 쓰는 Clock 구현체 — 다른 패키지(pugio.auth
+    등)도 재선언 없이 import해 쓸 수 있도록 공개 이름으로 export한다."""
+
     def monotonic(self) -> float:
         return time.monotonic()
 
     def sleep(self, seconds: float) -> None:
         time.sleep(seconds)
+
+
+# 하위 호환: 기존 내부 전용 이름으로 참조하던 코드(및 다른 패키지의 재선언부)가
+# 있을 수 있어 별칭을 유지한다.
+_MonotonicClock = SystemClock
 
 
 class TokenBucket:

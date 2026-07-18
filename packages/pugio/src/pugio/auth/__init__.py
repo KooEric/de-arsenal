@@ -7,13 +7,12 @@
 """
 
 import os
-import time
 from typing import Protocol
 
 import httpx
 
 from arsenal_core.errors import FatalError
-from arsenal_core.ratelimit import Clock
+from arsenal_core.ratelimit import Clock, SystemClock
 from arsenal_core.spec.models import AuthSpec
 
 
@@ -25,17 +24,6 @@ class AuthProvider(Protocol):
     def refresh(self) -> None:
         """자격 증명 갱신. AuthExpiredError 수신 시 러너가 호출한다."""
         ...
-
-
-class _MonotonicClock:
-    """arsenal_core.ratelimit._MonotonicClock와 동일한 shape — arsenal_core는 이 클래스를
-    export하지 않으므로(모듈 내부 전용) 여기서 별도로 둔다."""
-
-    def monotonic(self) -> float:
-        return time.monotonic()
-
-    def sleep(self, seconds: float) -> None:
-        time.sleep(seconds)
 
 
 class StaticTokenAuth:
@@ -76,7 +64,7 @@ class OAuth2ClientCredentials:
     ) -> None:
         self._spec = spec
         self._client = client
-        self._clock = clock or _MonotonicClock()
+        self._clock = clock or SystemClock()
         self._token: str | None = None
         self._expiry: float = 0.0
 
@@ -119,6 +107,12 @@ class OAuth2ClientCredentials:
             expires_in = body["expires_in"]
         except KeyError as e:
             raise FatalError(f"token response missing field: {e}") from e
+        # 토큰 엔드포인트는 외부 신뢰 경계 — access_token/expires_in의 타입까지
+        # 계약대로 왔는지 검증한다. 검증 없이 쓰면 문자열 expires_in은
+        # self._clock.monotonic() + expires_in에서 TypeError, null access_token은
+        # "Bearer None" 헤더로 조용히 새어나간다. 값 자체는 메시지에 담지 않는다.
+        if not isinstance(access_token, str) or not isinstance(expires_in, int | float):
+            raise FatalError("token endpoint returned malformed response (access_token/expires_in)")
         self._token = access_token
         self._expiry = self._clock.monotonic() + expires_in
 

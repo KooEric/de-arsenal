@@ -213,6 +213,11 @@ class RestSource:
             retry_after = self._parse_retry_after(resp)
             if retry_after is not None:
                 self._bucket.penalize(retry_after)
+        if resp.status_code == 401:
+            # 401 본문은 state.db에 mark_failed(str(e))로 영속된다 — 인증 서버가
+            # 요청 헤더/토큰을 에코백하는 경우가 있어 본문을 그대로 실으면 시크릿이
+            # state 파일에 새어나간다. 러너는 갱신 신호로만 쓰므로 상태코드+URL이면 충분하다.
+            raise exc_type(f"GET {resp.url} -> {resp.status_code}")
         raise exc_type(f"GET {resp.url} -> {resp.status_code}: {resp.text[:200]}")
 
     def _parse_retry_after(self, resp: httpx.Response) -> float | None:

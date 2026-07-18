@@ -128,6 +128,24 @@ def test_oauth2_token_endpoint_error_is_fatal(monkeypatch: pytest.MonkeyPatch) -
         auth.headers()
 
 
+@respx.mock
+def test_oauth2_malformed_token_response_is_fatal(monkeypatch: pytest.MonkeyPatch) -> None:
+    """FIX 2 — access_token/expires_in은 외부 응답(Any)이라 타입까지 검증해야 한다.
+    access_token=None, expires_in="soon" (문자열)은 계약 위반 → FatalError."""
+    monkeypatch.setenv("OAUTH_ID", "cid")
+    monkeypatch.setenv("OAUTH_SECRET", "csecret")
+    respx.post("https://auth.test/token").respond(json={"access_token": None, "expires_in": "soon"})
+    spec = AuthSpec(
+        type="oauth2_client_credentials",
+        token_url="https://auth.test/token",
+        client_id_env="OAUTH_ID",
+        client_secret_env="OAUTH_SECRET",
+    )
+    auth = OAuth2ClientCredentials(spec, client=httpx.Client())
+    with pytest.raises(FatalError):
+        auth.headers()
+
+
 def test_build_auth_none_spec_returns_none() -> None:
     assert build_auth(None, httpx.Client()) is None
 
