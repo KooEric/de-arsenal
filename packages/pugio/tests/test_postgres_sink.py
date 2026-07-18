@@ -93,6 +93,19 @@ def test_bad_password_is_fatal_not_retryable(pg_url: str, monkeypatch: pytest.Mo
         sink.write(make_unit("u"), pa.RecordBatch.from_pylist([{"id": 1}]))
 
 
+def test_malformed_dsn_is_fatal(monkeypatch: pytest.MonkeyPatch) -> None:
+    """M2 최종 리뷰 FIX 5: connect() 주변에서 psycopg.OperationalError만 잡으면
+    문법이 잘못된 DSN이 내는 psycopg.ProgrammingError가 분류 없이 그대로
+    escape한다 — 재시도해도 문법은 그대로 틀린 채이므로 FatalError여야 한다."""
+    monkeypatch.setenv("PUGIO_TEST_PG_MALFORMED", "this is not a dsn at all!!")
+    spec = PostgresSinkSpec(
+        type="postgres", dsn_env="PUGIO_TEST_PG_MALFORMED", table="x", merge_key=["id"]
+    )
+    sink = PostgresSink(spec)
+    with pytest.raises(FatalError):
+        sink.write(make_unit("u"), pa.RecordBatch.from_pylist([{"id": 1}]))
+
+
 def test_naive_timestamp_is_fatal(dsn: str) -> None:
     """tz 정보가 없는 timestamp 컬럼은 postgres에 꽂히는 순간 서버 세션 타임존
     기준으로 암묵 해석되어 값이 조용히 shift될 수 있다 — 업스트림에서 UTC로

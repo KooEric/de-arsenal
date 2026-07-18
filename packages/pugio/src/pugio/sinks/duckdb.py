@@ -43,8 +43,15 @@ class DuckDBSink:
         self._spec = spec
 
     def write(self, unit: UnitSpec, batch: pa.RecordBatch) -> None:
-        con = duckdb.connect(str(self._spec.path))
+        con: duckdb.DuckDBPyConnection | None = None
         try:
+            # M2 최종 리뷰 FIX 2: connect()를 try 안으로 옮긴다 — 락 경합 중인
+            # .duckdb 파일에 붙으려 하면 connect() 단계에서 duckdb.IOException/
+            # TransactionException이 날 수 있는데, 예전엔 이게 try 바깥이라
+            # 분류 없이 원본 예외가 그대로 호출부로 샜다(재시도도 안 되고 사용자
+            # 에게 raw traceback). 이제 connect 실패도 write 실패와 동일하게
+            # Retryable/Fatal로 분류된다.
+            con = duckdb.connect(str(self._spec.path))
             columns = list(batch.schema.names)
             seq = pa.array(range(batch.num_rows), type=pa.int64())
             staging = pa.Table.from_batches([batch]).append_column(_SEQ_COL, seq)
@@ -67,15 +74,18 @@ class DuckDBSink:
             )
             con.execute("COMMIT")
         except (duckdb.IOException, duckdb.TransactionException) as e:
-            # 락 경합/디스크 IO — 일시적, 재시도하면 성공할 수 있다.
-            with contextlib.suppress(Exception):  # 롤백 실패는 무시하고 원본 에러를 전파한다
-                con.execute("ROLLBACK")
+            # 락 경합/디스크 IO(connect 단계 포함) — 일시적, 재시도하면 성공할 수 있다.
+            if con is not None:
+                with contextlib.suppress(Exception):  # 롤백 실패는 무시하고 원본 에러를 전파한다
+                    con.execute("ROLLBACK")
             raise RetryableError(f"duckdb write failed for unit {unit.unit_id}: {e}") from e
         except Exception as e:
             # 파서/바인더/카탈로그/제약 위반 등 나머지 duckdb.Error 및 그 외 모든 예외 —
             # 설정/계약 문제라 재시도해도 소용없다.
-            with contextlib.suppress(Exception):
-                con.execute("ROLLBACK")
+            if con is not None:
+                with contextlib.suppress(Exception):
+                    con.execute("ROLLBACK")
             raise FatalError(f"duckdb write failed for unit {unit.unit_id}: {e}") from e
         finally:
-            con.close()
+            if con is not None:  # connect() 자체가 실패하면 con은 여전히 None
+                con.close()

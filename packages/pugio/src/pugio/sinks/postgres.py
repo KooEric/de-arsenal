@@ -116,6 +116,12 @@ class PostgresSink:
         except psycopg.OperationalError as e:
             error_cls = _classify_operational_error(e)
             raise error_cls(f"postgres connection failed for unit {unit.unit_id}: {e}") from e
+        except psycopg.Error as e:
+            # M2 최종 리뷰 FIX 5: OperationalError만 잡으면 malformed DSN 같은
+            # psycopg.ProgrammingError(구성 오류)가 분류 없이 그대로 샌다 — 재시도해도
+            # 문법은 그대로 틀린 채라 Fatal로 분류한다. psycopg 예외가 unwrapped로
+            # escape하는 경로를 남기지 않는다.
+            raise FatalError(f"postgres connection failed for unit {unit.unit_id}: {e}") from e
 
         try:
             with con.transaction():

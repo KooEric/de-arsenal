@@ -6,13 +6,14 @@ scanner 경로만 다룬다. postgres는 testcontainers로 실제 컨테이너�
 준비되지 않으면 명확한 사유로 skip한다.
 """
 
+import urllib.parse
 from collections.abc import Iterator
 
 import psycopg
 import pyarrow as pa
 import pytest
 
-from arsenal_core.errors import FatalError, RetryableError
+from arsenal_core.errors import ArsenalError, FatalError, RetryableError
 from arsenal_core.spec.models import DatabaseSourceSpec, SplitSpec
 from pugio.sources.database import DatabaseSource
 
@@ -124,6 +125,32 @@ def test_missing_dsn_env_is_fatal_postgres(monkeypatch: pytest.MonkeyPatch) -> N
     src = DatabaseSource(make_spec(), pipeline="p")
     with pytest.raises(FatalError, match=DSN_ENV):
         list(src.units())
+
+
+def test_scanner_error_redacts_dsn(pg_url: str, monkeypatch: pytest.MonkeyPatch) -> None:
+    """M2 최종 리뷰 FIX 3 (보안): duckdb의 ATTACH 실패는 연결 문자열을 그대로
+    에코백하는데, postgres DSN에는 비밀번호가 들어 있다 — 이 문자열이 그대로
+    mark_failed로 state.db에 영속되고 CLI에 출력되면 시크릿이 새어나간다.
+
+    실제 컨테이너(host/port는 유효, 비밀번호만 틀림)로 ATTACH를 실패시켜, 원문
+    비밀번호가 예외 메시지에 없고 대신 <redacted-dsn>으로 마스킹됐는지 확인한다.
+    """
+    parsed = urllib.parse.urlsplit(pg_url)
+    wrong_password = "s3cr3t-wrong-password"  # noqa: S105 - 테스트용 가짜 비밀번호, 실제 자격증명 아님
+    bad_netloc = f"{parsed.username}:{wrong_password}@{parsed.hostname}:{parsed.port}"
+    bad_dsn = urllib.parse.urlunsplit(
+        (parsed.scheme, bad_netloc, parsed.path, parsed.query, parsed.fragment)
+    )
+    monkeypatch.setenv(DSN_ENV, bad_dsn)
+
+    src = DatabaseSource(make_spec(), pipeline="p")
+    with pytest.raises(ArsenalError) as exc_info:
+        list(src.units())
+
+    message = str(exc_info.value)
+    assert wrong_password not in message
+    assert bad_dsn not in message
+    assert "<redacted-dsn>" in message
 
 
 # ---- mysql: best-effort, lower priority (task explicitly does not block on it) ----

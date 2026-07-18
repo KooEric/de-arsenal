@@ -194,26 +194,41 @@ def run_pipeline(
                     store.mark_failed(unit.unit_id, str(e))
                     raise
                 written += 1
-            store.mark_done(  # done 마킹은 그 다음 (핵심 불변식)
-                unit.unit_id,
-                row_count=result.batch.num_rows if result.batch is not None else 0,
-                byte_count=result.batch.nbytes if result.batch is not None else 0,
-                duration_ms=int((time.monotonic() - started) * 1000),
-            )
-            # 커서는 done 마킹 다음에 영속 — 쓰기→done→커서 순서로 불변식을 확장한다
-            # (크래시가 done 마킹 전이면 커서도 안 넘어가 재개 시 같은 unit을 다시 받는다).
+            row_count = result.batch.num_rows if result.batch is not None else 0
+            byte_count = result.batch.nbytes if result.batch is not None else 0
+            duration_ms = int((time.monotonic() - started) * 1000)
+            # done 마킹 + 커서 전진 (핵심 불변식의 확장): cursor/link 모드는 이 둘을
+            # StateStore.mark_done_and_advance_cursor로 원자화해 한 커밋에 묶는다
+            # (M2 최종 리뷰 FIX 1). 예전엔 mark_done()과 set_cursor()가 별개
+            # 트랜잭션이라, 그 사이 크래시가 나면 unit은 done인데 커서는 그 unit을
+            # 만든 이전 값에 멈춰 재실행 시 같은(이미 done인) unit을 다시 seed →
+            # is_done skip → fetch() 미호출 → 커서 영원히 미전진(무한루프)이었다
+            # (cursor/link의 모든 중간 페이지에 영향 — 마지막 페이지의
+            # SOURCE_EXHAUSTED 센티널만 다뤘던 이전 수정으로는 부족했다).
             #
-            # M2-B: cursor/link 모드가 next_cursor=None(=트래버설 완료)에 도달했을 때
-            # 예전엔 아무 것도 안 썼다 — 커서가 마지막 실제 페이지 값에 멈춰 있으니,
-            # 재실행 시 이미 done인 그 unit을 다시 seed → is_done skip → continue를
-            # 무한 반복 (fetch()가 다시 호출돼야 _cursor_exhausted가 갱신되는데, skip
-            # 경로는 fetch()를 안 부른다). 완료를 SOURCE_EXHAUSTED 센티널로 명시적으로
-            # 영속해 재실행이 clean no-op이 되게 한다 (완전 재수집은 P1, state를 지우면 됨).
+            # M2-B: cursor/link 모드가 next_cursor=None(=트래버설 완료)에 도달하면
+            # SOURCE_EXHAUSTED 센티널을 커서로 영속해 재실행이 clean no-op이 되게
+            # 한다 (완전 재수집은 P1, state를 지우면 됨).
             if spec.source.type == "rest" and spec.source.pagination.mode in ("cursor", "link"):
-                if result.exhausted:
-                    store.set_cursor(spec.name, spec.source.url, SOURCE_EXHAUSTED)
-                elif result.next_cursor is not None:
-                    store.set_cursor(spec.name, spec.source.url, result.next_cursor)
+                cursor_value = (
+                    result.next_cursor if result.next_cursor is not None else SOURCE_EXHAUSTED
+                )
+                store.mark_done_and_advance_cursor(
+                    unit.unit_id,
+                    pipeline=spec.name,
+                    source=spec.source.url,
+                    cursor=cursor_value,
+                    row_count=row_count,
+                    byte_count=byte_count,
+                    duration_ms=duration_ms,
+                )
+            else:
+                store.mark_done(
+                    unit.unit_id,
+                    row_count=row_count,
+                    byte_count=byte_count,
+                    duration_ms=duration_ms,
+                )
             done_count += 1
             if on_unit_complete is not None:
                 on_unit_complete(done_count)

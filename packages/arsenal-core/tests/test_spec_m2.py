@@ -4,9 +4,13 @@
 그대로 동작해야 하고, 새 필드는 옵션이어야 한다.
 """
 
+from pathlib import Path
+
 import pytest
 from pydantic import TypeAdapter, ValidationError
 
+from arsenal_core.errors import FatalError
+from arsenal_core.spec.loader import load_pipeline
 from arsenal_core.spec.models import (
     AuthSpec,
     DuckDBSinkSpec,
@@ -123,6 +127,24 @@ def test_sink_merge_key_must_be_non_empty() -> None:
         DuckDBSinkSpec(type="duckdb", path="o.db", table="t", merge_key=[])
     with pytest.raises(ValidationError, match="merge_key must have at least one column"):
         PostgresSinkSpec(type="postgres", dsn_env="DSN", table="t", merge_key=[])
+
+
+def test_sink_union_error_is_friendly(tmp_path: Path) -> None:
+    """M2 최종 리뷰 FIX 4: _UNION_TAGS가 source만 다루면 discriminated union인
+    sink(parquet/duckdb/postgres)의 필드 누락 에러 loc에 태그가 그대로 남아
+    sink.duckdb.merge_key처럼 나온다 — source.*와 일관되게 sink.merge_key로
+    앵커되어야 사용자가 읽기 쉽다."""
+    p = tmp_path / "pipe.yaml"
+    p.write_text(
+        "name: x\n"
+        "source: {type: rest, url: https://x, pagination: {mode: offset}}\n"
+        "sink: {type: duckdb, path: o.db, table: t}\n"
+    )
+    with pytest.raises(FatalError) as exc_info:
+        load_pipeline(p)
+    message = str(exc_info.value)
+    assert "sink.merge_key" in message
+    assert "sink.duckdb.merge_key" not in message
 
 
 def test_rate_limit_rps_must_be_positive() -> None:

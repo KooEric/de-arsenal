@@ -93,7 +93,8 @@ class StateStore:
     """unit 상태·커서·스키마 스냅샷의 영속 저장소.
 
     상태 전이: pending → running → done | failed | quarantined
-    (Retryable이면 running → pending 복귀, attempts < max 한정)
+    (재시도는 with_retry가 mark_failed 이전에 in-process로 수행한다 — 이 저장소는
+    running → pending으로 되돌리는 전이를 갖지 않는다.)
     """
 
     def __init__(self, db_path: Path) -> None:
@@ -136,6 +137,42 @@ class StateStore:
             "UPDATE units SET status='done', row_count=?, byte_count=?, duration_ms=?, "
             "updated_at=? WHERE unit_id=?",
             (row_count, byte_count, duration_ms, _now(), uid),
+        )
+        self._conn.commit()
+
+    def mark_done_and_advance_cursor(
+        self,
+        uid: str,
+        *,
+        pipeline: str,
+        source: str,
+        cursor: str,
+        row_count: int | None = None,
+        byte_count: int | None = None,
+        duration_ms: int | None = None,
+    ) -> None:
+        """mark_done + set_cursor를 한 커넥션·한 커밋으로 묶는다 (M2 최종 리뷰 FIX 1).
+
+        두 문장을 별개 트랜잭션(mark_done() 다음 set_cursor())으로 실행하면, 그
+        사이에 크래시가 나면 unit은 done인데 커서는 그 unit을 만들어낸 이전 값에
+        멈춘 상태로 남는다. 재실행 시 그 스테일 커서로 seed된 RestSource가 이미
+        done인 그 unit을 다시 내고, runner의 is_done 스킵 경로는 fetch()를 부르지
+        않으니 커서가 영원히 전진하지 못해 무한루프가 된다 — cursor/link 모드의
+        모든 중간 페이지에 영향을 준다(마지막 페이지의 SOURCE_EXHAUSTED 센티널만
+        고쳤던 이전 수정으로는 부족했다). 두 UPDATE/INSERT를 커밋 하나로 묶어,
+        크래시가 나면 "둘 다 반영" 또는 "둘 다 미반영"만 관측되게 한다 — 이 둘
+        사이의 상태는 존재하지 않는다.
+        """
+        self._conn.execute(
+            "UPDATE units SET status='done', row_count=?, byte_count=?, duration_ms=?, "
+            "updated_at=? WHERE unit_id=?",
+            (row_count, byte_count, duration_ms, _now(), uid),
+        )
+        self._conn.execute(
+            "INSERT INTO cursors (pipeline, source, cursor, updated_at) VALUES (?,?,?,?) "
+            "ON CONFLICT(pipeline, source) DO UPDATE SET cursor=excluded.cursor, "
+            "updated_at=excluded.updated_at",
+            (pipeline, source, cursor, _now()),
         )
         self._conn.commit()
 

@@ -12,7 +12,7 @@ from _sink_contract import (
     make_unit,
 )
 
-from arsenal_core.errors import FatalError
+from arsenal_core.errors import FatalError, RetryableError
 from arsenal_core.spec.models import DuckDBSinkSpec
 from pugio.sinks.duckdb import DuckDBSink
 
@@ -93,6 +93,38 @@ def test_write_failure_raises_fatal_error(tmp_path: Path, monkeypatch: pytest.Mo
     monkeypatch.setattr(duckdb, "connect", fake_connect)
     with pytest.raises(FatalError):
         sink.write(u, batch)
+
+
+def test_connect_lock_contention_is_retryable(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """M2 최종 리뷰 FIX 2: connect()가 try 바깥에 있으면 락 경합 중인 .duckdb 파일에
+    붙으려 할 때 나는 duckdb.IOException이 분류 없이 그대로 escape한다 (재시도도
+    안 되고 사용자에게 raw traceback).
+
+    실제 락 경합은 duckdb가 같은 프로세스 안에서는 같은 파일에 여러 커넥션을
+    열어도 락을 걸지 않는다(실측: 진짜 다른 OS 프로세스가 파일을 잡고 있어야
+    IOException이 난다) — pytest의 coverage/spawn 환경에서 실제 서브프로세스로
+    안정적으로 재현하는 건 깨지기 쉬워, 스펙이 명시적으로 허용하는 대로
+    connect() 실패를 결정론적으로 monkeypatch해 같은 코드 경로(예전엔 try 바깥이라
+    분류 없이 샜던 경로)를 검증한다."""
+    sink, db_path = make_sink(tmp_path)
+    u = make_unit("first")
+    sink.write(u, pa.RecordBatch.from_pylist([{"id": 1, "v": "a"}]))  # 파일/테이블 존재하게 만든다
+
+    real_connect = duckdb.connect
+
+    def fake_connect(path: str) -> object:
+        if path == str(db_path):
+            raise duckdb.IOException(
+                f'IO Error: Could not set lock on file "{path}": '
+                "Conflicting lock is held by another process"
+            )
+        return real_connect(path)
+
+    monkeypatch.setattr(duckdb, "connect", fake_connect)
+    with pytest.raises(RetryableError):
+        sink.write(make_unit("second"), pa.RecordBatch.from_pylist([{"id": 2, "v": "b"}]))
 
 
 def test_binder_error_is_fatal(tmp_path: Path) -> None:

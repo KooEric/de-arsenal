@@ -64,11 +64,21 @@ def _raise_classified(e: sqlite3.Error, *, context: str) -> NoReturn:
     raise FatalError(f"{context}: {e}") from e
 
 
-def _raise_classified_duckdb(e: duckdb.Error, *, context: str) -> NoReturn:
-    """duckdb scanner 에러를 재시도 가능 여부로 분류해 던진다 (M2-F DuckDBSink와 동일 원칙)."""
+def _raise_classified_duckdb(e: duckdb.Error, *, context: str, dsn: str | None = None) -> NoReturn:
+    """duckdb scanner 에러를 재시도 가능 여부로 분류해 던진다 (M2-F DuckDBSink와 동일 원칙).
+
+    dsn이 주어지면(M2 최종 리뷰 FIX 3) 에러 메시지에서 DSN 원문을 마스킹한다 —
+    ATTACH 실패 시 duckdb가 연결 문자열을 그대로 에코하는 경우가 있는데, postgres/
+    mysql DSN에는 비밀번호가 포함될 수 있다. 이 메시지는 mark_failed로 state.db에
+    영속되고 CLI에도 그대로 출력되므로 비밀만 마스킹하고 나머지 에러 상세는
+    보존한다.
+    """
+    message = str(e)
+    if dsn:
+        message = message.replace(dsn, "<redacted-dsn>")
     if isinstance(e, _DUCKDB_RETRYABLE):
-        raise RetryableError(f"{context}: {e}") from e
-    raise FatalError(f"{context}: {e}") from e
+        raise RetryableError(f"{context}: {message}") from e
+    raise FatalError(f"{context}: {message}") from e
 
 
 def _key_ranges(
@@ -155,7 +165,8 @@ class DatabaseSource:
         dialect = self._spec.dialect
         extension = _SCANNER_EXTENSION[dialect]
         attach_type = _SCANNER_ATTACH_TYPE[dialect]
-        dsn = self._dsn().replace("'", "''")
+        raw_dsn = self._dsn()
+        dsn = raw_dsn.replace("'", "''")
         con = duckdb.connect()
         try:
             con.execute(f"INSTALL {extension}")
@@ -163,7 +174,9 @@ class DatabaseSource:
             con.execute(f"ATTACH '{dsn}' AS src (TYPE {attach_type}, READ_ONLY)")
         except duckdb.Error as e:
             con.close()
-            _raise_classified_duckdb(e, context=f"attach failed for dialect {dialect!r}")
+            _raise_classified_duckdb(
+                e, context=f"attach failed for dialect {dialect!r}", dsn=raw_dsn
+            )
         except Exception:
             con.close()
             raise
@@ -179,7 +192,9 @@ class DatabaseSource:
             ).fetchone()
         except duckdb.Error as e:
             _raise_classified_duckdb(
-                e, context=f"min/max query failed for table {self._spec.table!r}"
+                e,
+                context=f"min/max query failed for table {self._spec.table!r}",
+                dsn=self._dsn(),
             )
         finally:
             con.close()
@@ -202,7 +217,9 @@ class DatabaseSource:
             )
             table = result.to_arrow_table()  # pyright: ignore[reportUnknownMemberType, reportUnknownVariableType]
         except duckdb.Error as e:
-            _raise_classified_duckdb(e, context=f"fetch failed for table {self._spec.table!r}")
+            _raise_classified_duckdb(
+                e, context=f"fetch failed for table {self._spec.table!r}", dsn=self._dsn()
+            )
         finally:
             con.close()
         if table.num_rows == 0:  # pyright: ignore[reportUnknownMemberType]

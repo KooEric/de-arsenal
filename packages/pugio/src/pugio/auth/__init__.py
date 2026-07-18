@@ -97,10 +97,11 @@ class OAuth2ClientCredentials:
         )
         if resp.status_code >= 400:
             # 토큰 엔드포인트 실패는 설정/자격증명 오류 — 재시도해도 나아지지 않는다.
-            raise FatalError(
-                f"token request to {self._spec.token_url} failed: "
-                f"{resp.status_code}: {resp.text[:200]}"
-            )
+            # 본문(resp.text)은 신지 않는다: 토큰 엔드포인트가 요청 페이로드(클라이언트
+            # 시크릿 등)를 에코백할 수 있고, 이 메시지는 mark_failed로 state.db에
+            # 영속된다 — rest.py의 401 리다크션과 동일한 defense-in-depth 원칙
+            # (M2 최종 리뷰 FIX 6). 상태코드+token_url이면 갱신 실패를 진단하기 충분하다.
+            raise FatalError(f"token request to {self._spec.token_url} failed: {resp.status_code}")
         body = resp.json()
         try:
             access_token = body["access_token"]
