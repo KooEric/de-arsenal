@@ -9,6 +9,7 @@ at-least-once 실행 + 멱등 쓰기 = exactly-once 결과.
 """
 
 import functools
+import sys
 import time
 from collections.abc import Callable
 from dataclasses import dataclass
@@ -21,12 +22,14 @@ from arsenal_core.retry import DEFAULT_MAX_ATTEMPTS, with_retry
 from arsenal_core.spec.models import PipelineSpec
 from arsenal_core.state import SOURCE_EXHAUSTED, StateStore, UnitSpec
 from pugio.auth import AuthProvider, build_auth
+from pugio.dlq import write_dlq
 from pugio.sinks.parquet import ParquetSink
 from pugio.sources.base import FetchResult, Source
 from pugio.sources.database import DatabaseSource
 from pugio.sources.file import FileSource
 from pugio.sources.python_source import load_python_source
 from pugio.sources.rest import RestSource
+from pugio.validate.gate import check
 
 
 @dataclass(frozen=True)
@@ -34,6 +37,7 @@ class RunReport:
     fetched: int
     written: int
     skipped: int  # done이라 건너뛴 unit 수 — 재개의 증거
+    quarantined: int = 0  # 검증 위반으로 격리된 unit 수 (M2-E)
 
 
 def _fetch_with_retry(source: Source, unit: UnitSpec, max_attempts: int) -> FetchResult:
@@ -117,7 +121,7 @@ def run_pipeline(
         raise FatalError(f"only parquet sink implemented (duckdb/postgres: M2-F): {spec.sink.type}")
     # spec.sink.path는 str(URI 스킴 보존용) — 로컬 파일시스템 싱크는 여기서 Path로 감싼다.
     sink = ParquetSink(Path(spec.sink.path))
-    fetched = written = skipped = done_count = 0
+    fetched = written = skipped = done_count = quarantined = 0
 
     try:
         for unit in source.units():
@@ -133,6 +137,30 @@ def run_pipeline(
                 store.mark_failed(unit.unit_id, str(e))
                 raise
             fetched += 1
+            if spec.validation is not None and result.batch is not None:
+                report = check(result.batch, spec.validation.rules)
+                if not report.ok:
+                    policy = spec.validation.on_violation
+                    if policy == "block":
+                        raise FatalError(
+                            f"validation failed for unit {unit.unit_key}: {report.violations}"
+                        )
+                    if policy == "warn":
+                        print(
+                            f"warning: validation violations in {unit.unit_key}: "
+                            f"{report.violations}",
+                            file=sys.stderr,
+                        )
+                    if policy == "quarantine":
+                        write_dlq(spec.state_dir, spec.name, unit, result.batch, report.violations)
+                        reason = "; ".join(
+                            f"{v.rule}:{v.field}={v.count}" for v in report.violations
+                        )
+                        store.mark_quarantined(unit.unit_id, reason)
+                        quarantined += 1
+                        # 쓰기·done 마킹 모두 건너뛰고 다음 unit으로 — 격리된 unit은
+                        # 커서를 진전시키지 않는다 (재실행 시 여전히 격리 상태로 재등록됨).
+                        continue
             if result.batch is not None:
                 sink.write(unit, result.batch)  # 멱등 쓰기 먼저,
                 written += 1
@@ -161,7 +189,7 @@ def run_pipeline(
                 on_unit_complete(done_count)
             if result.exhausted:
                 break
-        return RunReport(fetched=fetched, written=written, skipped=skipped)
+        return RunReport(fetched=fetched, written=written, skipped=skipped, quarantined=quarantined)
     finally:
         # close()는 Source 프로토콜의 선택적 훅 — httpx.Client 등 커넥션을 든 소스만
         # 구현한다 (RestSource). file/database/python 소스는 없으므로 getattr로 안전하게

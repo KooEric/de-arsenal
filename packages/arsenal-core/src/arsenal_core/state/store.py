@@ -143,6 +143,32 @@ class StateStore:
         """attempts를 1 올리고 last_error 기록."""
         self._set_status(uid, "failed", error)
 
+    def mark_quarantined(self, uid: str, reason: str) -> None:
+        """검증 위반으로 격리. _set_status를 재사용하지 않는 이유: quarantine은
+        재시도 실패가 아니라서 attempts를 올리면 안 된다 (M2-E)."""
+        self._conn.execute(
+            "UPDATE units SET status='quarantined', last_error=?, updated_at=? WHERE unit_id=?",
+            (reason, _now(), uid),
+        )
+        self._conn.commit()
+
+    def quarantined(self, pipeline: str) -> list[UnitRecord]:
+        """`pugio dlq list`의 데이터 — 격리된 unit만."""
+        rows = self._conn.execute(
+            "SELECT unit_id, status, attempts, last_error FROM units "
+            "WHERE pipeline=? AND status='quarantined'",
+            (pipeline,),
+        ).fetchall()
+        return [UnitRecord(*r) for r in rows]
+
+    def requeue(self, uid: str) -> None:
+        """`pugio dlq retry` — 격리를 풀고 pending으로 되돌려 다음 run이 재수집하게 한다."""
+        self._conn.execute(
+            "UPDATE units SET status='pending', last_error=NULL, updated_at=? WHERE unit_id=?",
+            (_now(), uid),
+        )
+        self._conn.commit()
+
     def status(self, uid: str) -> str | None:
         row = self._conn.execute("SELECT status FROM units WHERE unit_id=?", (uid,)).fetchone()
         return row[0] if row else None

@@ -1,6 +1,7 @@
 import sqlite3
 import textwrap
 from pathlib import Path
+from typing import Literal
 
 import httpx
 import pyarrow.parquet as pq
@@ -17,6 +18,8 @@ from arsenal_core.spec.models import (
     PythonSourceSpec,
     RestSourceSpec,
     SplitSpec,
+    ValidateRule,
+    ValidateSpec,
 )
 from arsenal_core.state import StateStore, UnitSpec
 from pugio.runner import run_pipeline
@@ -382,3 +385,63 @@ def test_fetch_failure_propagates_and_marks_unit_failed(
         assert rec.last_error is not None and "boom" in rec.last_error
     finally:
         store.close()
+
+
+def _make_validate_file_spec(
+    tmp_path: Path, *, on_violation: Literal["block", "quarantine", "warn"]
+) -> PipelineSpec:
+    """3개 파일 unit — 정렬 순서상 두 번째(b.csv)가 not_null 위반을 낸다."""
+    (tmp_path / "a.csv").write_text("id,v\n1,x\n")
+    (tmp_path / "b.csv").write_text("id,v\n2,\n")  # v가 빈 문자열 → not_null 위반
+    (tmp_path / "c.csv").write_text("id,v\n3,z\n")
+    return PipelineSpec(
+        name="validate-t",
+        state_dir=tmp_path / ".arsenal",
+        source=FileSourceSpec(type="file", path=str(tmp_path / "*.csv")),
+        sink=ParquetSinkSpec(type="parquet", path=str(tmp_path / "out")),
+        validate=ValidateSpec(
+            rules=[ValidateRule(field="v", not_null=True)], on_violation=on_violation
+        ),
+    )
+
+
+def test_quarantine_isolates_unit_and_run_continues(tmp_path: Path) -> None:
+    spec = _make_validate_file_spec(tmp_path, on_violation="quarantine")
+    report = run_pipeline(spec)
+
+    assert report.fetched == 3
+    assert report.written == 2
+    assert report.quarantined == 1
+
+    store = StateStore(spec.state_dir / f"{spec.name}.db")
+    try:
+        counts = store.counts(spec.name)
+    finally:
+        store.close()
+    assert counts.get("quarantined") == 1
+    assert counts.get("done") == 2
+
+    dlq_files = list((tmp_path / ".arsenal" / "dlq" / spec.name).glob("*.parquet"))
+    assert len(dlq_files) == 1
+
+
+def test_block_policy_raises_fatal(tmp_path: Path) -> None:
+    spec = _make_validate_file_spec(tmp_path, on_violation="block")
+    with pytest.raises(FatalError):
+        run_pipeline(spec)
+
+
+def test_warn_policy_writes_anyway(tmp_path: Path) -> None:
+    spec = _make_validate_file_spec(tmp_path, on_violation="warn")
+    report = run_pipeline(spec)
+
+    assert report.fetched == 3
+    assert report.written == 3
+    assert report.quarantined == 0
+
+    store = StateStore(spec.state_dir / f"{spec.name}.db")
+    try:
+        counts = store.counts(spec.name)
+    finally:
+        store.close()
+    assert counts.get("done") == 3
