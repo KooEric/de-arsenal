@@ -44,6 +44,19 @@ def _next_from_link_header(resp: httpx.Response) -> str | None:
     return m.group(1) if m else None
 
 
+def _merge_static_query(url: str, dynamic: dict[str, str | int]) -> dict[str, str | int]:
+    """url 자체에 박힌 정적 쿼리 파라미터(예: 공공데이터포털의 serviceKey — API 키를
+    쿼리 파라미터로 실어야 하는 API에는 그 외 표현 수단이 없다)와 페이지네이션
+    파라미터를 병합한다.
+
+    httpx.Client.get(url, params=X)는 X가 주어지면 url의 기존 쿼리 문자열을
+    "병합"이 아니라 통째로 대체해버린다 — 이 병합 없이는 url에 심어둔 API 키가
+    조용히 요청에서 빠진 채 나간다 (M2-H 실전 API 검증에서 발견).
+    """
+    static = dict(httpx.URL(url).params)
+    return {**static, **dynamic}
+
+
 class RestSource:
     def __init__(
         self,
@@ -159,11 +172,21 @@ class RestSource:
             return self._fetch_link(unit)
         if self._bucket is not None:
             self._bucket.acquire()
-        resp = self._client.get(
-            self._spec.url,
-            params=self._request_params(unit),
-            headers=self._request_headers(),
-        )
+        if self._spec.method == "POST":
+            # M2-H: Notion 검색처럼 페이지네이션 파라미터를 쿼리가 아니라 JSON
+            # 바디로 실어야 하는 API — 정적 body + _request_params()를 병합한다.
+            json_body = {**(self._spec.body or {}), **self._request_params(unit)}
+            resp = self._client.post(
+                self._spec.url,
+                json=json_body,
+                headers=self._request_headers(),
+            )
+        else:
+            resp = self._client.get(
+                self._spec.url,
+                params=_merge_static_query(self._spec.url, self._request_params(unit)),
+                headers=self._request_headers(),
+            )
         self._raise_for_status(resp)
         resp_json = self._parse_json(resp)
         rows = self._extract_rows(resp_json)
@@ -175,8 +198,11 @@ class RestSource:
                 raise FatalError("cursor mode requires cursor_path")
             raw_cursor = _dig(resp_json, p.cursor_path)
             # API가 숫자 커서를 줄 수도 있다 — next_cursor: str | None 계약을 런타임에도
-            # 지키도록 문자열로 강제 변환한다.
-            next_cursor = str(raw_cursor) if raw_cursor is not None else None
+            # 지키도록 문자열로 강제 변환한다. Slack처럼 "더 없음"을 null이 아니라
+            # 빈 문자열로 신호하는 API가 실전에 있다(M2-H 실전 API 검증에서 발견) —
+            # `""`만 None과 동일하게 취급하고, 숫자 0처럼 falsy이지만 유효한 커서는
+            # (str(0) == "0"이 non-empty이므로) 그대로 살려 계속 진행시킨다.
+            next_cursor = str(raw_cursor) if raw_cursor not in (None, "") else None
             self._pending_cursor = next_cursor
             self._cursor_exhausted = next_cursor is None
             return FetchResult(batch=batch, exhausted=next_cursor is None, next_cursor=next_cursor)
@@ -193,7 +219,9 @@ class RestSource:
             resp = self._client.get(cur, headers=self._request_headers())
         else:
             resp = self._client.get(
-                self._spec.url, params={p.size_param: p.size}, headers=self._request_headers()
+                self._spec.url,
+                params=_merge_static_query(self._spec.url, {p.size_param: p.size}),
+                headers=self._request_headers(),
             )
         self._raise_for_status(resp)
         rows = self._extract_rows(self._parse_json(resp))

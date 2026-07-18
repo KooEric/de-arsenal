@@ -82,6 +82,10 @@ class RestSourceSpec(_Frozen):
     rate_limit: RateLimitSpec | None = None
     encoding: str = "utf-8"  # M2: euc-kr 등 비UTF-8 처리
     auth: AuthSpec | None = None
+    # M2-H: Notion 검색(`POST /v1/search`)처럼 페이지네이션 파라미터를 쿼리가 아니라
+    # JSON 바디로 실어야 하는 API가 있다 — GET이 기본값이라 기존 스펙은 영향받지 않는다.
+    method: Literal["GET", "POST"] = "GET"
+    body: dict[str, Any] | None = None  # method="POST"일 때 요청에 실을 정적 JSON 바디
 
 
 class FileSourceSpec(_Frozen):

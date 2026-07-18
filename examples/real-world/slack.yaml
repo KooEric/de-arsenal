@@ -1,0 +1,25 @@
+# 실전 API 검증 5/5 — Slack conversations.history API (docs/reference/api-coverage.md)
+# 검증 포인트: mode: cursor(중첩 dot-path `response_metadata.next_cursor`),
+# 429 Retry-After 적응 감속.
+#
+# 표현 방식: `channel`은 페이지네이션과 무관한 고정 쿼리 파라미터인데,
+# RestSourceSpec에는 임의의 정적 쿼리 파라미터를 담는 필드가 없다(pagination
+# 전용 param/size_param/cursor_param만 쿼리로 나간다) — url에 직접 박아 넣는다.
+# api-coverage.md에 이 제약을 기록해 둔다.
+# 실행: SLACK_BOT_TOKEN=xxx pugio run examples/real-world/slack.yaml
+name: real-world-slack
+source:
+  type: rest
+  url: "https://slack.com/api/conversations.history?channel=C0000000"
+  pagination:
+    mode: cursor
+    size_param: limit
+    size: 200
+    cursor_param: cursor
+    cursor_path: response_metadata.next_cursor
+    record_path: messages
+  rate_limit: { rps: 1 }
+  auth: { type: static_token, token_env: SLACK_BOT_TOKEN }
+sink:
+  type: parquet
+  path: ./data/real-world/slack-messages
