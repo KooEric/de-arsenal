@@ -51,6 +51,23 @@ def test_bad_encoding_name_is_fatal() -> None:
 
 
 @respx.mock
+def test_non_json_body_is_fatal() -> None:
+    """200이지만 본문이 JSON이 아니면(json.JSONDecodeError) FatalError로 분류한다
+    (재시도해도 나아지지 않는 응답이므로 with_retry 재시도 대상이 아니다)."""
+    respx.get("https://api.test/not-json").respond(
+        content=b"<html>not json</html>", headers={"content-type": "application/json"}
+    )
+    spec = RestSourceSpec(
+        type="rest",
+        url="https://api.test/not-json",
+        pagination=OFFSET_PAGINATION,
+    )
+    src = RestSource(spec, pipeline="p", client=httpx.Client())
+    with pytest.raises(FatalError):
+        src.fetch(next(iter(src.units())))
+
+
+@respx.mock
 def test_utf8_default_still_works() -> None:
     """encoding을 지정하지 않으면 기본 utf-8 경로가 그대로 동작한다."""
     respx.get("https://api.test/utf8").respond(json=[{"id": 1}, {"id": 2}])

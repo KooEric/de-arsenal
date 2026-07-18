@@ -11,6 +11,7 @@ from arsenal_core.spec.models import (
     AuthSpec,
     PaginationSpec,
     PipelineSpec,
+    RateLimitSpec,
     SinkSpec,
     ValidateRule,
 )
@@ -91,3 +92,12 @@ def test_pipeline_validate_alias() -> None:
 def test_pipeline_without_validate_is_none() -> None:
     spec = PipelineSpec.model_validate(_minimal_pipeline_dict())
     assert spec.validation is None
+
+
+def test_rate_limit_rps_must_be_positive() -> None:
+    # rps=0은 TokenBucket의 1.0/rps에서 ZeroDivisionError, 음수는 역방향 스로틀로
+    # 이어진다 — SplitSpec.chunk와 동일하게 생성 시점에 gt=0으로 차단한다.
+    with pytest.raises(ValidationError):
+        RateLimitSpec(rps=0)
+    with pytest.raises(ValidationError):
+        RateLimitSpec(rps=-1)

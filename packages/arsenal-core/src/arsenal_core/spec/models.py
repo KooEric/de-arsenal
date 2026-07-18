@@ -38,7 +38,8 @@ class PaginationSpec(_Frozen):
 
 
 class RateLimitSpec(_Frozen):
-    rps: float  # M2: 토큰 버킷 + 429 적응 감속
+    rps: float = Field(gt=0)  # M2: 토큰 버킷 + 429 적응 감속. 0/음수는 TokenBucket의
+    # 1.0/rps 계산에서 ZeroDivisionError/역방향 스로틀로 이어져 여기서 차단한다.
 
 
 class AuthSpec(_Frozen):

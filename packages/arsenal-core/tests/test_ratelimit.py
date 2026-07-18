@@ -45,3 +45,23 @@ def test_penalize_respects_retry_after() -> None:
     tb.penalize(30.0)
     tb.acquire()
     assert clock.slept[0] >= 30.0
+
+
+def test_burst_allows_initial_capacity() -> None:
+    """rps=1.0, burst=3: 처음 3번의 acquire()는 버스트 용량을 소비만 하고
+    sleep 없이 즉시 반환된다 (버스트가 죽어있던 이전 구현은 매번 min(1.0, ...)로
+    캡을 걸어 burst>1을 무시했다). 4번째 호출에서 토큰이 바닥나 스로틀이 걸린다:
+
+    interval = 1/1.0 = 1.0
+    call1: tokens=3.0 → 소비만, sleep 없음. tokens=2.0
+    call2: tokens=2.0 (경과 0) → 소비만, sleep 없음. tokens=1.0
+    call3: tokens=1.0 → 소비만, sleep 없음. tokens=0.0
+    call4: tokens=0.0 → sleep((1.0-0.0)*1.0)=1.0
+    """
+    clock = FakeClock()
+    tb = TokenBucket(rps=1.0, clock=clock, burst=3)
+    for _ in range(3):
+        tb.acquire()
+    assert clock.slept == []
+    tb.acquire()
+    assert clock.slept == [pytest.approx(1.0, abs=0.01)]

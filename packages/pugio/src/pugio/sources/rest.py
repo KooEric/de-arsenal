@@ -226,7 +226,11 @@ class RestSource:
             raise FatalError(
                 f"cannot decode response from {resp.url} as {self._spec.encoding!r}: {e}"
             ) from e
-        return json.loads(text)
+        try:
+            return json.loads(text)
+        except json.JSONDecodeError as e:
+            # 비-JSON 200 응답(HTML 에러 페이지 등)은 재시도해도 나아지지 않는다 — Fatal로 분류.
+            raise FatalError(f"response from {resp.url} is not valid JSON: {e}") from e
 
     def _extract_rows(self, resp_json: Any) -> list[dict[str, object]]:
         """record_path가 없으면 응답 자체가 배열. 있으면 dot-path로 배열을 뽑는다."""
