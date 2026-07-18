@@ -5,6 +5,7 @@ M2 확장: page/cursor 모드, encoding, rate limiter, AuthProvider 연동 (docs
 """
 
 import itertools
+import json
 import re
 from collections.abc import Iterator
 from typing import Any, cast
@@ -13,6 +14,7 @@ import httpx
 import pyarrow as pa
 
 from arsenal_core.errors import FatalError, classify_http_status
+from arsenal_core.ratelimit import Clock, TokenBucket
 from arsenal_core.spec.models import RestSourceSpec
 from arsenal_core.state import SOURCE_EXHAUSTED, UnitSpec
 from pugio.sources.base import FetchResult
@@ -49,6 +51,7 @@ class RestSource:
         pipeline: str,
         client: httpx.Client,
         initial_cursor: str | None = None,
+        clock: Clock | None = None,
     ) -> None:
         self._spec = spec
         self._pipeline = pipeline
@@ -56,6 +59,11 @@ class RestSource:
         # cursor/link 공용 상태 — fetch()가 매 호출 후 갱신한다 (units()는 lazy하게 읽는다).
         self._pending_cursor = initial_cursor
         self._cursor_exhausted = False
+        # M2-C: rate_limit이 없으면 완전히 비활성 — 기존 호출부(clock/rate_limit
+        # 미지정)를 깨지 않기 위해 기본값을 안전하게 None으로 둔다.
+        self._bucket = (
+            TokenBucket(spec.rate_limit.rps, clock=clock) if spec.rate_limit is not None else None
+        )
 
     def units(self) -> Iterator[UnitSpec]:
         """모드별로 unit을 lazy하게 열거한다 (offset/page/cursor/link)."""
@@ -138,13 +146,15 @@ class RestSource:
         p = self._spec.pagination
         if p.mode == "link":
             return self._fetch_link(unit)
+        if self._bucket is not None:
+            self._bucket.acquire()
         resp = self._client.get(
             self._spec.url,
             params=self._request_params(unit),
             headers=self._spec.headers,
         )
         self._raise_for_status(resp)
-        resp_json = resp.json()
+        resp_json = self._parse_json(resp)
         rows = self._extract_rows(resp_json)
         batch = pa.RecordBatch.from_pylist(rows) if rows else None
         if p.mode == "cursor":
@@ -165,6 +175,8 @@ class RestSource:
     def _fetch_link(self, unit: UnitSpec) -> FetchResult:
         """B7: Link 헤더(rel="next")의 절대 URL을 그대로 GET한다."""
         p = self._spec.pagination
+        if self._bucket is not None:
+            self._bucket.acquire()
         cur = unit.payload["cursor"]
         if cur is not None:
             resp = self._client.get(cur, headers=self._spec.headers)
@@ -173,7 +185,7 @@ class RestSource:
                 self._spec.url, params={p.size_param: p.size}, headers=self._spec.headers
             )
         self._raise_for_status(resp)
-        rows = self._extract_rows(resp.json())
+        rows = self._extract_rows(self._parse_json(resp))
         batch = pa.RecordBatch.from_pylist(rows) if rows else None
         next_cursor = _next_from_link_header(resp)
         self._pending_cursor = next_cursor
@@ -182,8 +194,39 @@ class RestSource:
 
     def _raise_for_status(self, resp: httpx.Response) -> None:
         exc_type = classify_http_status(resp.status_code)
-        if exc_type is not None:
-            raise exc_type(f"GET {resp.url} -> {resp.status_code}: {resp.text[:200]}")
+        if exc_type is None:
+            return
+        # 429는 재시도 가능하지만, 다음 with_retry 시도가 서버를 또 두들기지 않도록
+        # Retry-After만큼 버킷에 벌점을 먹인다 — 다음 acquire()가 자연히 그 시간을 기다린다.
+        if resp.status_code == 429 and self._bucket is not None:
+            retry_after = self._parse_retry_after(resp)
+            if retry_after is not None:
+                self._bucket.penalize(retry_after)
+        raise exc_type(f"GET {resp.url} -> {resp.status_code}: {resp.text[:200]}")
+
+    def _parse_retry_after(self, resp: httpx.Response) -> float | None:
+        """Retry-After 헤더(정수 초)를 읽는다. 없거나 파싱 불가면 None (penalize 생략)."""
+        raw = resp.headers.get("retry-after")
+        if raw is None:
+            return None
+        try:
+            return float(raw)
+        except ValueError:
+            return None
+
+    def _parse_json(self, resp: httpx.Response) -> Any:
+        """resp.json() 대신 raw body를 spec.encoding으로 직접 디코드한다.
+
+        httpx는 Content-Type에 charset이 없으면 기본 UTF-8로 추정하므로, euc-kr 등
+        비UTF-8 응답은 spec.encoding을 명시하지 않으면 이 경로에서 깨진다.
+        """
+        try:
+            text = resp.content.decode(self._spec.encoding)
+        except (UnicodeDecodeError, LookupError) as e:
+            raise FatalError(
+                f"cannot decode response from {resp.url} as {self._spec.encoding!r}: {e}"
+            ) from e
+        return json.loads(text)
 
     def _extract_rows(self, resp_json: Any) -> list[dict[str, object]]:
         """record_path가 없으면 응답 자체가 배열. 있으면 dot-path로 배열을 뽑는다."""
