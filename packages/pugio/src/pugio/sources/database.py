@@ -1,9 +1,10 @@
 """운영 DB 소스 — 키 범위 unit 분할 + 재개·멱등.
 
-**초안(draft) 범위 이탈 고지**: 원안(docs/plans/2026-07-08-m2-pugio-complete.md
-Task 2.12)은 DuckDB scanner(ATTACH)로 드라이버·타입 매핑을 위임하지만, 이 초안은
-네트워크 의존(확장 다운로드) 없이 즉시 동작하도록 Python 표준 sqlite3 모듈만 사용한다.
-dialect="postgres"/"mysql"은 아직 구현체가 없다 — 생성 시점에 FatalError.
+dialect="sqlite"는 네트워크 의존 없이 즉시 동작하는 Python 표준 sqlite3 모듈
+경로(TESTED/HARDENED, 아래에서 동작을 바꾸지 않는다). dialect="postgres"/"mysql"은
+DuckDB scanner(ATTACH)로 드라이버·타입 매핑을 위임한다 (M2-G, docs/09-oss-leverage.md
+수 1). 두 경로 모두 min/max(key) → chunk 단위 범위 열거라는 동일한 계산을 공유하며
+(`_key_ranges`), fetch만 드라이버별로 갈린다.
 
 DE의 1번 수집 작업(운영 DB → 웨어하우스 동기화). 늘어난 행은 재실행 시
 max(key) 재조회로 새 unit이 생겨 증분 동기화가 구조에서 공짜로 나온다.
@@ -17,6 +18,7 @@ import sqlite3
 from collections.abc import Iterator
 from typing import NoReturn
 
+import duckdb
 import pyarrow as pa
 
 from arsenal_core.errors import FatalError, RetryableError
@@ -26,6 +28,20 @@ from pugio.sources.base import FetchResult
 
 _IDENT_RE = re.compile(r"^[A-Za-z_][A-Za-z0-9_]*$")
 _TRANSIENT_MARKERS = ("database is locked", "database is busy")
+
+# dialect → (duckdb 확장 이름, ATTACH TYPE 키워드). Literal["postgres","mysql","sqlite"]의
+# sqlite를 뺀 두 값만 scanner 경로로 온다 (units()/fetch()에서 분기).
+_SCANNER_EXTENSION = {"postgres": "postgres", "mysql": "mysql"}
+_SCANNER_ATTACH_TYPE = {"postgres": "POSTGRES", "mysql": "MYSQL"}
+
+# duckdb 에러 분류 (M2-F DuckDBSink와 동일한 원칙): IO/커넥션/트랜잭션 충돌만
+# 일시적 — 서버 다운, 네트워크 단절, lock 경합 등은 재시도하면 성공할 수 있다.
+# catalog(테이블 없음)/binder(컬럼 없음)/parser 등 나머지는 설정 오류라 FatalError.
+_DUCKDB_RETRYABLE: tuple[type[duckdb.Error], ...] = (
+    duckdb.IOException,
+    duckdb.ConnectionException,
+    duckdb.TransactionException,
+)
 
 
 def _qi(name: str) -> str:
@@ -48,13 +64,35 @@ def _raise_classified(e: sqlite3.Error, *, context: str) -> NoReturn:
     raise FatalError(f"{context}: {e}") from e
 
 
+def _raise_classified_duckdb(e: duckdb.Error, *, context: str) -> NoReturn:
+    """duckdb scanner 에러를 재시도 가능 여부로 분류해 던진다 (M2-F DuckDBSink와 동일 원칙)."""
+    if isinstance(e, _DUCKDB_RETRYABLE):
+        raise RetryableError(f"{context}: {e}") from e
+    raise FatalError(f"{context}: {e}") from e
+
+
+def _key_ranges(
+    lo: int, hi_bound: int, chunk: int, *, pipeline: str, source: str, key: str
+) -> Iterator[UnitSpec]:
+    """min/max(key) 범위를 chunk 단위로 잘라 UnitSpec을 낸다 — sqlite/scanner 공통.
+
+    dialect-agnostic: min/max만 구하면 그 다음 chunk 계산은 드라이버와 무관하다.
+    unit_key = "id=lo..hi" (결정적 — 재실행 시 동일 unit_id로 done 여부를 판별).
+    """
+    lo_cursor = lo
+    while lo_cursor <= hi_bound:
+        hi = lo_cursor + chunk
+        yield UnitSpec.create(
+            pipeline=pipeline,
+            source=source,
+            unit_key=f"{key}={lo_cursor}..{hi}",
+            payload={"lo": lo_cursor, "hi": hi},
+        )
+        lo_cursor = hi
+
+
 class DatabaseSource:
     def __init__(self, spec: DatabaseSourceSpec, *, pipeline: str) -> None:
-        if spec.dialect != "sqlite":
-            raise FatalError(
-                f"DatabaseSource draft only supports dialect='sqlite' (got {spec.dialect!r}); "
-                "postgres/mysql are P1 scope (docs/09-oss-leverage.md)"
-            )
         self._spec = spec
         self._pipeline = pipeline
 
@@ -64,11 +102,12 @@ class DatabaseSource:
             raise FatalError(f"environment variable not set: {self._spec.dsn_env}")
         return dsn
 
+    # ---- sqlite3 경로 (TESTED/HARDENED — 동작 불변) ----------------------------
+
     def _connect(self) -> sqlite3.Connection:
         return sqlite3.connect(self._dsn())
 
-    def units(self) -> Iterator[UnitSpec]:
-        """min/max(key) 조회 → chunk 단위 범위 열거. unit_key = "id=lo..hi" (결정적)."""
+    def _units_sqlite(self) -> Iterator[UnitSpec]:
         key = self._spec.split.key
         chunk = self._spec.split.chunk
         con = self._connect()
@@ -82,19 +121,11 @@ class DatabaseSource:
             con.close()
         if row is None or row[0] is None or row[1] is None:
             return
-        lo, hi_bound = row[0], row[1]
-        while lo <= hi_bound:
-            hi = lo + chunk
-            yield UnitSpec.create(
-                pipeline=self._pipeline,
-                source=self._spec.table,
-                unit_key=f"{key}={lo}..{hi}",
-                payload={"lo": lo, "hi": hi},
-            )
-            lo = hi
+        yield from _key_ranges(
+            row[0], row[1], chunk, pipeline=self._pipeline, source=self._spec.table, key=key
+        )
 
-    def fetch(self, unit: UnitSpec) -> FetchResult:
-        """sqlite3 SELECT 범위 조회 → Arrow. lock 충돌만 RetryableError, 나머지는 FatalError."""
+    def _fetch_sqlite(self, unit: UnitSpec) -> FetchResult:
         key = self._spec.split.key
         lo, hi = unit.payload["lo"], unit.payload["hi"]
         con = self._connect()
@@ -113,3 +144,83 @@ class DatabaseSource:
             return FetchResult(batch=None, exhausted=False)
         records = [dict(zip(columns, r, strict=True)) for r in rows]
         return FetchResult(batch=pa.RecordBatch.from_pylist(records), exhausted=False)
+
+    # ---- postgres/mysql: duckdb scanner 경로 (M2-G) ----------------------------
+
+    def _scanner_connect(self) -> duckdb.DuckDBPyConnection:
+        """duckdb 확장 설치/로드 + ATTACH. dsn은 파라미터화 불가(ATTACH는 DDL)라
+        f-string으로 조립하되, 작은따옴표만 이스케이프해 문법 파손을 막는다
+        (dsn은 dsn_env로만 주입되는 운영자 설정값 — 비밀 원칙, 사용자 입력 아님).
+        """
+        dialect = self._spec.dialect
+        extension = _SCANNER_EXTENSION[dialect]
+        attach_type = _SCANNER_ATTACH_TYPE[dialect]
+        dsn = self._dsn().replace("'", "''")
+        con = duckdb.connect()
+        try:
+            con.execute(f"INSTALL {extension}")
+            con.execute(f"LOAD {extension}")
+            con.execute(f"ATTACH '{dsn}' AS src (TYPE {attach_type}, READ_ONLY)")
+        except duckdb.Error as e:
+            con.close()
+            _raise_classified_duckdb(e, context=f"attach failed for dialect {dialect!r}")
+        except Exception:
+            con.close()
+            raise
+        return con
+
+    def _units_scanner(self) -> Iterator[UnitSpec]:
+        key = self._spec.split.key
+        chunk = self._spec.split.chunk
+        con = self._scanner_connect()
+        try:
+            row = con.execute(
+                f"SELECT min({_qi(key)}), max({_qi(key)}) FROM src.{_qi(self._spec.table)}"
+            ).fetchone()
+        except duckdb.Error as e:
+            _raise_classified_duckdb(
+                e, context=f"min/max query failed for table {self._spec.table!r}"
+            )
+        finally:
+            con.close()
+        if row is None or row[0] is None or row[1] is None:
+            return
+        yield from _key_ranges(
+            row[0], row[1], chunk, pipeline=self._pipeline, source=self._spec.table, key=key
+        )
+
+    def _fetch_scanner(self, unit: UnitSpec) -> FetchResult:
+        key = self._spec.split.key
+        lo, hi = unit.payload["lo"], unit.payload["hi"]
+        con = self._scanner_connect()
+        table: pa.Table
+        try:
+            result = con.execute(
+                f"SELECT * FROM src.{_qi(self._spec.table)} "
+                f"WHERE {_qi(key)} >= ? AND {_qi(key)} < ?",
+                [lo, hi],
+            )
+            table = result.to_arrow_table()  # pyright: ignore[reportUnknownMemberType, reportUnknownVariableType]
+        except duckdb.Error as e:
+            _raise_classified_duckdb(e, context=f"fetch failed for table {self._spec.table!r}")
+        finally:
+            con.close()
+        if table.num_rows == 0:  # pyright: ignore[reportUnknownMemberType]
+            return FetchResult(batch=None, exhausted=False)
+        batches = table.combine_chunks().to_batches()  # pyright: ignore[reportUnknownMemberType, reportUnknownVariableType]
+        return FetchResult(batch=batches[0], exhausted=False)  # pyright: ignore[reportUnknownArgumentType]
+
+    # ---- dispatch ---------------------------------------------------------
+
+    def units(self) -> Iterator[UnitSpec]:
+        """min/max(key) 조회 → chunk 단위 범위 열거. dialect로 sqlite/scanner 분기."""
+        if self._spec.dialect == "sqlite":
+            yield from self._units_sqlite()
+        else:
+            yield from self._units_scanner()
+
+    def fetch(self, unit: UnitSpec) -> FetchResult:
+        """범위 조회 → Arrow. dialect로 sqlite/scanner 분기, 에러 분류는 각자 담당."""
+        if self._spec.dialect == "sqlite":
+            return self._fetch_sqlite(unit)
+        return self._fetch_scanner(unit)

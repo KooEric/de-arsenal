@@ -103,15 +103,18 @@ def test_missing_dsn_env_is_fatal(tmp_path: Path, monkeypatch: pytest.MonkeyPatc
         list(src.units())
 
 
-def test_unsupported_dialect_is_fatal() -> None:
-    spec = DatabaseSourceSpec(
-        type="database",
-        dialect="postgres",
-        dsn_env="SRC_DB",
-        table="orders",
-        split=SplitSpec(key="id", chunk=100),
-    )
-    with pytest.raises(FatalError, match="sqlite"):
+def test_postgres_and_mysql_dialects_no_longer_raise_at_construction() -> None:
+    """M2-G: postgres/mysql은 이제 duckdb scanner로 구현되어 있다 — 생성 시점에
+    더 이상 FatalError를 던지지 않는다 (기능 자체는 packages/pugio/tests/
+    test_database_source_scanner.py의 postgres testcontainers 테스트가 검증)."""
+    for dialect in ("postgres", "mysql"):
+        spec = DatabaseSourceSpec(
+            type="database",
+            dialect=dialect,  # type: ignore[arg-type]
+            dsn_env="SRC_DB",
+            table="orders",
+            split=SplitSpec(key="id", chunk=100),
+        )
         DatabaseSource(spec, pipeline="p")
 
 

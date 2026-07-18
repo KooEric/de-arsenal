@@ -271,6 +271,23 @@ def test_run_pipeline_dispatches_database_source(
     assert ids == [1, 2, 3, 4, 5]
 
 
+@respx.mock
+def test_run_records_schema_snapshot(tmp_path: Path) -> None:
+    """M2-G: run 중 첫 non-empty batch의 스키마가 StateStore에 기록된다 (기록만 —
+    탐지/정책은 P1)."""
+    mock_pages([[{"id": 1}, {"id": 2}], [{"id": 3}]])
+    spec = make_spec(tmp_path)
+    run_pipeline(spec)
+
+    store = StateStore(spec.state_dir / f"{spec.name}.db")
+    try:
+        schema_json = store.last_schema(spec.name)
+    finally:
+        store.close()
+    assert schema_json is not None
+    assert "id" in schema_json
+
+
 def test_run_pipeline_dispatches_python_source(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:

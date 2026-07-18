@@ -99,10 +99,10 @@ class SplitSpec(_Frozen):
 
 
 class DatabaseSourceSpec(_Frozen):
-    """운영 DB 소스 (M2 Task 2.12).
+    """운영 DB 소스 (M2 Task 2.12 / M2-G).
 
-    초안(draft): dialect="sqlite"만 구현체가 지원 — Python 표준 sqlite3 드라이버.
-    postgres/mysql(DuckDB scanner 차용, docs/09 수 1)은 P1로 이연.
+    dialect="sqlite"는 Python 표준 sqlite3 드라이버. dialect="postgres"/"mysql"은
+    DuckDB scanner(ATTACH, docs/09 수 1)로 구현된다.
     """
 
     type: Literal["database"]

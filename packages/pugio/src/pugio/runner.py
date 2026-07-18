@@ -9,12 +9,14 @@ at-least-once 실행 + 멱등 쓰기 = exactly-once 결과.
 """
 
 import functools
+import json
 import logging
 import time
 from collections.abc import Callable
 from dataclasses import dataclass
 
 import httpx
+import pyarrow as pa
 
 from arsenal_core.errors import AuthExpiredError, FatalError
 from arsenal_core.retry import DEFAULT_MAX_ATTEMPTS, with_retry
@@ -39,6 +41,16 @@ class RunReport:
     written: int
     skipped: int  # done이라 건너뛴 unit 수 — 재개의 증거
     quarantined: int = 0  # 검증 위반으로 격리된 unit 수 (M2-E)
+
+
+def _schema_json(batch: pa.RecordBatch) -> str:
+    """batch 스키마를 결정적 JSON으로 직렬화 (필드 순서 = 스키마 필드 순서).
+
+    schema_snapshots 기록용 (M2-G) — 탐지/정책은 P1, 여기는 기록만 한다.
+    """
+    return json.dumps(
+        [{"name": f.name, "type": str(f.type), "nullable": f.nullable} for f in batch.schema]
+    )
 
 
 def _fetch_with_retry(source: Source, unit: UnitSpec, max_attempts: int) -> FetchResult:
@@ -120,6 +132,7 @@ def run_pipeline(
     # spec.type으로 알맞은 구현체를 만든다 (M2-F).
     sink = build_sink(spec.sink)
     fetched = written = skipped = done_count = quarantined = 0
+    schema_recorded = False  # 이번 run에서 스냅샷 기록 여부 (첫 non-empty batch에서 한 번만)
 
     try:
         for unit in source.units():
@@ -135,6 +148,9 @@ def run_pipeline(
                 store.mark_failed(unit.unit_id, str(e))
                 raise
             fetched += 1
+            if not schema_recorded and result.batch is not None:
+                store.snapshot_schema(spec.name, _schema_json(result.batch))
+                schema_recorded = True
             if spec.validation is not None and result.batch is not None:
                 report = check(result.batch, spec.validation.rules)
                 if not report.ok:

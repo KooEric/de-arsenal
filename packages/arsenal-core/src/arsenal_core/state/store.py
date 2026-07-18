@@ -215,6 +215,29 @@ class StateStore:
         )
         self._conn.commit()
 
+    def last_schema(self, pipeline: str) -> str | None:
+        """이 pipeline의 가장 최근 스키마 스냅샷 — 없으면 None (첫 실행)."""
+        row = self._conn.execute(
+            "SELECT schema_json FROM schema_snapshots WHERE pipeline=? "
+            "ORDER BY captured_at DESC, rowid DESC LIMIT 1",
+            (pipeline,),
+        ).fetchone()
+        return row[0] if row else None
+
+    def snapshot_schema(self, pipeline: str, schema_json: str) -> None:
+        """가장 최근 스냅샷과 다를 때만 append — 스키마가 안 바뀌었으면 no-op.
+
+        스키마 변경 이력만 남기려는 것 — 매 run마다 동일한 schema_json을 계속
+        쌓으면 감사 이력이 노이즈로 뒤덮인다 (탐지/정책은 P1, 여기는 기록만).
+        """
+        if self.last_schema(pipeline) == schema_json:
+            return
+        self._conn.execute(
+            "INSERT INTO schema_snapshots (pipeline, captured_at, schema_json) VALUES (?, ?, ?)",
+            (pipeline, _now(), schema_json),
+        )
+        self._conn.commit()
+
     def counts(self, pipeline: str) -> dict[str, int]:
         """status → 개수. `pugio status`의 데이터."""
         rows = self._conn.execute(
