@@ -11,9 +11,12 @@ import typer
 from arsenal_core.errors import ArsenalError
 from arsenal_core.spec import load_pipeline
 from arsenal_core.state import StateStore
+from pugio.dlq import dlq_dir, read_reason, remove_dlq
 from pugio.runner import run_pipeline
 
 app = typer.Typer(help="Pugio — 수집·전송. 재실행은 곧 재개다.")
+dlq_app = typer.Typer(help="dead-letter queue — 격리된 unit 조회·재시도")
+app.add_typer(dlq_app, name="dlq")
 
 
 @app.command()
@@ -46,6 +49,48 @@ def status(spec_path: Path) -> None:
         return
     for state, n in sorted(counts.items()):
         typer.echo(f"{state}: {n}")
+
+
+@dlq_app.command("list")
+def dlq_list(spec_path: Path) -> None:
+    """격리된 unit 목록 — unit_key + 위반 사유(DLQ 사유 JSON에서 읽는다)."""
+    try:
+        spec = load_pipeline(spec_path)
+    except ArsenalError as e:
+        typer.echo(f"error: {e}", err=True)
+        raise typer.Exit(1) from e
+    store = StateStore(spec.state_dir / f"{spec.name}.db")
+    try:
+        records = store.quarantined(spec.name)
+    finally:
+        store.close()
+    if not records:
+        typer.echo("no quarantined units")
+        return
+    for rec in records:
+        json_path = dlq_dir(spec.state_dir, spec.name) / f"{rec.unit_id}.json"
+        unit_key = rec.unit_id
+        if json_path.exists():
+            reason = read_reason(json_path)
+            unit_key = str(reason.get("unit_key", rec.unit_id))
+        typer.echo(f"{unit_key}: {rec.last_error}")
+
+
+@dlq_app.command("retry")
+def dlq_retry(spec_path: Path, unit: str = typer.Option(..., "--unit")) -> None:
+    """격리된 unit을 pending으로 되돌리고 DLQ 파일을 지운다. 다음 run이 재수집한다."""
+    try:
+        spec = load_pipeline(spec_path)
+    except ArsenalError as e:
+        typer.echo(f"error: {e}", err=True)
+        raise typer.Exit(1) from e
+    store = StateStore(spec.state_dir / f"{spec.name}.db")
+    try:
+        store.requeue(unit)
+    finally:
+        store.close()
+    remove_dlq(spec.state_dir, spec.name, unit)
+    typer.echo(f"requeued {unit}")
 
 
 if __name__ == "__main__":
