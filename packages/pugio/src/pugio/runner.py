@@ -165,7 +165,18 @@ def run_pipeline(
                         # 커서를 진전시키지 않는다 (재실행 시 여전히 격리 상태로 재등록됨).
                         continue
             if result.batch is not None:
-                sink.write(unit, result.batch)  # 멱등 쓰기 먼저,
+                # M2-F FIX 7: sink.write는 fetch와 달리 감싸지지 않아, 실패해도
+                # mark_failed 없이 unit이 'running'에 영원히 갇혔다 (Retryable/Fatal
+                # 분류도 무의미해짐). fetch와 동일하게 with_retry로 감싸 RetryableError는
+                # 재시도하고, 그래도 실패하면(또는 FatalError면) mark_failed 후 전파한다.
+                try:
+                    with_retry(
+                        functools.partial(sink.write, unit, result.batch),
+                        max_attempts=max_attempts,
+                    )
+                except Exception as e:
+                    store.mark_failed(unit.unit_id, str(e))
+                    raise
                 written += 1
             store.mark_done(  # done 마킹은 그 다음 (핵심 불변식)
                 unit.unit_id,

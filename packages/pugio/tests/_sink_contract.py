@@ -52,3 +52,34 @@ def assert_two_different_batches_accumulate(sink: Sink, readback: ReadBack) -> N
     rows = readback()
     ids = sorted(cast(int, r["id"]) for r in rows)
     assert ids == [1, 2]
+
+
+def assert_in_batch_duplicate_key_keeps_last(sink: Sink, readback: ReadBack) -> None:
+    """한 batch 안에 같은 merge_key(id=1)가 중복되면 merge_key당 정확히 한 행만
+    남고, 그 값은 batch 내 마지막(row order 기준) 값이어야 한다 (M2-F FIX 2).
+    postgres는 ON CONFLICT가 row 단위로 처리되어 자연히 last-wins가 되지만,
+    duckdb는 유니크 제약이 없는 set INSERT라 별도 조치 없이는 중복 행이 그대로
+    쌓인다 — 두 싱크가 동일한 최종 상태를 내는지 이 계약으로 함께 검증한다."""
+    u = make_unit("u_dup")
+    batch = pa.RecordBatch.from_pylist([{"id": 1, "v": "a"}, {"id": 1, "v": "b"}])
+    sink.write(u, batch)
+    rows = readback()
+    assert len(rows) == 1
+    assert rows[0]["v"] == "b"
+
+
+def assert_composite_merge_key_upsert(sink: Sink, readback: ReadBack) -> None:
+    """복합 merge_key(a, b) 기준으로 두 번째 write가 (1,1)은 갱신하고 (1,2)는
+    새로 추가한다 — DELETE/ON CONFLICT의 다중 컬럼 매치 조건이 올바른지 검증한다
+    (M2-F FIX 5). 싱크 생성 시 merge_key=["a", "b"]로 만들어야 호출할 수 있다."""
+    u1 = make_unit("u_comp1")
+    u2 = make_unit("u_comp2")
+    sink.write(u1, pa.RecordBatch.from_pylist([{"a": 1, "b": 1, "v": "x"}]))
+    sink.write(
+        u2,
+        pa.RecordBatch.from_pylist([{"a": 1, "b": 1, "v": "y"}, {"a": 1, "b": 2, "v": "z"}]),
+    )
+    rows = readback()
+    assert len(rows) == 2
+    by_key = {(cast(int, r["a"]), cast(int, r["b"])): r["v"] for r in rows}
+    assert by_key == {(1, 1): "y", (1, 2): "z"}

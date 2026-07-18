@@ -141,6 +141,14 @@ class ParquetSinkSpec(_Frozen):
         return v
 
 
+def _merge_key_non_empty(v: list[str]) -> list[str]:
+    """merge_key가 비어 있으면 DELETE/ON CONFLICT의 매치 조건이 없어 전체 테이블을
+    지우거나(duckdb) 제약을 만들 수 없다(postgres) — 생성 시점에 차단한다 (M2-F FIX 4)."""
+    if len(v) < 1:
+        raise ValueError("merge_key must have at least one column")
+    return v
+
+
 class DuckDBSinkSpec(_Frozen):
     """DuckDB 파일 싱크 (M2) — temp 테이블 → MERGE로 멱등 upsert."""
 
@@ -148,6 +156,11 @@ class DuckDBSinkSpec(_Frozen):
     path: str
     table: str
     merge_key: list[str]
+
+    @field_validator("merge_key")
+    @classmethod
+    def _merge_key_non_empty(cls, v: list[str]) -> list[str]:
+        return _merge_key_non_empty(v)
 
 
 class PostgresSinkSpec(_Frozen):
@@ -157,6 +170,11 @@ class PostgresSinkSpec(_Frozen):
     dsn_env: str
     table: str
     merge_key: list[str]
+
+    @field_validator("merge_key")
+    @classmethod
+    def _merge_key_non_empty(cls, v: list[str]) -> list[str]:
+        return _merge_key_non_empty(v)
 
 
 SinkSpec = Annotated[

@@ -1,9 +1,12 @@
+import urllib.parse
 from collections.abc import Iterator
 
 import psycopg
 import pyarrow as pa
 import pytest
 from _sink_contract import (
+    assert_composite_merge_key_upsert,
+    assert_in_batch_duplicate_key_keeps_last,
     assert_merge_updates_changed_rows,
     assert_two_different_batches_accumulate,
     assert_write_twice_same_unit_is_idempotent,
@@ -32,8 +35,10 @@ def dsn(pg_url: str, monkeypatch: pytest.MonkeyPatch) -> str:
     return pg_url
 
 
-def make_sink(table: str) -> PostgresSink:
-    spec = PostgresSinkSpec(type="postgres", dsn_env=DSN_ENV, table=table, merge_key=["id"])
+def make_sink(table: str, *, merge_key: list[str] | None = None) -> PostgresSink:
+    spec = PostgresSinkSpec(
+        type="postgres", dsn_env=DSN_ENV, table=table, merge_key=merge_key or ["id"]
+    )
     return PostgresSink(spec)
 
 
@@ -57,6 +62,50 @@ def test_merge_updates_changed_rows(dsn: str) -> None:
 def test_write_two_different_batches_accumulates(dsn: str) -> None:
     sink = make_sink("contract_accum")
     assert_two_different_batches_accumulate(sink, lambda: readback(dsn, "contract_accum"))
+
+
+def test_in_batch_duplicate_key_keeps_last(dsn: str) -> None:
+    sink = make_sink("contract_dup")
+    assert_in_batch_duplicate_key_keeps_last(sink, lambda: readback(dsn, "contract_dup"))
+
+
+def test_composite_merge_key_upsert(dsn: str) -> None:
+    sink = make_sink("contract_composite", merge_key=["a", "b"])
+    assert_composite_merge_key_upsert(sink, lambda: readback(dsn, "contract_composite"))
+
+
+def test_bad_password_is_fatal_not_retryable(pg_url: str, monkeypatch: pytest.MonkeyPatch) -> None:
+    """실행 중인 컨테이너의 host/port는 그대로 두고 비밀번호만 틀리게 만들면
+    psycopg.OperationalError의 sqlstate가 28P01(invalid_password)이어야 한다 —
+    설정 오류라 재시도해도 소용없으니 FatalError여야 한다 (RetryableError가
+    아니다) (M2-F FIX 3)."""
+    parsed = urllib.parse.urlsplit(pg_url)
+    bad_netloc = f"{parsed.username}:wrong-password@{parsed.hostname}:{parsed.port}"
+    bad_dsn = urllib.parse.urlunsplit(
+        (parsed.scheme, bad_netloc, parsed.path, parsed.query, parsed.fragment)
+    )
+    monkeypatch.setenv("PUGIO_TEST_PG_BADPW", bad_dsn)
+    spec = PostgresSinkSpec(
+        type="postgres", dsn_env="PUGIO_TEST_PG_BADPW", table="x", merge_key=["id"]
+    )
+    sink = PostgresSink(spec)
+    with pytest.raises(FatalError):
+        sink.write(make_unit("u"), pa.RecordBatch.from_pylist([{"id": 1}]))
+
+
+def test_naive_timestamp_is_fatal(dsn: str) -> None:
+    """tz 정보가 없는 timestamp 컬럼은 postgres에 꽂히는 순간 서버 세션 타임존
+    기준으로 암묵 해석되어 값이 조용히 shift될 수 있다 — 업스트림에서 UTC로
+    정규화하도록 강제하며 FatalError로 막는다 (M2-F FIX 6)."""
+    import datetime
+
+    sink = make_sink("contract_naive_ts")
+    batch = pa.RecordBatch.from_pylist(
+        [{"id": 1, "seen_at": datetime.datetime(2026, 1, 1)}],  # noqa: DTZ001 — naive가 테스트 대상
+        schema=pa.schema([("id", pa.int64()), ("seen_at", pa.timestamp("us"))]),
+    )
+    with pytest.raises(FatalError, match="naive timestamp"):
+        sink.write(make_unit("u"), batch)
 
 
 def test_missing_dsn_env_raises_fatal_error(monkeypatch: pytest.MonkeyPatch) -> None:

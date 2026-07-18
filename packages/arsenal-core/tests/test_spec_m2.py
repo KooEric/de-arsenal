@@ -9,8 +9,10 @@ from pydantic import TypeAdapter, ValidationError
 
 from arsenal_core.spec.models import (
     AuthSpec,
+    DuckDBSinkSpec,
     PaginationSpec,
     PipelineSpec,
+    PostgresSinkSpec,
     RateLimitSpec,
     SinkSpec,
     ValidateRule,
@@ -112,6 +114,15 @@ def test_pipeline_name_rejects_path_separators() -> None:
         raw["name"] = bad_name
         with pytest.raises(ValidationError):
             PipelineSpec.model_validate(raw)
+
+
+def test_sink_merge_key_must_be_non_empty() -> None:
+    """merge_key=[]는 DELETE(duckdb)/ON CONFLICT(postgres)의 매치 조건이 없어
+    전체 테이블을 지우거나 제약을 만들 수 없다 — 생성 시점에 차단한다 (M2-F FIX 4)."""
+    with pytest.raises(ValidationError, match="merge_key must have at least one column"):
+        DuckDBSinkSpec(type="duckdb", path="o.db", table="t", merge_key=[])
+    with pytest.raises(ValidationError, match="merge_key must have at least one column"):
+        PostgresSinkSpec(type="postgres", dsn_env="DSN", table="t", merge_key=[])
 
 
 def test_rate_limit_rps_must_be_positive() -> None:

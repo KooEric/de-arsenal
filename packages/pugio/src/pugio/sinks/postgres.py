@@ -7,10 +7,19 @@ merge_key가 충돌하면 나머지 컬럼을 EXCLUDED 값으로 덮어쓴다 �
 트랜잭션(con.transaction()) 안에서 스키마 보장 + upsert를 모두 수행한다.
 
 에러 분류 (arsenal_core.errors):
-  - DSN 환경변수 미설정, 지원하지 않는 Arrow 타입, SQL 프로그래밍 오류(psycopg.Error
-    일반) → FatalError. 설정/계약 문제라 재시도해도 소용없다.
-  - 연결 실패(psycopg.OperationalError) → RetryableError. 네트워크/일시 장애로
-    분류해 재시도 대상이 된다.
+  - DSN 환경변수 미설정, 지원하지 않는 Arrow 타입(naive timestamp 포함), SQL
+    프로그래밍 오류(psycopg.Error 일반) → FatalError. 설정/계약 문제라 재시도해도
+    소용없다.
+  - psycopg.OperationalError는 sqlstate로 다시 나눈다 (M2-F FIX 3): 인증 실패
+    (28xxx, 예 28P01 invalid_password)나 대상 db/schema 부재(3D000/3F000)는
+    설정 오류라 FatalError — 비밀번호가 틀렸는데 재시도해봐야 계속 틀린 채다.
+    그 외(연결 거부/타임아웃 등 sqlstate 없는 클라이언트 레벨 오류)는 네트워크/
+    일시 장애로 보고 RetryableError.
+    실측(psycopg 3.3.4): connect() 단계에서 나는 OperationalError는 PGresult가
+    아직 없어 e.sqlstate/e.diag.sqlstate가 항상 None이다 — 인증 실패든 연결
+    거부든 구조화된 코드가 없다. sqlstate가 있으면(=쿼리 실행 단계 오류) 그걸
+    최우선으로 쓰고, 없으면 libpq가 내려준 원문 FATAL 메시지("password
+    authentication failed", "database ... does not exist" 등)로 폴백 판별한다.
 
 식별자는 psycopg.sql.Identifier로 안전하게 구성한다(문자열 직접 보간 금지) —
 gladius.compile.ident.quote_ident와 동일한 목적이지만, pugio는 gladius에
@@ -27,6 +36,45 @@ from arsenal_core.errors import FatalError, RetryableError
 from arsenal_core.spec.models import PostgresSinkSpec
 from arsenal_core.state import UnitSpec
 
+_FATAL_OPERATIONAL_SQLSTATE_PREFIXES = ("28",)  # invalid_authorization_specification 계열
+_FATAL_OPERATIONAL_SQLSTATES = frozenset({"3D000", "3F000"})  # invalid catalog/schema name
+
+# connect() 단계 실패는 sqlstate가 없다(위 docstring 참조) — libpq가 내려준 원문
+# FATAL 메시지로 폴백 판별한다. 인증 실패/존재하지 않는 db·role은 설정 오류다.
+_FATAL_CONNECT_MESSAGE_MARKERS = (
+    "password authentication failed",
+    "no pg_hba.conf entry",
+)
+
+
+def _looks_like_fatal_connect_error(message: str) -> bool:
+    if any(marker in message for marker in _FATAL_CONNECT_MESSAGE_MARKERS):
+        return True
+    return "does not exist" in message and ('database "' in message or 'role "' in message)
+
+
+def _classify_operational_error(
+    e: psycopg.OperationalError,
+) -> type[FatalError] | type[RetryableError]:
+    """sqlstate(있으면)로, 없으면 원문 메시지로 영구(설정) 오류와 일시(네트워크)
+    오류를 나눈다 (M2-F FIX 3).
+
+    인증 실패(28xxx)나 대상 db/schema 부재(3D000/3F000)는 재시도해도 그대로
+    실패하는 설정 문제 — Fatal. 연결 거부/타임아웃처럼 서버에 닿기 전에 나는
+    클라이언트 레벨 오류는 sqlstate도 없고 폴백 마커에도 안 걸리니, 네트워크
+    일시 장애로 보고 Retryable로 남긴다.
+    """
+    sqlstate = getattr(e, "sqlstate", None)
+    if sqlstate is not None:
+        if sqlstate.startswith(_FATAL_OPERATIONAL_SQLSTATE_PREFIXES) or (
+            sqlstate in _FATAL_OPERATIONAL_SQLSTATES
+        ):
+            return FatalError
+        return RetryableError
+    if _looks_like_fatal_connect_error(str(e)):
+        return FatalError
+    return RetryableError
+
 
 def _pg_type(field: pa.Field) -> sql.SQL:
     """고정 화이트리스트만 반환한다 — sql.SQL은 LiteralString만 받는 안전 API라서,
@@ -41,6 +89,14 @@ def _pg_type(field: pa.Field) -> sql.SQL:
     if pa.types.is_boolean(t):
         return sql.SQL("boolean")
     if pa.types.is_timestamp(t):
+        # naive timestamp는 postgres에 꽂히는 순간 서버(세션) 타임존 기준으로 암묵
+        # 해석되어 값이 조용히 shift될 수 있다 (M2-F FIX 6) — 업스트림에서 UTC로
+        # 정규화하도록 강제한다.
+        if t.tz is None:
+            raise FatalError(
+                f"column {field.name!r}: naive timestamp not supported; "
+                "normalize to a timezone (UTC) upstream"
+            )
         return sql.SQL("timestamptz")
     raise FatalError(f"unsupported arrow type for postgres sink: column={field.name!r} type={t!r}")
 
@@ -58,14 +114,16 @@ class PostgresSink:
         try:
             con = psycopg.connect(dsn)
         except psycopg.OperationalError as e:
-            raise RetryableError(f"postgres connection failed for unit {unit.unit_id}: {e}") from e
+            error_cls = _classify_operational_error(e)
+            raise error_cls(f"postgres connection failed for unit {unit.unit_id}: {e}") from e
 
         try:
             with con.transaction():
                 self._ensure_table(con, batch.schema)
                 self._upsert(con, batch)
         except psycopg.OperationalError as e:
-            raise RetryableError(f"postgres write failed for unit {unit.unit_id}: {e}") from e
+            error_cls = _classify_operational_error(e)
+            raise error_cls(f"postgres write failed for unit {unit.unit_id}: {e}") from e
         except FatalError:
             raise
         except psycopg.Error as e:

@@ -17,6 +17,7 @@ from arsenal_core.spec.models import (
     PipelineSpec,
     PythonSourceSpec,
     RestSourceSpec,
+    SinkSpec,
     SplitSpec,
     ValidateRule,
     ValidateSpec,
@@ -383,6 +384,43 @@ def test_fetch_failure_propagates_and_marks_unit_failed(
         assert rec.status == "failed"
         assert rec.attempts == 1
         assert rec.last_error is not None and "boom" in rec.last_error
+    finally:
+        store.close()
+
+
+def test_sink_write_failure_marks_unit_failed(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """sink.write가 예외를 던지면 mark_failed로 기록되고 예외가 전파된다 (M2-F FIX 7,
+    이전까지 sink.write는 runner의 try/except로 감싸지지 않아 unit이 'running'에
+    영원히 갇혔다)."""
+    (tmp_path / "a.csv").write_text("id,v\n1,x\n")
+    spec = PipelineSpec(
+        name="sink-fail-t",
+        state_dir=tmp_path / ".arsenal",
+        source=FileSourceSpec(type="file", path=str(tmp_path / "*.csv")),
+        sink=ParquetSinkSpec(type="parquet", path=str(tmp_path / "out")),
+    )
+
+    class FailingSink:
+        def write(self, unit: UnitSpec, batch: object) -> None:
+            raise FatalError("sink boom")
+
+    def fake_build_sink(sink_spec: SinkSpec) -> FailingSink:
+        return FailingSink()
+
+    monkeypatch.setattr("pugio.runner.build_sink", fake_build_sink)
+
+    with pytest.raises(FatalError, match="sink boom"):
+        run_pipeline(spec)
+
+    assert spec.source.type == "file"
+    uid = UnitSpec.create(
+        pipeline=spec.name, source=spec.source.path, unit_key="a.csv", payload={}
+    ).unit_id
+    store = StateStore(spec.state_dir / f"{spec.name}.db")
+    try:
+        assert store.status(uid) == "failed"
     finally:
         store.close()
 
