@@ -60,6 +60,10 @@ def run_pipeline(
 ) -> RunReport:
     store = StateStore(spec.state_dir / f"{spec.name}.db")
     source = _build_source(spec)
+    # SinkSpec이 discriminated union이 되며 duckdb/postgres 멤버가 추가됐다 (M2-A).
+    # 구현체는 아직 parquet뿐 — M2-F가 build_sink 팩토리로 이 분기를 대체한다.
+    if spec.sink.type != "parquet":
+        raise FatalError(f"only parquet sink implemented (duckdb/postgres: M2-F): {spec.sink.type}")
     # spec.sink.path는 str(URI 스킴 보존용) — 로컬 파일시스템 싱크는 여기서 Path로 감싼다.
     sink = ParquetSink(Path(spec.sink.path))
     fetched = written = skipped = done_count = 0

@@ -13,7 +13,7 @@ auth, validate 블록 추가. P1 필드는 이름을 미리 예약해 하위 호
 from pathlib import Path
 from typing import Annotated, Any, Literal
 
-from pydantic import BaseModel, ConfigDict, Field, field_validator
+from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
 
 class _Frozen(BaseModel):
@@ -21,14 +21,36 @@ class _Frozen(BaseModel):
 
 
 class PaginationSpec(_Frozen):
-    mode: Literal["offset"]  # M2: "page", "cursor" 추가
+    mode: Literal["offset", "page", "cursor", "link"]
     param: str = "offset"
     size_param: str = "limit"
     size: int = 100
+    start_page: int = 1  # "page" 모드의 시작 페이지 번호
+    cursor_param: str | None = None  # "cursor" 모드: 커서를 실어 보낼 요청 파라미터명
+    cursor_path: str | None = None  # "cursor" 모드: 응답에서 다음 커서를 읽을 dot-path
+    record_path: str | None = None  # envelope 내 레코드 배열의 dot-path (None=응답 자체가 배열)
+
+    @model_validator(mode="after")
+    def _cursor_fields_required(self) -> "PaginationSpec":
+        if self.mode == "cursor" and not (self.cursor_param and self.cursor_path):
+            raise ValueError("cursor mode requires cursor_param and cursor_path")
+        return self
 
 
 class RateLimitSpec(_Frozen):
     rps: float  # M2: 토큰 버킷 + 429 적응 감속
+
+
+class AuthSpec(_Frozen):
+    """REST 소스 인증 (M2). static_token은 헤더에 그대로, oauth2는 client_credentials
+    흐름으로 토큰을 획득/갱신한다 (구현은 M2-D 이후, 여기는 모델만)."""
+
+    type: Literal["static_token", "oauth2_client_credentials"]
+    token_env: str | None = None
+    token_url: str | None = None
+    client_id_env: str | None = None
+    client_secret_env: str | None = None
+    expiry_buffer_s: int = 60
 
 
 class RestSourceSpec(_Frozen):
@@ -40,6 +62,7 @@ class RestSourceSpec(_Frozen):
     pagination: PaginationSpec
     rate_limit: RateLimitSpec | None = None
     encoding: str = "utf-8"  # M2: euc-kr 등 비UTF-8 처리
+    auth: AuthSpec | None = None
 
 
 class FileSourceSpec(_Frozen):
@@ -84,8 +107,8 @@ SourceSpec = Annotated[
 ]
 
 
-class SinkSpec(_Frozen):
-    type: Literal["parquet"]  # M2: "duckdb", "postgres" 추가 (temp→MERGE 멱등)
+class ParquetSinkSpec(_Frozen):
+    type: Literal["parquet"]
     # str로 보관 — Path로 파싱하면 "s3://bucket/x" 같은 URI 스킴이 "s3:/bucket/x"로
     # 정규화되어 훼손된다 (P1 httpfs/S3 싱크가 이 필드를 그대로 쓴다). sink/엔진이
     # 파일시스템 연산이 필요한 지점에서 Path(...)로 감싸 해석한다.
@@ -99,9 +122,48 @@ class SinkSpec(_Frozen):
         return v
 
 
+class DuckDBSinkSpec(_Frozen):
+    """DuckDB 파일 싱크 (M2) — temp 테이블 → MERGE로 멱등 upsert."""
+
+    type: Literal["duckdb"]
+    path: str
+    table: str
+    merge_key: list[str]
+
+
+class PostgresSinkSpec(_Frozen):
+    """Postgres 싱크 (M2) — merge_key 기준 upsert."""
+
+    type: Literal["postgres"]
+    dsn_env: str
+    table: str
+    merge_key: list[str]
+
+
+SinkSpec = Annotated[
+    ParquetSinkSpec | DuckDBSinkSpec | PostgresSinkSpec,
+    Field(discriminator="type"),
+]
+
+
+class ValidateRule(_Frozen):
+    field: str
+    not_null: bool = False
+    unique: bool = False
+    min: float | None = None
+    max: float | None = None
+
+
+class ValidateSpec(_Frozen):
+    rules: list[ValidateRule]
+    on_violation: Literal["block", "quarantine", "warn"] = "quarantine"
+
+
 class PipelineSpec(_Frozen):
+    model_config = ConfigDict(frozen=True, extra="forbid", populate_by_name=True)
+
     name: str
     state_dir: Path = Path(".arsenal")
     source: SourceSpec
     sink: SinkSpec
-    # M2 예약: validate (검증 게이트), auth
+    validation: ValidateSpec | None = Field(default=None, alias="validate")

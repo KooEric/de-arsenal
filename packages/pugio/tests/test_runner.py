@@ -12,10 +12,10 @@ from arsenal_core.spec.models import (
     DatabaseSourceSpec,
     FileSourceSpec,
     PaginationSpec,
+    ParquetSinkSpec,
     PipelineSpec,
     PythonSourceSpec,
     RestSourceSpec,
-    SinkSpec,
     SplitSpec,
 )
 from arsenal_core.state import StateStore, UnitSpec
@@ -31,7 +31,7 @@ def make_spec(tmp_path: Path) -> PipelineSpec:
             url="https://api.test/items",
             pagination=PaginationSpec(mode="offset", size=2),
         ),
-        sink=SinkSpec(type="parquet", path=str(tmp_path / "out")),
+        sink=ParquetSinkSpec(type="parquet", path=str(tmp_path / "out")),
     )
 
 
@@ -104,7 +104,7 @@ def test_run_pipeline_dispatches_file_source(tmp_path: Path) -> None:
         name="file-t",
         state_dir=tmp_path / ".arsenal",
         source=FileSourceSpec(type="file", path=str(tmp_path / "*.csv")),
-        sink=SinkSpec(type="parquet", path=str(tmp_path / "out")),
+        sink=ParquetSinkSpec(type="parquet", path=str(tmp_path / "out")),
     )
     report = run_pipeline(spec)
     assert report.fetched == 1
@@ -137,7 +137,7 @@ def test_run_pipeline_dispatches_database_source(
             table="orders",
             split=SplitSpec(key="id", chunk=10),
         ),
-        sink=SinkSpec(type="parquet", path=str(tmp_path / "out")),
+        sink=ParquetSinkSpec(type="parquet", path=str(tmp_path / "out")),
     )
     report = run_pipeline(spec)
     assert report.fetched == 1
@@ -182,7 +182,7 @@ def test_run_pipeline_dispatches_python_source(
         name="py-t",
         state_dir=tmp_path / ".arsenal",
         source=PythonSourceSpec(type="python", target="runner_test_source:RunnerTestSource"),
-        sink=SinkSpec(type="parquet", path=str(tmp_path / "out")),
+        sink=ParquetSinkSpec(type="parquet", path=str(tmp_path / "out")),
     )
     report = run_pipeline(spec)
     assert report.fetched == 1
@@ -247,7 +247,7 @@ def test_fetch_failure_propagates_and_marks_unit_failed(
         name="fail-t",
         state_dir=tmp_path / ".arsenal",
         source=PythonSourceSpec(type="python", target="failing_source:FailingSource"),
-        sink=SinkSpec(type="parquet", path=str(tmp_path / "out")),
+        sink=ParquetSinkSpec(type="parquet", path=str(tmp_path / "out")),
     )
 
     with pytest.raises(FatalError, match="boom"):
