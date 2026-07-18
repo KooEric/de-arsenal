@@ -1,0 +1,615 @@
+{
+  "$defs": {
+    "AuthSpec": {
+      "additionalProperties": false,
+      "description": "REST \uc18c\uc2a4 \uc778\uc99d (M2). static_token\uc740 \ud5e4\ub354\uc5d0 \uadf8\ub300\ub85c, oauth2\ub294 client_credentials\n\ud750\ub984\uc73c\ub85c \ud1a0\ud070\uc744 \ud68d\ub4dd/\uac31\uc2e0\ud55c\ub2e4 (\uad6c\ud604\uc740 M2-D \uc774\ud6c4, \uc5ec\uae30\ub294 \ubaa8\ub378\ub9cc).",
+      "properties": {
+        "type": {
+          "enum": [
+            "static_token",
+            "oauth2_client_credentials"
+          ],
+          "title": "Type",
+          "type": "string"
+        },
+        "token_env": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Token Env"
+        },
+        "token_url": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Token Url"
+        },
+        "client_id_env": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Client Id Env"
+        },
+        "client_secret_env": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Client Secret Env"
+        },
+        "expiry_buffer_s": {
+          "default": 60,
+          "title": "Expiry Buffer S",
+          "type": "integer"
+        }
+      },
+      "required": [
+        "type"
+      ],
+      "title": "AuthSpec",
+      "type": "object"
+    },
+    "DatabaseSourceSpec": {
+      "additionalProperties": false,
+      "description": "\uc6b4\uc601 DB \uc18c\uc2a4 (M2 Task 2.12 / M2-G).\n\ndialect=\"sqlite\"\ub294 Python \ud45c\uc900 sqlite3 \ub4dc\ub77c\uc774\ubc84. dialect=\"postgres\"/\"mysql\"\uc740\nDuckDB scanner(ATTACH, docs/09 \uc218 1)\ub85c \uad6c\ud604\ub41c\ub2e4.",
+      "properties": {
+        "type": {
+          "const": "database",
+          "title": "Type",
+          "type": "string"
+        },
+        "dialect": {
+          "enum": [
+            "postgres",
+            "mysql",
+            "sqlite"
+          ],
+          "title": "Dialect",
+          "type": "string"
+        },
+        "dsn_env": {
+          "title": "Dsn Env",
+          "type": "string"
+        },
+        "table": {
+          "title": "Table",
+          "type": "string"
+        },
+        "split": {
+          "$ref": "#/$defs/SplitSpec"
+        }
+      },
+      "required": [
+        "type",
+        "dialect",
+        "dsn_env",
+        "table",
+        "split"
+      ],
+      "title": "DatabaseSourceSpec",
+      "type": "object"
+    },
+    "DuckDBSinkSpec": {
+      "additionalProperties": false,
+      "description": "DuckDB \ud30c\uc77c \uc2f1\ud06c (M2) \u2014 temp \ud14c\uc774\ube14 \u2192 MERGE\ub85c \uba71\ub4f1 upsert.",
+      "properties": {
+        "type": {
+          "const": "duckdb",
+          "title": "Type",
+          "type": "string"
+        },
+        "path": {
+          "title": "Path",
+          "type": "string"
+        },
+        "table": {
+          "title": "Table",
+          "type": "string"
+        },
+        "merge_key": {
+          "items": {
+            "type": "string"
+          },
+          "title": "Merge Key",
+          "type": "array"
+        }
+      },
+      "required": [
+        "type",
+        "path",
+        "table",
+        "merge_key"
+      ],
+      "title": "DuckDBSinkSpec",
+      "type": "object"
+    },
+    "FileSourceSpec": {
+      "additionalProperties": false,
+      "description": "\ub85c\uceec \ud30c\uc77c \uc18c\uc2a4 (M2 Task 2.11) \u2014 csv/jsonl/excel to Arrow.",
+      "properties": {
+        "type": {
+          "const": "file",
+          "title": "Type",
+          "type": "string"
+        },
+        "path": {
+          "title": "Path",
+          "type": "string"
+        },
+        "format": {
+          "default": "auto",
+          "enum": [
+            "auto",
+            "csv",
+            "jsonl",
+            "excel"
+          ],
+          "title": "Format",
+          "type": "string"
+        },
+        "encoding": {
+          "default": "utf-8",
+          "title": "Encoding",
+          "type": "string"
+        }
+      },
+      "required": [
+        "type",
+        "path"
+      ],
+      "title": "FileSourceSpec",
+      "type": "object"
+    },
+    "PaginationSpec": {
+      "additionalProperties": false,
+      "properties": {
+        "mode": {
+          "enum": [
+            "offset",
+            "page",
+            "cursor",
+            "link"
+          ],
+          "title": "Mode",
+          "type": "string"
+        },
+        "param": {
+          "default": "offset",
+          "title": "Param",
+          "type": "string"
+        },
+        "size_param": {
+          "default": "limit",
+          "title": "Size Param",
+          "type": "string"
+        },
+        "size": {
+          "default": 100,
+          "title": "Size",
+          "type": "integer"
+        },
+        "start_page": {
+          "default": 1,
+          "title": "Start Page",
+          "type": "integer"
+        },
+        "cursor_param": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Cursor Param"
+        },
+        "cursor_path": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Cursor Path"
+        },
+        "record_path": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Record Path"
+        }
+      },
+      "required": [
+        "mode"
+      ],
+      "title": "PaginationSpec",
+      "type": "object"
+    },
+    "ParquetSinkSpec": {
+      "additionalProperties": false,
+      "properties": {
+        "type": {
+          "const": "parquet",
+          "title": "Type",
+          "type": "string"
+        },
+        "path": {
+          "title": "Path",
+          "type": "string"
+        }
+      },
+      "required": [
+        "type",
+        "path"
+      ],
+      "title": "ParquetSinkSpec",
+      "type": "object"
+    },
+    "PostgresSinkSpec": {
+      "additionalProperties": false,
+      "description": "Postgres \uc2f1\ud06c (M2) \u2014 merge_key \uae30\uc900 upsert.",
+      "properties": {
+        "type": {
+          "const": "postgres",
+          "title": "Type",
+          "type": "string"
+        },
+        "dsn_env": {
+          "title": "Dsn Env",
+          "type": "string"
+        },
+        "table": {
+          "title": "Table",
+          "type": "string"
+        },
+        "merge_key": {
+          "items": {
+            "type": "string"
+          },
+          "title": "Merge Key",
+          "type": "array"
+        }
+      },
+      "required": [
+        "type",
+        "dsn_env",
+        "table",
+        "merge_key"
+      ],
+      "title": "PostgresSinkSpec",
+      "type": "object"
+    },
+    "PythonSourceSpec": {
+      "additionalProperties": false,
+      "description": "\ucee4\uc2a4\ud140 Python \uc18c\uc2a4 \ud0c8\ucd9c\uad6c (M2 Task 2.13). P1 dlt \ub798\ud37c\uc758 \uae30\ubc18 \uba54\ucee4\ub2c8\uc998.",
+      "properties": {
+        "type": {
+          "const": "python",
+          "title": "Type",
+          "type": "string"
+        },
+        "target": {
+          "title": "Target",
+          "type": "string"
+        },
+        "options": {
+          "additionalProperties": true,
+          "default": {},
+          "title": "Options",
+          "type": "object"
+        }
+      },
+      "required": [
+        "type",
+        "target"
+      ],
+      "title": "PythonSourceSpec",
+      "type": "object"
+    },
+    "RateLimitSpec": {
+      "additionalProperties": false,
+      "properties": {
+        "rps": {
+          "exclusiveMinimum": 0,
+          "title": "Rps",
+          "type": "number"
+        }
+      },
+      "required": [
+        "rps"
+      ],
+      "title": "RateLimitSpec",
+      "type": "object"
+    },
+    "RestSourceSpec": {
+      "additionalProperties": false,
+      "description": "REST API \uc18c\uc2a4 \u2014 M1 SourceSpec\uc758 \ud544\ub4dc\ub97c \uadf8\ub300\ub85c \uc62e\uae34 \uac83 (\ud558\uc704 \ud638\ud658).",
+      "properties": {
+        "type": {
+          "const": "rest",
+          "title": "Type",
+          "type": "string"
+        },
+        "url": {
+          "title": "Url",
+          "type": "string"
+        },
+        "headers": {
+          "additionalProperties": {
+            "type": "string"
+          },
+          "default": {},
+          "title": "Headers",
+          "type": "object"
+        },
+        "pagination": {
+          "$ref": "#/$defs/PaginationSpec"
+        },
+        "rate_limit": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/RateLimitSpec"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        },
+        "encoding": {
+          "default": "utf-8",
+          "title": "Encoding",
+          "type": "string"
+        },
+        "auth": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/AuthSpec"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        },
+        "method": {
+          "default": "GET",
+          "enum": [
+            "GET",
+            "POST"
+          ],
+          "title": "Method",
+          "type": "string"
+        },
+        "body": {
+          "anyOf": [
+            {
+              "additionalProperties": true,
+              "type": "object"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Body"
+        }
+      },
+      "required": [
+        "type",
+        "url",
+        "pagination"
+      ],
+      "title": "RestSourceSpec",
+      "type": "object"
+    },
+    "SplitSpec": {
+      "additionalProperties": false,
+      "properties": {
+        "key": {
+          "title": "Key",
+          "type": "string"
+        },
+        "chunk": {
+          "default": 100000,
+          "exclusiveMinimum": 0,
+          "title": "Chunk",
+          "type": "integer"
+        }
+      },
+      "required": [
+        "key"
+      ],
+      "title": "SplitSpec",
+      "type": "object"
+    },
+    "ValidateRule": {
+      "additionalProperties": false,
+      "properties": {
+        "field": {
+          "title": "Field",
+          "type": "string"
+        },
+        "not_null": {
+          "default": false,
+          "title": "Not Null",
+          "type": "boolean"
+        },
+        "unique": {
+          "default": false,
+          "title": "Unique",
+          "type": "boolean"
+        },
+        "min": {
+          "anyOf": [
+            {
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Min"
+        },
+        "max": {
+          "anyOf": [
+            {
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Max"
+        }
+      },
+      "required": [
+        "field"
+      ],
+      "title": "ValidateRule",
+      "type": "object"
+    },
+    "ValidateSpec": {
+      "additionalProperties": false,
+      "properties": {
+        "rules": {
+          "items": {
+            "$ref": "#/$defs/ValidateRule"
+          },
+          "title": "Rules",
+          "type": "array"
+        },
+        "on_violation": {
+          "default": "quarantine",
+          "enum": [
+            "block",
+            "quarantine",
+            "warn"
+          ],
+          "title": "On Violation",
+          "type": "string"
+        }
+      },
+      "required": [
+        "rules"
+      ],
+      "title": "ValidateSpec",
+      "type": "object"
+    }
+  },
+  "additionalProperties": false,
+  "properties": {
+    "name": {
+      "title": "Name",
+      "type": "string"
+    },
+    "state_dir": {
+      "default": ".arsenal",
+      "format": "path",
+      "title": "State Dir",
+      "type": "string"
+    },
+    "source": {
+      "discriminator": {
+        "mapping": {
+          "database": "#/$defs/DatabaseSourceSpec",
+          "file": "#/$defs/FileSourceSpec",
+          "python": "#/$defs/PythonSourceSpec",
+          "rest": "#/$defs/RestSourceSpec"
+        },
+        "propertyName": "type"
+      },
+      "oneOf": [
+        {
+          "$ref": "#/$defs/RestSourceSpec"
+        },
+        {
+          "$ref": "#/$defs/FileSourceSpec"
+        },
+        {
+          "$ref": "#/$defs/DatabaseSourceSpec"
+        },
+        {
+          "$ref": "#/$defs/PythonSourceSpec"
+        }
+      ],
+      "title": "Source"
+    },
+    "sink": {
+      "discriminator": {
+        "mapping": {
+          "duckdb": "#/$defs/DuckDBSinkSpec",
+          "parquet": "#/$defs/ParquetSinkSpec",
+          "postgres": "#/$defs/PostgresSinkSpec"
+        },
+        "propertyName": "type"
+      },
+      "oneOf": [
+        {
+          "$ref": "#/$defs/ParquetSinkSpec"
+        },
+        {
+          "$ref": "#/$defs/DuckDBSinkSpec"
+        },
+        {
+          "$ref": "#/$defs/PostgresSinkSpec"
+        }
+      ],
+      "title": "Sink"
+    },
+    "validate": {
+      "anyOf": [
+        {
+          "$ref": "#/$defs/ValidateSpec"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null
+    }
+  },
+  "required": [
+    "name",
+    "source",
+    "sink"
+  ],
+  "title": "PipelineSpec",
+  "type": "object"
+}

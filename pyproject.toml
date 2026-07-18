@@ -36,7 +36,7 @@ select = ["E", "F", "I", "UP", "B", "SIM"]
 known-first-party = ["arsenal_core", "pugio", "gladius"]
 
 [tool.pyright]
-include = ["packages", "benchmarks"]
+include = ["packages", "benchmarks", "scripts"]
 typeCheckingMode = "strict"
 
 [tool.pytest.ini_options]
