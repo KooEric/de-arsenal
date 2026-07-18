@@ -17,6 +17,7 @@ from arsenal_core.errors import FatalError, classify_http_status
 from arsenal_core.ratelimit import Clock, TokenBucket
 from arsenal_core.spec.models import RestSourceSpec
 from arsenal_core.state import SOURCE_EXHAUSTED, UnitSpec
+from pugio.auth import AuthProvider
 from pugio.sources.base import FetchResult
 
 # GitHub 스타일 `<url>; rel="next"` 만 처리한다 (P0 스코프) — RFC 8288 전체 문법
@@ -52,6 +53,7 @@ class RestSource:
         client: httpx.Client,
         initial_cursor: str | None = None,
         clock: Clock | None = None,
+        auth: AuthProvider | None = None,
     ) -> None:
         self._spec = spec
         self._pipeline = pipeline
@@ -64,6 +66,15 @@ class RestSource:
         self._bucket = (
             TokenBucket(spec.rate_limit.rps, clock=clock) if spec.rate_limit is not None else None
         )
+        # M2-D: auth가 없으면 spec.headers만 사용 — 기존 호출부(auth 미지정)를 깨지 않는다.
+        self._auth = auth
+
+    def _request_headers(self) -> dict[str, str]:
+        """spec.headers + auth.headers() 병합. auth가 우선순위상 뒤에 와서 같은
+        키(예: Authorization)를 덮어쓸 수 있게 한다."""
+        if self._auth is None:
+            return self._spec.headers
+        return {**self._spec.headers, **self._auth.headers()}
 
     def units(self) -> Iterator[UnitSpec]:
         """모드별로 unit을 lazy하게 열거한다 (offset/page/cursor/link)."""
@@ -151,7 +162,7 @@ class RestSource:
         resp = self._client.get(
             self._spec.url,
             params=self._request_params(unit),
-            headers=self._spec.headers,
+            headers=self._request_headers(),
         )
         self._raise_for_status(resp)
         resp_json = self._parse_json(resp)
@@ -179,10 +190,10 @@ class RestSource:
             self._bucket.acquire()
         cur = unit.payload["cursor"]
         if cur is not None:
-            resp = self._client.get(cur, headers=self._spec.headers)
+            resp = self._client.get(cur, headers=self._request_headers())
         else:
             resp = self._client.get(
-                self._spec.url, params={p.size_param: p.size}, headers=self._spec.headers
+                self._spec.url, params={p.size_param: p.size}, headers=self._request_headers()
             )
         self._raise_for_status(resp)
         rows = self._extract_rows(self._parse_json(resp))

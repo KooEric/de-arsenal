@@ -16,12 +16,13 @@ from pathlib import Path
 
 import httpx
 
-from arsenal_core.errors import FatalError
+from arsenal_core.errors import AuthExpiredError, FatalError
 from arsenal_core.retry import DEFAULT_MAX_ATTEMPTS, with_retry
 from arsenal_core.spec.models import PipelineSpec
-from arsenal_core.state import SOURCE_EXHAUSTED, StateStore
+from arsenal_core.state import SOURCE_EXHAUSTED, StateStore, UnitSpec
+from pugio.auth import build_auth
 from pugio.sinks.parquet import ParquetSink
-from pugio.sources.base import Source
+from pugio.sources.base import FetchResult, Source
 from pugio.sources.database import DatabaseSource
 from pugio.sources.file import FileSource
 from pugio.sources.python_source import load_python_source
@@ -33,6 +34,12 @@ class RunReport:
     fetched: int
     written: int
     skipped: int  # done이라 건너뛴 unit 수 — 재개의 증거
+
+
+def _fetch_with_retry(source: Source, unit: UnitSpec, max_attempts: int) -> FetchResult:
+    """with_retry(source.fetch(unit)) 래퍼 — 루프 안 클로저(B023 loop-variable 함정)를
+    피하려고 top-level 함수로 뺐다."""
+    return with_retry(functools.partial(source.fetch, unit), max_attempts=max_attempts)
 
 
 def _build_source(spec: PipelineSpec, store: StateStore) -> Source:
@@ -51,8 +58,16 @@ def _build_source(spec: PipelineSpec, store: StateStore) -> Source:
         initial_cursor = None
         if src.pagination.mode in ("cursor", "link"):
             initial_cursor = store.get_cursor(spec.name, src.url)
+        client = httpx.Client()
+        # M2-D: auth가 None이면 build_auth도 None을 돌려준다 — RestSource는 그대로
+        # spec.headers만 사용해 기존 호출부(무인증 스펙)를 깨지 않는다.
+        auth = build_auth(src.auth, client)
         return RestSource(
-            src, pipeline=spec.name, client=httpx.Client(), initial_cursor=initial_cursor
+            src,
+            pipeline=spec.name,
+            client=client,
+            initial_cursor=initial_cursor,
+            auth=auth,
         )
     if src.type == "file":
         return FileSource(src, pipeline=spec.name)
@@ -71,6 +86,10 @@ def run_pipeline(
 ) -> RunReport:
     store = StateStore(spec.state_dir / f"{spec.name}.db")
     source = _build_source(spec, store)
+    # M2-D: RestSource는 self._auth에 AuthProvider를 들고 있다 (auth 미설정 스펙이면
+    # None) — file/database/python 소스엔 이 속성이 없으므로 getattr로 안전하게
+    # 읽는다 (close()와 동일한 duck-typing 패턴).
+    auth = getattr(source, "_auth", None)
     # SinkSpec이 discriminated union이 되며 duckdb/postgres 멤버가 추가됐다 (M2-A).
     # 구현체는 아직 parquet뿐 — M2-F가 build_sink 팩토리로 이 분기를 대체한다.
     if spec.sink.type != "parquet":
@@ -88,9 +107,17 @@ def run_pipeline(
             store.mark_running(unit.unit_id)
             started = time.monotonic()
             try:
-                result = with_retry(
-                    functools.partial(source.fetch, unit), max_attempts=max_attempts
-                )
+                try:
+                    result = _fetch_with_retry(source, unit, max_attempts)
+                except AuthExpiredError:
+                    # with_retry는 AuthExpiredError를 blind하게 재시도하지 않고 즉시
+                    # 전파한다 (retry.py M2-D) — 여기서 정확히 한 번 refresh() 후
+                    # 같은 unit을 한 번 더 시도한다. 그마저 401이면 AuthExpiredError가
+                    # 다시 escape해 바깥 except가 failed로 기록한다.
+                    if auth is None:
+                        raise
+                    auth.refresh()
+                    result = _fetch_with_retry(source, unit, max_attempts)
             except Exception as e:
                 store.mark_failed(unit.unit_id, str(e))
                 raise
