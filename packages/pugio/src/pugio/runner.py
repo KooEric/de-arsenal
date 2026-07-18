@@ -19,7 +19,7 @@ import httpx
 from arsenal_core.errors import FatalError
 from arsenal_core.retry import DEFAULT_MAX_ATTEMPTS, with_retry
 from arsenal_core.spec.models import PipelineSpec
-from arsenal_core.state import StateStore
+from arsenal_core.state import SOURCE_EXHAUSTED, StateStore
 from pugio.sinks.parquet import ParquetSink
 from pugio.sources.base import Source
 from pugio.sources.database import DatabaseSource
@@ -40,6 +40,11 @@ def _build_source(spec: PipelineSpec, store: StateStore) -> Source:
 
     discriminated union이라 spec.source.type이 좁혀지면 pyright도 필드를 좁혀 안다.
     rest cursor/link 모드는 StateStore에 영속된 커서로 재개한다 (M2-B).
+
+    커서가 SOURCE_EXHAUSTED 센티널이면 이 트래버설은 이미 완료된 것 — RestSource에
+    그대로 전달하면 _cursor_units()가 즉시 return해 unit을 하나도 내지 않는다.
+    (재실행이 clean no-op이 되는 지점. 처음부터 다시 긁으려면 사용자가 state를
+    지워야 한다 — DatabaseSource의 스냅샷 재개 시맨틱과 동일, P1 스코프 밖.)
     """
     src = spec.source
     if src.type == "rest":
@@ -101,8 +106,18 @@ def run_pipeline(
             )
             # 커서는 done 마킹 다음에 영속 — 쓰기→done→커서 순서로 불변식을 확장한다
             # (크래시가 done 마킹 전이면 커서도 안 넘어가 재개 시 같은 unit을 다시 받는다).
-            if spec.source.type == "rest" and result.next_cursor is not None:
-                store.set_cursor(spec.name, spec.source.url, result.next_cursor)
+            #
+            # M2-B: cursor/link 모드가 next_cursor=None(=트래버설 완료)에 도달했을 때
+            # 예전엔 아무 것도 안 썼다 — 커서가 마지막 실제 페이지 값에 멈춰 있으니,
+            # 재실행 시 이미 done인 그 unit을 다시 seed → is_done skip → continue를
+            # 무한 반복 (fetch()가 다시 호출돼야 _cursor_exhausted가 갱신되는데, skip
+            # 경로는 fetch()를 안 부른다). 완료를 SOURCE_EXHAUSTED 센티널로 명시적으로
+            # 영속해 재실행이 clean no-op이 되게 한다 (완전 재수집은 P1, state를 지우면 됨).
+            if spec.source.type == "rest" and spec.source.pagination.mode in ("cursor", "link"):
+                if result.exhausted:
+                    store.set_cursor(spec.name, spec.source.url, SOURCE_EXHAUSTED)
+                elif result.next_cursor is not None:
+                    store.set_cursor(spec.name, spec.source.url, result.next_cursor)
             done_count += 1
             if on_unit_complete is not None:
                 on_unit_complete(done_count)

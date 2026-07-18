@@ -1,3 +1,9 @@
-from arsenal_core.state.store import StateStore, UnitMetrics, UnitRecord, UnitSpec
+from arsenal_core.state.store import (
+    SOURCE_EXHAUSTED,
+    StateStore,
+    UnitMetrics,
+    UnitRecord,
+    UnitSpec,
+)
 
-__all__ = ["StateStore", "UnitMetrics", "UnitRecord", "UnitSpec"]
+__all__ = ["SOURCE_EXHAUSTED", "StateStore", "UnitMetrics", "UnitRecord", "UnitSpec"]

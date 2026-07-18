@@ -1,9 +1,12 @@
+from collections.abc import Iterator
+
 import httpx
 import pytest
 import respx
 
 from arsenal_core.errors import FatalError, RetryableError
 from arsenal_core.spec.models import PaginationSpec, RestSourceSpec
+from arsenal_core.state import SOURCE_EXHAUSTED, UnitSpec
 from pugio.sources.base import FetchResult
 from pugio.sources.rest import (
     RestSource,
@@ -267,6 +270,43 @@ def test_link_resume() -> None:
     result = src.fetch(unit)
     assert result.batch is not None and result.batch.to_pylist() == [{"id": 42}]
     assert result.exhausted is True
+
+
+def test_cursor_units_terminates_when_seeded_exhausted() -> None:
+    """M2-B: initial_cursor=SOURCE_EXHAUSTED로 seed되면(=이전 실행에서 완료된
+    트래버설) units()가 unit을 하나도 내지 않고 즉시 끝난다 — fetch()가 한 번도
+    안 불려도 제너레이터 스스로 멈추는 게 재실행 무한루프 수정의 핵심이다.
+    list()로 완전히 drain해도(=StopIteration까지) 끝난다는 걸 못박는다.
+    """
+    src = RestSource(
+        CURSOR_SPEC, pipeline="p", client=httpx.Client(), initial_cursor=SOURCE_EXHAUSTED
+    )
+    assert list(src.units()) == []
+
+
+@respx.mock
+def test_cursor_units_terminates_after_natural_exhaustion() -> None:
+    """cursor 체인을 실제로 끝까지 fetch하며 drain하면(마지막 next_cursor=None)
+    units() 제너레이터가 StopIteration으로 스스로 멈춘다 — 재개 없이도 종료가
+    보장됨을 러너와 무관하게 검증한다.
+    """
+    chain: dict[str | None, tuple[list[dict[str, int]], str | None]] = {
+        None: ([{"id": 1}], "c1"),
+        "c1": ([{"id": 2}], None),
+    }
+    spec = CURSOR_SPEC.model_copy(
+        update={"pagination": CURSOR_SPEC.pagination.model_copy(update={"record_path": "data"})}
+    )
+    respx.get("https://api.test/cursor-items").mock(side_effect=_cursor_responder(chain))
+    src = RestSource(spec, pipeline="p", client=httpx.Client())
+
+    def drive() -> Iterator[UnitSpec]:
+        for unit in src.units():
+            yield unit
+            src.fetch(unit)
+
+    units = list(drive())
+    assert len(units) == 2  # None, c1 두 유닛만 낸다 — c2는 없음 (제너레이터가 스스로 멈춤)
 
 
 def test_close_closes_underlying_httpx_client() -> None:

@@ -14,6 +14,11 @@ from typing import Any
 
 from arsenal_core.identity import unit_id as make_unit_id
 
+# cursor/link 트래버설이 next_cursor=None에 도달해 "완료"됐음을 나타내는 예약 센티널.
+# cursors 테이블(schema 불변)에 실제 커서/URL 값처럼 저장된다 — NUL 바이트 프리픽스라
+# 실제 커서 값이나 URL과 절대 충돌하지 않는다. M2-B: 재실행 무한루프 수정.
+SOURCE_EXHAUSTED = "\x00__ARSENAL_SOURCE_EXHAUSTED__"
+
 _SCHEMA = """
 CREATE TABLE IF NOT EXISTS units (
     unit_id    TEXT PRIMARY KEY,

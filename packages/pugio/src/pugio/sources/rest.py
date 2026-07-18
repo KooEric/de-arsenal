@@ -14,9 +14,11 @@ import pyarrow as pa
 
 from arsenal_core.errors import FatalError, classify_http_status
 from arsenal_core.spec.models import RestSourceSpec
-from arsenal_core.state import UnitSpec
+from arsenal_core.state import SOURCE_EXHAUSTED, UnitSpec
 from pugio.sources.base import FetchResult
 
+# GitHub 스타일 `<url>; rel="next"` 만 처리한다 (P0 스코프) — RFC 8288 전체 문법
+# (복수 rel, 확장 파라미터, 토큰 인용 규칙 등)은 다루지 않는다.
 _LINK_NEXT = re.compile(r'<([^>]+)>\s*;\s*rel="next"')
 
 
@@ -90,8 +92,16 @@ class RestSource:
         """cursor/link 공용: fetch()가 갱신한 _pending_cursor를 매번 다시 읽는다.
 
         unit_key = "cursor={cur}" — link 모드에서도 cur은 (URL 문자열이거나) None이다.
+
+        M2-B: _pending_cursor가 SOURCE_EXHAUSTED 센티널로 seed되면(=이전 실행에서
+        이 트래버설이 이미 끝까지 완주했다는 뜻) unit을 하나도 내지 않고 즉시 return한다.
+        이게 없으면: 마지막 실제 페이지의 커서가 store에 남아 있고, 재실행 시 그 unit은
+        이미 done이라 runner가 skip → continue하며 fetch()를 절대 안 부르고, fetch()만
+        _cursor_exhausted를 갱신하므로 같은 unit이 영원히 재생산된다 (무한루프).
         """
         while True:
+            if self._pending_cursor == SOURCE_EXHAUSTED:
+                return
             cur = self._pending_cursor
             yield UnitSpec.create(
                 pipeline=self._pipeline,
@@ -111,7 +121,10 @@ class RestSource:
             cur = unit.payload["cursor"]
             if cur is None:
                 return {p.size_param: p.size}
-            assert p.cursor_param is not None  # model_validator가 cursor 모드에서 보장
+            if p.cursor_param is None:
+                # model_validator가 cursor 모드에서 보장하지만, assert는 python -O로
+                # 스트립되고 bandit B101이 지적하므로 명시적으로 체크한다.
+                raise FatalError("cursor mode requires cursor_param")
             return {p.cursor_param: cur, p.size_param: p.size}
         return {p.param: unit.payload["offset"], p.size_param: p.size}
 
@@ -135,8 +148,14 @@ class RestSource:
         rows = self._extract_rows(resp_json)
         batch = pa.RecordBatch.from_pylist(rows) if rows else None
         if p.mode == "cursor":
-            assert p.cursor_path is not None  # model_validator가 cursor 모드에서 보장
-            next_cursor = _dig(resp_json, p.cursor_path)
+            if p.cursor_path is None:
+                # model_validator가 cursor 모드에서 보장하지만, assert는 python -O로
+                # 스트립되고 bandit B101이 지적하므로 명시적으로 체크한다.
+                raise FatalError("cursor mode requires cursor_path")
+            raw_cursor = _dig(resp_json, p.cursor_path)
+            # API가 숫자 커서를 줄 수도 있다 — next_cursor: str | None 계약을 런타임에도
+            # 지키도록 문자열로 강제 변환한다.
+            next_cursor = str(raw_cursor) if raw_cursor is not None else None
             self._pending_cursor = next_cursor
             self._cursor_exhausted = next_cursor is None
             return FetchResult(batch=batch, exhausted=next_cursor is None, next_cursor=next_cursor)

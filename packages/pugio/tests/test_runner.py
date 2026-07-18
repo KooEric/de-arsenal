@@ -156,6 +156,65 @@ def test_cursor_crash_resume(tmp_path: Path) -> None:
     assert all_ids == [1, 2, 3]  # 중복 0, 누락 0
 
 
+@respx.mock
+def test_cursor_rerun_after_completion_is_noop(tmp_path: Path) -> None:
+    """M2-B (CRITICAL): 커서 트래버설이 next_cursor=None까지 완주한 뒤 재실행하면,
+    이전엔 마지막 실제 커서가 store에 남아 있어 재실행 시 그 unit이 is_done으로
+    skip되면서 fetch()가 절대 안 불려 _cursor_exhausted도 안 갱신되고 같은 unit이
+    영원히 재생산되는 무한루프였다 (크래시가 마지막 mark_done 직후에 나도 동일).
+
+    수정 후: 완료 시 SOURCE_EXHAUSTED 센티널을 커서로 영속 → 재실행 시 RestSource가
+    그 센티널로 seed되고 _cursor_units()가 unit을 하나도 안 내 즉시 종료(clean no-op).
+    HTTP 요청도 전혀 추가되지 않는다.
+    """
+    chain: dict[str | None, tuple[list[dict[str, int]], str | None]] = {
+        None: ([{"id": 1}], "c1"),
+        "c1": ([{"id": 2}], "c2"),
+        "c2": ([{"id": 3}], None),
+    }
+    call_count = 0
+
+    def responder(request: httpx.Request) -> httpx.Response:
+        nonlocal call_count
+        call_count += 1
+        after = dict(request.url.params).get("after")
+        rows, next_cursor = chain[after]
+        return httpx.Response(200, json={"data": rows, "meta": {"next": next_cursor}})
+
+    respx.get("https://api.test/cursor-rerun-items").mock(side_effect=responder)
+
+    spec = PipelineSpec(
+        name="cursor-rerun-t",
+        state_dir=tmp_path / ".arsenal",
+        source=RestSourceSpec(
+            type="rest",
+            url="https://api.test/cursor-rerun-items",
+            pagination=PaginationSpec(
+                mode="cursor",
+                size_param="limit",
+                size=1,
+                cursor_param="after",
+                cursor_path="meta.next",
+                record_path="data",
+            ),
+        ),
+        sink=ParquetSinkSpec(type="parquet", path=str(tmp_path / "out")),
+    )
+
+    report1 = run_pipeline(spec)  # 첫 실행: 3페이지 다 수집, next_cursor=None으로 완주
+    assert report1.written == 3
+    calls_after_first_run = call_count
+
+    # 재실행 — 수정 전엔 여기서 무한루프. 반드시 즉시 반환해야 한다.
+    report2 = run_pipeline(spec)
+    assert report2.fetched == 0
+    assert report2.written == 0
+    assert call_count == calls_after_first_run  # 새 HTTP 요청 0건
+
+    files = sorted((tmp_path / "out").glob("*.parquet"))
+    assert len(files) == 3  # 재실행이 중복 파일을 만들지 않음
+
+
 def test_run_pipeline_dispatches_file_source(tmp_path: Path) -> None:
     """runner._build_source가 file 타입을 FileSource로 올바르게 배선하는지 종단 검증."""
     (tmp_path / "a.csv").write_text("id,v\n1,x\n2,y\n")
