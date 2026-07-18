@@ -161,6 +161,23 @@ class StateStore:
             raise KeyError(uid)
         return UnitMetrics(*row)
 
+    def get_cursor(self, pipeline: str, source: str) -> str | None:
+        """cursor/link 모드 재개용 — 없으면 None (첫 실행)."""
+        row = self._conn.execute(
+            "SELECT cursor FROM cursors WHERE pipeline=? AND source=?", (pipeline, source)
+        ).fetchone()
+        return row[0] if row else None
+
+    def set_cursor(self, pipeline: str, source: str, cursor: str) -> None:
+        """upsert — 같은 (pipeline, source)는 최신 커서로 덮어쓴다."""
+        self._conn.execute(
+            "INSERT INTO cursors (pipeline, source, cursor, updated_at) VALUES (?,?,?,?) "
+            "ON CONFLICT(pipeline, source) DO UPDATE SET cursor=excluded.cursor, "
+            "updated_at=excluded.updated_at",
+            (pipeline, source, cursor, _now()),
+        )
+        self._conn.commit()
+
     def counts(self, pipeline: str) -> dict[str, int]:
         """status → 개수. `pugio status`의 데이터."""
         rows = self._conn.execute(

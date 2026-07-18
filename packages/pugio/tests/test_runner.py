@@ -97,6 +97,65 @@ def test_crash_and_resume_no_dup_no_loss(tmp_path: Path) -> None:
     assert all_ids == [1, 2, 3, 4, 5]  # 중복 0, 누락 0
 
 
+@respx.mock
+def test_cursor_crash_resume(tmp_path: Path) -> None:
+    """B6: 크래시 후 재실행 시 첫 요청이 영속된 커서를 실어 보낸다 — 처음부터 재시작하지
+    않는다. 두 실행에 걸쳐 중복 행도 없다.
+    """
+    chain: dict[str | None, tuple[list[dict[str, int]], str | None]] = {
+        None: ([{"id": 1}], "c1"),
+        "c1": ([{"id": 2}], "c2"),
+        "c2": ([{"id": 3}], None),
+    }
+    seen_afters: list[str | None] = []
+
+    def responder(request: httpx.Request) -> httpx.Response:
+        after = dict(request.url.params).get("after")
+        seen_afters.append(after)
+        rows, next_cursor = chain[after]
+        return httpx.Response(200, json={"data": rows, "meta": {"next": next_cursor}})
+
+    respx.get("https://api.test/cursor-items").mock(side_effect=responder)
+
+    spec = PipelineSpec(
+        name="cursor-t",
+        state_dir=tmp_path / ".arsenal",
+        source=RestSourceSpec(
+            type="rest",
+            url="https://api.test/cursor-items",
+            pagination=PaginationSpec(
+                mode="cursor",
+                size_param="limit",
+                size=1,
+                cursor_param="after",
+                cursor_path="meta.next",
+                record_path="data",
+            ),
+        ),
+        sink=ParquetSinkSpec(type="parquet", path=str(tmp_path / "out")),
+    )
+
+    def crash_after_first(done_count: int) -> None:
+        if done_count >= 1:
+            raise SimulatedCrash
+
+    with pytest.raises(SimulatedCrash):
+        run_pipeline(spec, on_unit_complete=crash_after_first)
+    assert seen_afters == [None]  # 크래시 전 딱 한 번만 요청됨
+
+    seen_afters.clear()
+    run_pipeline(spec)  # 같은 명령 그대로 재실행 (처음부터가 아니라 커서에서 재개)
+    assert seen_afters[0] == "c1"  # 재개 시 첫 요청이 영속된 커서를 실어 보낸다
+
+    files = sorted((tmp_path / "out").glob("*.parquet"))
+    rows: list[dict[str, int]] = []
+    for f in files:
+        table = pq.read_table(f)  # pyright: ignore[reportUnknownMemberType, reportUnknownVariableType]
+        rows.extend(table.to_pylist())  # pyright: ignore[reportUnknownMemberType, reportUnknownArgumentType]
+    all_ids = sorted(row["id"] for row in rows)
+    assert all_ids == [1, 2, 3]  # 중복 0, 누락 0
+
+
 def test_run_pipeline_dispatches_file_source(tmp_path: Path) -> None:
     """runner._build_source가 file 타입을 FileSource로 올바르게 배선하는지 종단 검증."""
     (tmp_path / "a.csv").write_text("id,v\n1,x\n2,y\n")

@@ -35,14 +35,20 @@ class RunReport:
     skipped: int  # done이라 건너뛴 unit 수 — 재개의 증거
 
 
-def _build_source(spec: PipelineSpec) -> Source:
+def _build_source(spec: PipelineSpec, store: StateStore) -> Source:
     """spec.source.type으로 분기해 알맞은 Source 구현체를 만든다.
 
     discriminated union이라 spec.source.type이 좁혀지면 pyright도 필드를 좁혀 안다.
+    rest cursor/link 모드는 StateStore에 영속된 커서로 재개한다 (M2-B).
     """
     src = spec.source
     if src.type == "rest":
-        return RestSource(src, pipeline=spec.name, client=httpx.Client())
+        initial_cursor = None
+        if src.pagination.mode in ("cursor", "link"):
+            initial_cursor = store.get_cursor(spec.name, src.url)
+        return RestSource(
+            src, pipeline=spec.name, client=httpx.Client(), initial_cursor=initial_cursor
+        )
     if src.type == "file":
         return FileSource(src, pipeline=spec.name)
     if src.type == "database":
@@ -59,7 +65,7 @@ def run_pipeline(
     max_attempts: int = DEFAULT_MAX_ATTEMPTS,
 ) -> RunReport:
     store = StateStore(spec.state_dir / f"{spec.name}.db")
-    source = _build_source(spec)
+    source = _build_source(spec, store)
     # SinkSpec이 discriminated union이 되며 duckdb/postgres 멤버가 추가됐다 (M2-A).
     # 구현체는 아직 parquet뿐 — M2-F가 build_sink 팩토리로 이 분기를 대체한다.
     if spec.sink.type != "parquet":
@@ -93,6 +99,10 @@ def run_pipeline(
                 byte_count=result.batch.nbytes if result.batch is not None else 0,
                 duration_ms=int((time.monotonic() - started) * 1000),
             )
+            # 커서는 done 마킹 다음에 영속 — 쓰기→done→커서 순서로 불변식을 확장한다
+            # (크래시가 done 마킹 전이면 커서도 안 넘어가 재개 시 같은 unit을 다시 받는다).
+            if spec.source.type == "rest" and result.next_cursor is not None:
+                store.set_cursor(spec.name, spec.source.url, result.next_cursor)
             done_count += 1
             if on_unit_complete is not None:
                 on_unit_complete(done_count)
