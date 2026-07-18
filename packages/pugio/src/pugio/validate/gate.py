@@ -46,13 +46,26 @@ def check(batch: pa.RecordBatch, rules: list[ValidateRule]) -> GateReport:
             dupes = len(col) - int(distinct_count)  # pyright: ignore[reportUnknownArgumentType]
             if dupes:
                 out.append(Violation("unique", r.field, dupes))
+        # min/max는 null을 무시한다: pc.less/pc.greater는 null 입력에 null을 내고,
+        # pc.sum은 null을 건너뛰므로 null 값은 위반으로도 통과로도 세지 않는다
+        # (M2-E FIX 7). null을 거부하려면 별도로 not_null 규칙을 추가해야 한다.
         if r.min is not None:
-            below_min = pc.sum(pc.less(col, r.min)).as_py()  # pyright: ignore[reportUnknownMemberType, reportAttributeAccessIssue, reportUnknownVariableType]
+            try:
+                below_min = pc.sum(pc.less(col, r.min)).as_py()  # pyright: ignore[reportUnknownMemberType, reportAttributeAccessIssue, reportUnknownVariableType]
+            except (pa.lib.ArrowNotImplementedError, pa.lib.ArrowInvalid) as e:
+                raise FatalError(
+                    f"validate: min/max requires a numeric field, got {r.field!r}: {e}"
+                ) from e
             n = int(below_min or 0)  # pyright: ignore[reportUnknownArgumentType]
             if n:
                 out.append(Violation("min", r.field, n))
         if r.max is not None:
-            above_max = pc.sum(pc.greater(col, r.max)).as_py()  # pyright: ignore[reportUnknownMemberType, reportAttributeAccessIssue, reportUnknownVariableType]
+            try:
+                above_max = pc.sum(pc.greater(col, r.max)).as_py()  # pyright: ignore[reportUnknownMemberType, reportAttributeAccessIssue, reportUnknownVariableType]
+            except (pa.lib.ArrowNotImplementedError, pa.lib.ArrowInvalid) as e:
+                raise FatalError(
+                    f"validate: min/max requires a numeric field, got {r.field!r}: {e}"
+                ) from e
             n = int(above_max or 0)  # pyright: ignore[reportUnknownArgumentType]
             if n:
                 out.append(Violation("max", r.field, n))

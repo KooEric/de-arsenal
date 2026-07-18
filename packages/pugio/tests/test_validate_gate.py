@@ -32,3 +32,17 @@ def test_missing_field_is_fatal() -> None:
     batch = pa.RecordBatch.from_pylist([{"v": 1}])
     with pytest.raises(FatalError, match="not in batch schema"):
         check(batch, [ValidateRule(field="nope", not_null=True)])
+
+
+def test_min_on_non_numeric_field_is_fatal() -> None:
+    """min/max on a string column raises a raw pyarrow ArrowNotImplementedError —
+    gate.check() must translate it into a FatalError with a clear message (M2-E FIX 4)."""
+    batch = pa.RecordBatch.from_pylist([{"v": "a"}, {"v": "b"}])
+    with pytest.raises(FatalError, match="min/max requires a numeric field"):
+        check(batch, [ValidateRule(field="v", min=0)])
+
+
+def test_max_on_non_numeric_field_is_fatal() -> None:
+    batch = pa.RecordBatch.from_pylist([{"v": "a"}, {"v": "b"}])
+    with pytest.raises(FatalError, match="min/max requires a numeric field"):
+        check(batch, [ValidateRule(field="v", max=10)])

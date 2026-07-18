@@ -426,14 +426,28 @@ def test_quarantine_isolates_unit_and_run_continues(tmp_path: Path) -> None:
 
 
 def test_block_policy_raises_fatal(tmp_path: Path) -> None:
+    """block 정책의 FatalError는 _fetch_with_auth_refresh를 감싼 except 바깥에서
+    던져지므로, 명시적으로 mark_failed하지 않으면 unit이 영원히 'running'에 갇힌다
+    (M2-E FIX 3). raise 이후 status가 'failed'여야 한다 — 'running'이면 회귀."""
     spec = _make_validate_file_spec(tmp_path, on_violation="block")
     with pytest.raises(FatalError):
         run_pipeline(spec)
 
+    assert spec.source.type == "file"
+    uid = UnitSpec.create(
+        pipeline=spec.name, source=spec.source.path, unit_key="b.csv", payload={}
+    ).unit_id
+    store = StateStore(spec.state_dir / f"{spec.name}.db")
+    try:
+        assert store.status(uid) == "failed"
+    finally:
+        store.close()
 
-def test_warn_policy_writes_anyway(tmp_path: Path) -> None:
+
+def test_warn_policy_writes_anyway(tmp_path: Path, caplog: pytest.LogCaptureFixture) -> None:
     spec = _make_validate_file_spec(tmp_path, on_violation="warn")
-    report = run_pipeline(spec)
+    with caplog.at_level("WARNING", logger="pugio.runner"):
+        report = run_pipeline(spec)
 
     assert report.fetched == 3
     assert report.written == 3
@@ -445,3 +459,6 @@ def test_warn_policy_writes_anyway(tmp_path: Path) -> None:
     finally:
         store.close()
     assert counts.get("done") == 3
+
+    # M2-E FIX 6: warn 정책은 print(stderr) 대신 logging을 쓴다.
+    assert any("validation violations" in rec.message for rec in caplog.records)

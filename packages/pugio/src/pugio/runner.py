@@ -9,7 +9,7 @@ at-least-once 실행 + 멱등 쓰기 = exactly-once 결과.
 """
 
 import functools
-import sys
+import logging
 import time
 from collections.abc import Callable
 from dataclasses import dataclass
@@ -30,6 +30,8 @@ from pugio.sources.file import FileSource
 from pugio.sources.python_source import load_python_source
 from pugio.sources.rest import RestSource
 from pugio.validate.gate import check
+
+logger = logging.getLogger("pugio.runner")
 
 
 @dataclass(frozen=True)
@@ -142,14 +144,19 @@ def run_pipeline(
                 if not report.ok:
                     policy = spec.validation.on_violation
                     if policy == "block":
-                        raise FatalError(
-                            f"validation failed for unit {unit.unit_key}: {report.violations}"
-                        )
+                        # M2-E FIX 3: 이 FatalError는 _fetch_with_auth_refresh를 감싼
+                        # try/except(Exception → mark_failed → raise) 바깥에서 던져지므로,
+                        # 명시적으로 failed를 기록하지 않으면 unit이 영원히 'running'에
+                        # 갇힌다 (mark_running은 위에서 이미 호출됨). quarantine/warn은
+                        # 그대로 done/quarantined로 전이하므로 영향 없다.
+                        msg = f"validation failed for unit {unit.unit_key}: {report.violations}"
+                        store.mark_failed(unit.unit_id, msg)
+                        raise FatalError(msg)
                     if policy == "warn":
-                        print(
-                            f"warning: validation violations in {unit.unit_key}: "
-                            f"{report.violations}",
-                            file=sys.stderr,
+                        logger.warning(
+                            "validation violations in unit %s: %s",
+                            unit.unit_key,
+                            report.violations,
                         )
                     if policy == "quarantine":
                         write_dlq(spec.state_dir, spec.name, unit, result.batch, report.violations)

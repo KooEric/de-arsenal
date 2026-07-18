@@ -104,6 +104,16 @@ def test_auth_spec_oauth2_requires_endpoints() -> None:
         AuthSpec(type="oauth2_client_credentials")
 
 
+def test_pipeline_name_rejects_path_separators() -> None:
+    """name flows into state_dir/{name}.db and dlq/{name}/ — path separators or
+    '..' could escape those directories (M2-E FIX 8)."""
+    for bad_name in ("a/b", "a\\b", ".."):
+        raw = _minimal_pipeline_dict()
+        raw["name"] = bad_name
+        with pytest.raises(ValidationError):
+            PipelineSpec.model_validate(raw)
+
+
 def test_rate_limit_rps_must_be_positive() -> None:
     # rps=0은 TokenBucket의 1.0/rps에서 ZeroDivisionError, 음수는 역방향 스로틀로
     # 이어진다 — SplitSpec.chunk와 동일하게 생성 시점에 gt=0으로 차단한다.

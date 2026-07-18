@@ -186,3 +186,15 @@ class PipelineSpec(_Frozen):
     source: SourceSpec
     sink: SinkSpec
     validation: ValidateSpec | None = Field(default=None, alias="validate")
+
+    @field_validator("name")
+    @classmethod
+    def _name_is_path_safe(cls, v: str) -> str:
+        """name은 `state_dir/{name}.db`와 `dlq/{name}/`에 그대로 꽂힌다 (M2-E FIX 8) —
+        경로 구분자나 `..`가 섞이면 상태 DB/DLQ 경로를 다른 디렉터리로 탈출시킬 수
+        있어 여기서 차단한다."""
+        if "/" in v or "\\" in v or ".." in v:
+            raise ValueError(
+                f"pipeline name must not contain '/', '\\\\', or '..' (path-safety): {v!r}"
+            )
+        return v

@@ -161,13 +161,19 @@ class StateStore:
         ).fetchall()
         return [UnitRecord(*r) for r in rows]
 
-    def requeue(self, uid: str) -> None:
-        """`pugio dlq retry` — 격리를 풀고 pending으로 되돌려 다음 run이 재수집하게 한다."""
-        self._conn.execute(
+    def requeue(self, uid: str) -> int:
+        """`pugio dlq retry` — 격리를 풀고 pending으로 되돌려 다음 run이 재수집하게 한다.
+
+        반환값은 실제로 갱신된 행 수 (0 또는 1) — 존재하지 않는 unit_id를 넘기면
+        조용히 0건 갱신되고도 성공한 것처럼 보이는 걸 막으려고 CLI가 이 값을 확인한다
+        (M2-E FIX 1: unit_key/unit_id 혼동으로 인한 silent no-op false success).
+        """
+        cur = self._conn.execute(
             "UPDATE units SET status='pending', last_error=NULL, updated_at=? WHERE unit_id=?",
             (_now(), uid),
         )
         self._conn.commit()
+        return cur.rowcount
 
     def status(self, uid: str) -> str | None:
         row = self._conn.execute("SELECT status FROM units WHERE unit_id=?", (uid,)).fetchone()
