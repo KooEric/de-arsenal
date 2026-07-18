@@ -15,6 +15,9 @@ classifiers = [
     "Topic :: Software Development :: Libraries :: Python Modules",
 ]
 
+[project.optional-dependencies]
+postgres = ["pugio[postgres]"]
+
 [project.urls]
 Homepage = "https://github.com/KooEric/de-arsenal"
 Repository = "https://github.com/KooEric/de-arsenal"

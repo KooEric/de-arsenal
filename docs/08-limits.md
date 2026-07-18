@@ -62,6 +62,15 @@ Scutum 설계 원칙("끝점 능력별 멱등 전략을 명시", [roadmap.md](ro
 
 ### 알려진 한계 (Known Limitations)
 
+- **postgres sink는 optional extra(`psycopg`)가 필요하다.** `de-arsenal`/`pugio`
+  기본 설치(`uv tool install de-arsenal` / `pip install pugio`)에는 psycopg가
+  포함되지 않는다 — `postgres` extra를 명시적으로 설치해야 한다
+  (`uv tool install "de-arsenal[postgres]"` 또는 `pip install "pugio[postgres]"`).
+  extra 없이 `build_sink`에 `sink: postgres` spec을 넘기면 `pugio.sinks`가
+  `ModuleNotFoundError`를 잡아 `FatalError`("postgres sink requires the
+  'postgres' extra: pip install pugio[postgres]")로 번역한다 — `api-to-postgres`
+  레시피를 extra 없이 그대로 `arsenal run`하면 원문 traceback이 아니라 이 명확한
+  에러 메시지로 즉시 중단된다.
 - **`pugio dlq retry`는 REST `cursor`/`link` 페이지네이션을 지원하지 않는다
   (P0 스코프 락).** 프론티어 커서는 앞으로만 전진하므로, 격리된 과거 페이지의
   `unit_key`(`cursor=<val>`)는 재실행이 다시 생성할 수 없다 — requeue해도

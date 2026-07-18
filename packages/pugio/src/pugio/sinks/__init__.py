@@ -33,7 +33,12 @@ def build_sink(spec: SinkSpec) -> Sink:
     if spec.type == "duckdb":
         return DuckDBSink(spec)
     if spec.type == "postgres":
-        from pugio.sinks.postgres import PostgresSink as _PostgresSink
+        try:
+            from pugio.sinks.postgres import PostgresSink as _PostgresSink
+        except ImportError as e:
+            raise FatalError(
+                "postgres sink requires the 'postgres' extra: pip install pugio[postgres]"
+            ) from e
 
         return _PostgresSink(spec)
     raise FatalError(f"unknown sink type: {spec.type}")  # pragma: no cover
@@ -42,7 +47,12 @@ def build_sink(spec: SinkSpec) -> Sink:
 def __getattr__(name: str) -> Any:  # noqa: ANN401 - PEP 562 lazy re-export
     """`from pugio.sinks import PostgresSink`를 psycopg 설치 시에만 지연 해결한다."""
     if name == "PostgresSink":
-        from pugio.sinks.postgres import PostgresSink
+        try:
+            from pugio.sinks.postgres import PostgresSink
+        except ImportError as e:
+            raise FatalError(
+                "postgres sink requires the 'postgres' extra: pip install pugio[postgres]"
+            ) from e
 
         return PostgresSink
     raise AttributeError(f"module {__name__!r} has no attribute {name!r}")

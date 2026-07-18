@@ -139,6 +139,13 @@ Compact summary of the source/sink/auth building blocks:
 
 Full detail: [docs/08-limits.md](docs/08-limits.md).
 
+- **Postgres sink requires the optional `postgres` extra (`psycopg`).**
+  Neither `de-arsenal` nor `pugio`'s base install pulls in `psycopg` —
+  install with `uv tool install "de-arsenal[postgres]"` (or
+  `pip install "pugio[postgres]"`) before running the `api-to-postgres`
+  recipe. Without the extra, `build_sink` on a `sink: postgres` spec raises a
+  clean `FatalError` ("postgres sink requires the 'postgres' extra: pip
+  install pugio[postgres]") instead of a raw `ModuleNotFoundError`.
 - **P0 scope boundary (by design, not a bug)**: no real-time streaming, no
   distributed execution, no schema-drift detection/policy (snapshot is
   recorded, comparison/alerting is not), no incremental transform

@@ -251,13 +251,20 @@ dependencies = [
     { name = "typer" },
 ]
 
+[package.optional-dependencies]
+postgres = [
+    { name = "pugio", extra = ["postgres"] },
+]
+
 [package.metadata]
 requires-dist = [
     { name = "arsenal-core", editable = "packages/arsenal-core" },
     { name = "gladius", editable = "packages/gladius" },
     { name = "pugio", editable = "packages/pugio" },
+    { name = "pugio", extras = ["postgres"], marker = "extra == 'postgres'", editable = "packages/pugio" },
     { name = "typer", specifier = ">=0.12" },
 ]
+provides-extras = ["postgres"]
 
 [[package]]
 name = "de-arsenal-workspace"
