@@ -102,11 +102,12 @@ def test_csv_cleanup_recipe_runs_end_to_end(tmp_path: Path) -> None:
 
 
 @pytest.fixture(scope="module")
-def api_to_postgres_pg_url() -> Iterator[str]:
+def api_to_postgres_pg_url(require_docker: None) -> Iterator[str]:
     """api-to-postgres 레시피 E2E 전용 Postgres 컨테이너.
 
-    testcontainers가 없는 환경(Docker 미가용)에서는 이 fixture를 쓰는 테스트만
-    스킵된다 — 나머지 레시피 E2E(github-issues/csv-cleanup)는 영향받지 않는다.
+    testcontainers 모듈이 없거나(미설치) Docker 데몬이 미가용인 환경에서는
+    이 fixture를 쓰는 테스트만 스킵된다 — 나머지 레시피 E2E(github-issues/
+    csv-cleanup)는 영향받지 않는다.
     """
     pgtc = pytest.importorskip("testcontainers.postgres")
     with pgtc.PostgresContainer("postgres:16-alpine") as container:
