@@ -5,11 +5,13 @@
 데이터 엔지니어와 분석가가 매일 부딪히는 문제들 — 새벽에 끊긴 수집, 만료된 토큰, 쿼리도 못 하는 CSV 뭉치 — 에 대한 **원클릭 솔루션**. 서버도, 클러스터도, DAG 코드도 없다.
 
 ```bash
-uv tool install de-arsenal        # 설치 한 번 (v0.1 예정)
-arsenal init csv-cleanup           # 레시피로 시작
+uv tool install de-arsenal        # (PyPI 배포 예정 — 현재는 소스 설치, 아래 "시작하기" 참고)
+arsenal init csv-cleanup           # 레시피로 시작 (github-issues · csv-cleanup · api-to-postgres)
 arsenal run                        # 수집→검증→변환. 끊겨도 재실행하면 이어서
 arsenal query "SELECT * FROM './data/clean/*.parquet' LIMIT 10"
 ```
+
+> **상태: v0.1.0 (P0) 코드 완성 · 태그 완료.** 수집(pugio)·변환(gladius)·우산 CLI(arsenal)가 모두 동작한다. PyPI 배포만 보류 중(`gladius` 이름 선점 해결 후) — 현재는 소스에서 바로 실행 가능하다.
 
 Databricks·Snowflake 수준의 **완성도**를, 그들과 정반대의 **형태**로. 거대 플랫폼이 백 가지를 80점으로 하는 동안, 우리는 한 가지를 100점으로. 신뢰성(멱등·재개·검증)이 기본값이고, 마진 없는 비용 구조([docs/07](docs/07-cost-efficiency.md))가 아키텍처에서 나온다.
 
@@ -19,12 +21,12 @@ Databricks·Snowflake 수준의 **완성도**를, 그들과 정반대의 **형�
 
 | 무기 | 담당 영역 | 우선순위 | 상태 |
 |---|---|---|---|
-| **Arsenal** (우산 CLI) | 단일 진입점 — init/run/query, 원클릭 레시피 | P0 (M4) | 🚧 뼈대 |
-| **Pugio** | 수집·전송 (ETL 엔진) | P0 | 🚧 개발 중 |
-| **Gladius** | 변환·쿼리 (핵심 처리) | P0 | 🚧 개발 중 |
-| **Spatha** | 오케스트레이션 (의존성·스케줄링) | P0(멱등 코어)/P1 | 📋 계획 |
-| **Scutum** | 데이터 품질·검증·보호 | P0(멱등 가드)/P1 | 🚧 코어 내장 |
-| **Scorpio** | 관측성 (모니터링·lineage) | P1 | 📋 계획 |
+| **Arsenal** (우산 CLI) | 단일 진입점 — init/run/query, 원클릭 레시피 3종 | P0 (M4) | ✅ v0.1.0 |
+| **Pugio** | 수집·전송 (ETL 엔진) | P0 | ✅ v0.1.0 |
+| **Gladius** | 변환·쿼리 (핵심 처리) | P0 | ✅ v0.1.0 |
+| **Spatha** | 오케스트레이션 (의존성·스케줄링) | P0(멱등 코어)/P1 | ✅ 멱등 재실행(코어) · 📋 DAG P1 |
+| **Scutum** | 데이터 품질·검증·보호 | P0(멱등 가드)/P1 | ✅ 코어 내장 (검증 게이트·DLQ·멱등) |
+| **Scorpio** | 관측성 (모니터링·lineage) | P1 | 📋 계획 (스키마 스냅샷 기록은 코어에) |
 | **Onager** | 백필·대규모 재처리 | P1 | 📋 계획 |
 | **Hasta** | 스트리밍·CDC | P2 | 📋 계획 |
 | **Pilum** | 디스패치·reverse ETL | P2 | 📋 계획 |
@@ -59,20 +61,34 @@ Databricks·Snowflake 수준의 **완성도**를, 그들과 정반대의 **형�
 | [docs/plans/](docs/plans/) | 마일스톤별 상세 TDD 구현 계획 |
 | [docs/roadmap.md](docs/roadmap.md) | 원본 로드맵 (문제 정의 전체) |
 
-## 개발 상태에서 시작하기
+## 시작하기 (소스에서)
 
-M1 완료 — REST→Parquet 수집이 재개·멱등 보장과 함께 동작한다 (uv tool 배포는 M4).
+v0.1.0 (P0) 완성 — 수집·변환·쿼리·우산 CLI가 모두 동작한다. PyPI 배포 전까지는 소스에서 실행한다.
 
 ```bash
 uv sync
 
-export GITHUB_TOKEN=ghp_...                     # examples/github-issues.yaml이 참조하는 시크릿
-uv run pugio run examples/github-issues.yaml    # 수집 — 중간에 죽여도(Ctrl-C) 재실행하면 이어서, 완주 후 재실행은 no-op
-uv run pugio status examples/github-issues.yaml # unit 상태 요약 (done/pending/failed/quarantined 수)
+# 1) 수집 (pugio) — 중간에 죽여도(Ctrl-C) 재실행하면 이어서, 완주 후 재실행은 no-op
+export GITHUB_TOKEN=ghp_...
+uv run pugio run examples/github-issues.yaml
+uv run pugio status examples/github-issues.yaml   # unit 상태 요약 (done/pending/failed/quarantined)
+
+# 2) 변환 (gladius) — 선언형 map/steps가 SQL로 컴파일되어 DuckDB에서 실행
+uv run gladius compile examples/transform.yaml    # 생성될 SQL을 그대로 확인 (마법 없음)
+uv run gladius run examples/transform.yaml
+uv run gladius query "SELECT * FROM './data/issues_clean/*.parquet' LIMIT 10"   # 미니 DWH
+
+# 3) 우산 CLI (arsenal) — 레시피 스캐폴드 → 수집→변환 일괄
+uv run arsenal init --list                        # 레시피 목록
+uv run arsenal init csv-cleanup                    # 프로젝트 스캐폴드
+uv run arsenal run                                 # arsenal.yaml 순서대로 수집→변환
+uv run arsenal query "SELECT ..."
 ```
 
-변환·쿼리(`gladius run` / `gladius query`)는 아직 스텁이다 — M2/M3에서 구현 예정([docs/04-implementation-plan.md](docs/04-implementation-plan.md)).
+원클릭 레시피 3종: **github-issues**(API→정리된 테이블), **csv-cleanup**(CSV 뭉치→dedup/cast), **api-to-postgres**(API→검증 게이트→PG upsert). `api-to-postgres`는 postgres extra가 필요하다: `uv tool install "de-arsenal[postgres]"` (또는 소스에서 `pugio[postgres]`).
+
+지원하는 YAML 필드 전체는 코드에서 자동 생성된다 — [docs/reference/pipeline-schema.md](docs/reference/pipeline-schema.md) · [transform-schema.md](docs/reference/transform-schema.md). 변경 이력은 [CHANGELOG.md](CHANGELOG.md), 정직한 한계선은 [docs/08-limits.md](docs/08-limits.md).
 
 ## 라이선스
 
-TBD (Apache-2.0 예정)
+[Apache-2.0](LICENSE)
