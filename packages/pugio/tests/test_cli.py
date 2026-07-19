@@ -22,7 +22,9 @@ sink:
 
 def write_spec(tmp_path: Path) -> Path:
     p = tmp_path / "pipe.yaml"
-    p.write_text(YAML.format(state_dir=tmp_path / ".arsenal", out=tmp_path / "out"))
+    p.write_text(
+        YAML.format(state_dir=tmp_path / ".arsenal", out=tmp_path / "out"), encoding="utf-8"
+    )
     return p
 
 
@@ -46,7 +48,7 @@ def test_status_command(tmp_path: Path) -> None:
 
 def test_invalid_spec_exits_nonzero(tmp_path: Path) -> None:
     bad = tmp_path / "bad.yaml"
-    bad.write_text("name: x\n")
+    bad.write_text("name: x\n", encoding="utf-8")
     result = runner.invoke(app, ["run", str(bad)])
     assert result.exit_code == 1
     assert "source" in result.output  # 어떤 필드가 문제인지 보인다

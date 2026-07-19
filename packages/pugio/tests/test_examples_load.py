@@ -41,7 +41,7 @@ def test_example_yaml_loads_without_error(path: Path, monkeypatch: pytest.Monkey
     """${VAR} 치환이 필요한 예제(예: github-issues.yaml, data-go-kr.yaml)는 더미
     값으로 채워 로더의 파싱/검증 자체만 확인한다 — load_pipeline은 스펙을 만들
     뿐 실행하지 않으므로 실제 시크릿은 필요 없다."""
-    for var in _env_vars_referenced(path.read_text()):
+    for var in _env_vars_referenced(path.read_text(encoding="utf-8")):
         monkeypatch.setenv(var, "dummy-value-for-load-test")
     spec = load_pipeline(path)
     assert spec.name  # 최소 정합성 — 이름 있는 유효한 PipelineSpec이 나왔다

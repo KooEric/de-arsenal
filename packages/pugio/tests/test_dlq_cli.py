@@ -26,15 +26,16 @@ validate:
 
 
 def write_validate_spec(tmp_path: Path) -> Path:
-    (tmp_path / "a.csv").write_text("id,v\n1,x\n")
-    (tmp_path / "b.csv").write_text("id,v\n2,\n")  # not_null 위반 → quarantine
+    (tmp_path / "a.csv").write_text("id,v\n1,x\n", encoding="utf-8")
+    (tmp_path / "b.csv").write_text("id,v\n2,\n", encoding="utf-8")  # not_null 위반 → quarantine
     p = tmp_path / "pipe.yaml"
     p.write_text(
         VALIDATE_YAML.format(
             state_dir=tmp_path / ".arsenal",
             glob=str(tmp_path / "*.csv"),
             out=tmp_path / "out",
-        )
+        ),
+        encoding="utf-8",
     )
     return p
 
@@ -50,7 +51,7 @@ def test_dlq_list_shows_quarantined(tmp_path: Path) -> None:
 
 
 def test_dlq_list_no_quarantine(tmp_path: Path) -> None:
-    (tmp_path / "clean.csv").write_text("id,v\n1,x\n")
+    (tmp_path / "clean.csv").write_text("id,v\n1,x\n", encoding="utf-8")
     p = tmp_path / "clean.yaml"
     p.write_text(
         """
@@ -66,7 +67,8 @@ sink:
             state_dir=tmp_path / ".arsenal",
             glob=str(tmp_path / "clean.csv"),
             out=tmp_path / "out",
-        )
+        ),
+        encoding="utf-8",
     )
     result = runner.invoke(app, ["run", str(p)])
     assert result.exit_code == 0
@@ -108,7 +110,7 @@ def test_dlq_retry_requeues_and_removes_files(tmp_path: Path) -> None:
 @respx.mock
 def test_dlq_retry_invalid_spec_exits_nonzero(tmp_path: Path) -> None:
     bad = tmp_path / "bad.yaml"
-    bad.write_text("name: x\n")
+    bad.write_text("name: x\n", encoding="utf-8")
     result = runner.invoke(app, ["dlq", "retry", str(bad), "--unit", "whatever"])
     assert result.exit_code == 1
     assert "error" in result.output
@@ -195,7 +197,8 @@ validate:
     - field: v
       not_null: true
   on_violation: quarantine
-"""
+""",
+        encoding="utf-8",
     )
 
     result = runner.invoke(app, ["run", str(spec_path)])

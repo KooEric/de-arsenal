@@ -48,7 +48,7 @@ def test_quickstart_collect_then_transform_produces_expected_rows(
 
 def test_quickstart_readme_matches_shipped_specs(quickstart_project: Path) -> None:
     """README의 복붙 명령이 참조하는 파일이 실제로 존재하는지 확인 (문서 드리프트 방지)."""
-    readme = (quickstart_project / "README.md").read_text()
+    readme = (quickstart_project / "README.md").read_text(encoding="utf-8")
     assert "pugio run collect.yaml" in readme
     assert "gladius run transform.yaml" in readme
     assert "arsenal query" in readme

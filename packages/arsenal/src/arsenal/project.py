@@ -27,7 +27,7 @@ def load_project(manifest_path: Path) -> ArsenalProject:
     해석만 한다 (존재 검사는 각 스펙을 실제로 로드하는 시점의 책임).
     """
     try:
-        text = manifest_path.read_text()
+        text = manifest_path.read_text(encoding="utf-8")
     except FileNotFoundError as e:
         raise FatalError(f"manifest not found: {manifest_path}") from e
     except OSError as e:

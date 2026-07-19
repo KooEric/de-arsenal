@@ -50,7 +50,7 @@ def _clean_loc(loc: tuple[int | str, ...]) -> tuple[int | str, ...]:
 
 def load_pipeline(path: Path) -> PipelineSpec:
     try:
-        text = path.read_text()
+        text = path.read_text(encoding="utf-8")
     except FileNotFoundError as e:
         raise FatalError(f"spec file not found: {path}") from e
     except OSError as e:

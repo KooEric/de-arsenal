@@ -26,7 +26,8 @@ def test_loads_user_source_and_runs(tmp_path: Path, monkeypatch: pytest.MonkeyPa
                 def fetch(self, unit):
                     return FetchResult(pa.RecordBatch.from_pylist([{"id": 1}]), exhausted=True)
             """
-        )
+        ),
+        encoding="utf-8",
     )
     monkeypatch.syspath_prepend(str(tmp_path))  # pyright: ignore[reportUnknownMemberType]
     src = load_python_source(
@@ -49,7 +50,8 @@ def test_missing_protocol_method_is_fatal(tmp_path: Path, monkeypatch: pytest.Mo
                 def units(self):
                     return iter([])
             """
-        )
+        ),
+        encoding="utf-8",
     )
     monkeypatch.syspath_prepend(str(tmp_path))  # pyright: ignore[reportUnknownMemberType]
     with pytest.raises(FatalError, match="does not implement Source protocol: fetch"):
@@ -67,7 +69,7 @@ def test_import_error_is_fatal_with_hint() -> None:
 
 
 def test_missing_class_attribute_is_fatal(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
-    (tmp_path / "empty_module.py").write_text("x = 1\n")
+    (tmp_path / "empty_module.py").write_text("x = 1\n", encoding="utf-8")
     monkeypatch.syspath_prepend(str(tmp_path))  # pyright: ignore[reportUnknownMemberType]
     with pytest.raises(FatalError, match="cannot load python source"):
         load_python_source(

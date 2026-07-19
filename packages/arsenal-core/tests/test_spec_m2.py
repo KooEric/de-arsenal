@@ -138,7 +138,8 @@ def test_sink_union_error_is_friendly(tmp_path: Path) -> None:
     p.write_text(
         "name: x\n"
         "source: {type: rest, url: https://x, pagination: {mode: offset}}\n"
-        "sink: {type: duckdb, path: o.db, table: t}\n"
+        "sink: {type: duckdb, path: o.db, table: t}\n",
+        encoding="utf-8",
     )
     with pytest.raises(FatalError) as exc_info:
         load_pipeline(p)

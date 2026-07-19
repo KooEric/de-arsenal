@@ -69,7 +69,7 @@ def test_csv_cleanup_recipe_runs_end_to_end(tmp_path: Path) -> None:
 
     input_dir = dest / "input"
     input_dir.mkdir(parents=True)
-    with (input_dir / "orders.csv").open("w", newline="") as f:
+    with (input_dir / "orders.csv").open("w", newline="", encoding="utf-8") as f:
         writer = csv.writer(f)
         writer.writerow(["id", "name", "amount"])
         writer.writerow([1, "Alice", "10.5"])
@@ -132,7 +132,10 @@ def test_api_to_postgres_recipe_runs_end_to_end(
     # 실제 레시피 기본값(size: 100)은 그대로 두되, 테스트에서만 페이지 크기를
     # 줄여 "몇 페이지"를 실제로 오가게 한다.
     collect_path = dest / "collect.yaml"
-    collect_path.write_text(collect_path.read_text().replace("size: 100", "size: 3"))
+    collect_path.write_text(
+        collect_path.read_text(encoding="utf-8").replace("size: 100", "size: 3"),
+        encoding="utf-8",
+    )
 
     page1 = [{"id": 1, "name": "Alice"}, {"id": 2, "name": "Bob"}, {"id": 3, "name": "Carol"}]
     # 마지막 페이지(len=2 < size=3 → exhausted) 이면서 동시에 id가 null인 위반

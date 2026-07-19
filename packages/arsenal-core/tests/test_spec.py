@@ -20,7 +20,7 @@ sink:
 
 def write(tmp_path: Path, text: str) -> Path:
     p = tmp_path / "pipe.yaml"
-    p.write_text(text)
+    p.write_text(text, encoding="utf-8")
     return p
 
 

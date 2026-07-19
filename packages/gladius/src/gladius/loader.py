@@ -29,7 +29,7 @@ def _substitute_env(text: str) -> str:
 
 def load_transform(path: Path) -> TransformSpec:
     try:
-        text = path.read_text()
+        text = path.read_text(encoding="utf-8")
     except FileNotFoundError as e:
         raise FatalError(f"spec file not found: {path}") from e
     except OSError as e:

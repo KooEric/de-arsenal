@@ -301,7 +301,7 @@ def test_cursor_crash_between_done_and_cursor_advance_resumes(tmp_path: Path) ->
 
 def test_run_pipeline_dispatches_file_source(tmp_path: Path) -> None:
     """runner._build_source가 file 타입을 FileSource로 올바르게 배선하는지 종단 검증."""
-    (tmp_path / "a.csv").write_text("id,v\n1,x\n2,y\n")
+    (tmp_path / "a.csv").write_text("id,v\n1,x\n2,y\n", encoding="utf-8")
     spec = PipelineSpec(
         name="file-t",
         state_dir=tmp_path / ".arsenal",
@@ -394,7 +394,8 @@ def test_run_pipeline_dispatches_python_source(
                         exhausted=True,
                     )
             """
-        )
+        ),
+        encoding="utf-8",
     )
     monkeypatch.syspath_prepend(str(tmp_path))  # pyright: ignore[reportUnknownMemberType]
     spec = PipelineSpec(
@@ -459,7 +460,8 @@ def test_fetch_failure_propagates_and_marks_unit_failed(
                 def fetch(self, unit):
                     raise FatalError("boom")
             """
-        )
+        ),
+        encoding="utf-8",
     )
     monkeypatch.syspath_prepend(str(tmp_path))  # pyright: ignore[reportUnknownMemberType]
     spec = PipelineSpec(
@@ -491,7 +493,7 @@ def test_sink_write_failure_marks_unit_failed(
     """sink.write가 예외를 던지면 mark_failed로 기록되고 예외가 전파된다 (M2-F FIX 7,
     이전까지 sink.write는 runner의 try/except로 감싸지지 않아 unit이 'running'에
     영원히 갇혔다)."""
-    (tmp_path / "a.csv").write_text("id,v\n1,x\n")
+    (tmp_path / "a.csv").write_text("id,v\n1,x\n", encoding="utf-8")
     spec = PipelineSpec(
         name="sink-fail-t",
         state_dir=tmp_path / ".arsenal",
@@ -526,9 +528,9 @@ def _make_validate_file_spec(
     tmp_path: Path, *, on_violation: Literal["block", "quarantine", "warn"]
 ) -> PipelineSpec:
     """3개 파일 unit — 정렬 순서상 두 번째(b.csv)가 not_null 위반을 낸다."""
-    (tmp_path / "a.csv").write_text("id,v\n1,x\n")
-    (tmp_path / "b.csv").write_text("id,v\n2,\n")  # v가 빈 문자열 → not_null 위반
-    (tmp_path / "c.csv").write_text("id,v\n3,z\n")
+    (tmp_path / "a.csv").write_text("id,v\n1,x\n", encoding="utf-8")
+    (tmp_path / "b.csv").write_text("id,v\n2,\n", encoding="utf-8")  # v가 빈 문자열 → not_null 위반
+    (tmp_path / "c.csv").write_text("id,v\n3,z\n", encoding="utf-8")
     return PipelineSpec(
         name="validate-t",
         state_dir=tmp_path / ".arsenal",

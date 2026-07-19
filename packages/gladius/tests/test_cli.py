@@ -21,7 +21,7 @@ output: {output}
 
 def write_spec(tmp_path: Path, input_dir: Path, output_dir: Path) -> Path:
     p = tmp_path / "transform.yaml"
-    p.write_text(YAML.format(input=input_dir, output=output_dir))
+    p.write_text(YAML.format(input=input_dir, output=output_dir), encoding="utf-8")
     return p
 
 
@@ -47,7 +47,7 @@ def test_run_produces_output(tmp_path: Path) -> None:
 
 def test_invalid_spec_exits_1_with_field_path(tmp_path: Path) -> None:
     bad = tmp_path / "bad.yaml"
-    bad.write_text("name: x\n")
+    bad.write_text("name: x\n", encoding="utf-8")
     result = runner.invoke(app, ["compile", str(bad)])
     assert result.exit_code == 1
     assert "input" in result.output  # 어떤 필드가 문제인지 보인다

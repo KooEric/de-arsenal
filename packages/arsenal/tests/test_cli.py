@@ -23,7 +23,7 @@ transforms:
 
 
 def test_manifest_parses_and_paths_resolve_relative_to_file(tmp_path: Path) -> None:
-    (tmp_path / "arsenal.yaml").write_text(MANIFEST)
+    (tmp_path / "arsenal.yaml").write_text(MANIFEST, encoding="utf-8")
     proj = load_project(tmp_path / "arsenal.yaml")
     assert proj.name == "my-project"
     assert proj.pipelines[0] == tmp_path / "collect.yaml"
@@ -36,13 +36,13 @@ def test_load_project_missing_manifest_raises_fatal_error(tmp_path: Path) -> Non
 
 
 def test_load_project_bad_yaml_raises_fatal_error(tmp_path: Path) -> None:
-    (tmp_path / "arsenal.yaml").write_text("name: [unterminated")
+    (tmp_path / "arsenal.yaml").write_text("name: [unterminated", encoding="utf-8")
     with pytest.raises(FatalError):
         load_project(tmp_path / "arsenal.yaml")
 
 
 def test_load_project_missing_required_field_raises_fatal_error(tmp_path: Path) -> None:
-    (tmp_path / "arsenal.yaml").write_text("pipelines: []\n")
+    (tmp_path / "arsenal.yaml").write_text("pipelines: []\n", encoding="utf-8")
     with pytest.raises(FatalError, match="name"):
         load_project(tmp_path / "arsenal.yaml")
 
@@ -50,7 +50,7 @@ def test_load_project_missing_required_field_raises_fatal_error(tmp_path: Path) 
 def test_run_executes_pipelines_then_transforms(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    (tmp_path / "arsenal.yaml").write_text(MANIFEST)
+    (tmp_path / "arsenal.yaml").write_text(MANIFEST, encoding="utf-8")
     calls: list[str] = []
 
     def fake_run_pipeline(p: Path) -> None:
@@ -75,7 +75,7 @@ def test_run_bad_manifest_exits_with_clean_error(tmp_path: Path) -> None:
 
 def test_run_missing_pipeline_spec_exits_clean_and_names_file(tmp_path: Path) -> None:
     """valid arsenal.yaml → collect.yaml referenced but absent — no raw traceback."""
-    (tmp_path / "arsenal.yaml").write_text(MANIFEST)
+    (tmp_path / "arsenal.yaml").write_text(MANIFEST, encoding="utf-8")
     # collect.yaml intentionally not created
     result = runner.invoke(app, ["run", "--project", str(tmp_path)])
     assert result.exit_code == 1
@@ -88,8 +88,10 @@ def test_run_missing_transform_spec_exits_clean_and_names_file(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     """valid arsenal.yaml → transform.yaml referenced but absent — no raw traceback."""
-    (tmp_path / "arsenal.yaml").write_text(MANIFEST)
-    (tmp_path / "collect.yaml").write_text("unused")  # pipeline step is stubbed below
+    (tmp_path / "arsenal.yaml").write_text(MANIFEST, encoding="utf-8")
+    (tmp_path / "collect.yaml").write_text(
+        "unused", encoding="utf-8"
+    )  # pipeline step is stubbed below
 
     def fake_run_pipeline(p: Path) -> None:
         pass
@@ -117,11 +119,11 @@ def test_init_happy_path_copies_recipe_and_prints_guidance(tmp_path: Path) -> No
 def test_init_refuses_to_overwrite_existing_files(tmp_path: Path) -> None:
     dest = tmp_path / "proj"
     dest.mkdir()
-    (dest / "arsenal.yaml").write_text("keep me")
+    (dest / "arsenal.yaml").write_text("keep me", encoding="utf-8")
     result = runner.invoke(app, ["init", "csv-cleanup", "--dest", str(dest)])
     assert result.exit_code == 1
     assert "error:" in result.output
-    assert (dest / "arsenal.yaml").read_text() == "keep me"
+    assert (dest / "arsenal.yaml").read_text(encoding="utf-8") == "keep me"
     assert not (dest / "collect.yaml").exists()  # 부분 복사 없음 — 전부 아니면 전무
 
 
