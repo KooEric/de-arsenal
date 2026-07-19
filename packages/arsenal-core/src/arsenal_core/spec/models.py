@@ -13,7 +13,7 @@ auth, validate 블록 추가. P1 필드는 이름을 미리 예약해 하위 호
 from pathlib import Path
 from typing import Annotated, Any, Literal
 
-from pydantic import BaseModel, ConfigDict, Field, field_validator
+from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
 
 class _Frozen(BaseModel):
@@ -21,14 +21,55 @@ class _Frozen(BaseModel):
 
 
 class PaginationSpec(_Frozen):
-    mode: Literal["offset"]  # M2: "page", "cursor" 추가
+    mode: Literal["offset", "page", "cursor", "link"]
     param: str = "offset"
     size_param: str = "limit"
     size: int = 100
+    start_page: int = 1  # "page" 모드의 시작 페이지 번호
+    cursor_param: str | None = None  # "cursor" 모드: 커서를 실어 보낼 요청 파라미터명
+    cursor_path: str | None = None  # "cursor" 모드: 응답에서 다음 커서를 읽을 dot-path
+    record_path: str | None = None  # envelope 내 레코드 배열의 dot-path (None=응답 자체가 배열)
+
+    @model_validator(mode="after")
+    def _cursor_fields_required(self) -> "PaginationSpec":
+        if self.mode == "cursor" and not (self.cursor_param and self.cursor_path):
+            raise ValueError("cursor mode requires cursor_param and cursor_path")
+        return self
 
 
 class RateLimitSpec(_Frozen):
-    rps: float  # M2: 토큰 버킷 + 429 적응 감속
+    rps: float = Field(gt=0)  # M2: 토큰 버킷 + 429 적응 감속. 0/음수는 TokenBucket의
+    # 1.0/rps 계산에서 ZeroDivisionError/역방향 스로틀로 이어져 여기서 차단한다.
+
+
+class AuthSpec(_Frozen):
+    """REST 소스 인증 (M2). static_token은 헤더에 그대로, oauth2는 client_credentials
+    흐름으로 토큰을 획득/갱신한다 (구현은 M2-D 이후, 여기는 모델만)."""
+
+    type: Literal["static_token", "oauth2_client_credentials"]
+    token_env: str | None = None
+    token_url: str | None = None
+    client_id_env: str | None = None
+    client_secret_env: str | None = None
+    expiry_buffer_s: int = 60
+
+    @model_validator(mode="after")
+    def _required_fields_for_type(self) -> "AuthSpec":
+        if self.type == "static_token" and not self.token_env:
+            raise ValueError("static_token auth requires token_env")
+        if self.type == "oauth2_client_credentials":
+            missing = [
+                name
+                for name, value in (
+                    ("token_url", self.token_url),
+                    ("client_id_env", self.client_id_env),
+                    ("client_secret_env", self.client_secret_env),
+                )
+                if not value
+            ]
+            if missing:
+                raise ValueError(f"oauth2_client_credentials auth requires {', '.join(missing)}")
+        return self
 
 
 class RestSourceSpec(_Frozen):
@@ -40,6 +81,11 @@ class RestSourceSpec(_Frozen):
     pagination: PaginationSpec
     rate_limit: RateLimitSpec | None = None
     encoding: str = "utf-8"  # M2: euc-kr 등 비UTF-8 처리
+    auth: AuthSpec | None = None
+    # M2-H: Notion 검색(`POST /v1/search`)처럼 페이지네이션 파라미터를 쿼리가 아니라
+    # JSON 바디로 실어야 하는 API가 있다 — GET이 기본값이라 기존 스펙은 영향받지 않는다.
+    method: Literal["GET", "POST"] = "GET"
+    body: dict[str, Any] | None = None  # method="POST"일 때 요청에 실을 정적 JSON 바디
 
 
 class FileSourceSpec(_Frozen):
@@ -57,10 +103,10 @@ class SplitSpec(_Frozen):
 
 
 class DatabaseSourceSpec(_Frozen):
-    """운영 DB 소스 (M2 Task 2.12).
+    """운영 DB 소스 (M2 Task 2.12 / M2-G).
 
-    초안(draft): dialect="sqlite"만 구현체가 지원 — Python 표준 sqlite3 드라이버.
-    postgres/mysql(DuckDB scanner 차용, docs/09 수 1)은 P1로 이연.
+    dialect="sqlite"는 Python 표준 sqlite3 드라이버. dialect="postgres"/"mysql"은
+    DuckDB scanner(ATTACH, docs/09 수 1)로 구현된다.
     """
 
     type: Literal["database"]
@@ -84,8 +130,8 @@ SourceSpec = Annotated[
 ]
 
 
-class SinkSpec(_Frozen):
-    type: Literal["parquet"]  # M2: "duckdb", "postgres" 추가 (temp→MERGE 멱등)
+class ParquetSinkSpec(_Frozen):
+    type: Literal["parquet"]
     # str로 보관 — Path로 파싱하면 "s3://bucket/x" 같은 URI 스킴이 "s3:/bucket/x"로
     # 정규화되어 훼손된다 (P1 httpfs/S3 싱크가 이 필드를 그대로 쓴다). sink/엔진이
     # 파일시스템 연산이 필요한 지점에서 Path(...)로 감싸 해석한다.
@@ -99,9 +145,78 @@ class SinkSpec(_Frozen):
         return v
 
 
+def _merge_key_non_empty(v: list[str]) -> list[str]:
+    """merge_key가 비어 있으면 DELETE/ON CONFLICT의 매치 조건이 없어 전체 테이블을
+    지우거나(duckdb) 제약을 만들 수 없다(postgres) — 생성 시점에 차단한다 (M2-F FIX 4)."""
+    if len(v) < 1:
+        raise ValueError("merge_key must have at least one column")
+    return v
+
+
+class DuckDBSinkSpec(_Frozen):
+    """DuckDB 파일 싱크 (M2) — temp 테이블 → MERGE로 멱등 upsert."""
+
+    type: Literal["duckdb"]
+    path: str
+    table: str
+    merge_key: list[str]
+
+    @field_validator("merge_key")
+    @classmethod
+    def _merge_key_non_empty(cls, v: list[str]) -> list[str]:
+        return _merge_key_non_empty(v)
+
+
+class PostgresSinkSpec(_Frozen):
+    """Postgres 싱크 (M2) — merge_key 기준 upsert."""
+
+    type: Literal["postgres"]
+    dsn_env: str
+    table: str
+    merge_key: list[str]
+
+    @field_validator("merge_key")
+    @classmethod
+    def _merge_key_non_empty(cls, v: list[str]) -> list[str]:
+        return _merge_key_non_empty(v)
+
+
+SinkSpec = Annotated[
+    ParquetSinkSpec | DuckDBSinkSpec | PostgresSinkSpec,
+    Field(discriminator="type"),
+]
+
+
+class ValidateRule(_Frozen):
+    field: str
+    not_null: bool = False
+    unique: bool = False
+    min: float | None = None
+    max: float | None = None
+
+
+class ValidateSpec(_Frozen):
+    rules: list[ValidateRule]
+    on_violation: Literal["block", "quarantine", "warn"] = "quarantine"
+
+
 class PipelineSpec(_Frozen):
+    model_config = ConfigDict(frozen=True, extra="forbid", populate_by_name=True)
+
     name: str
     state_dir: Path = Path(".arsenal")
     source: SourceSpec
     sink: SinkSpec
-    # M2 예약: validate (검증 게이트), auth
+    validation: ValidateSpec | None = Field(default=None, alias="validate")
+
+    @field_validator("name")
+    @classmethod
+    def _name_is_path_safe(cls, v: str) -> str:
+        """name은 `state_dir/{name}.db`와 `dlq/{name}/`에 그대로 꽂힌다 (M2-E FIX 8) —
+        경로 구분자나 `..`가 섞이면 상태 DB/DLQ 경로를 다른 디렉터리로 탈출시킬 수
+        있어 여기서 차단한다."""
+        if "/" in v or "\\" in v or ".." in v:
+            raise ValueError(
+                f"pipeline name must not contain '/', '\\\\', or '..' (path-safety): {v!r}"
+            )
+        return v

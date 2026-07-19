@@ -1,0 +1,16 @@
+name: api-to-postgres
+source:
+  type: rest
+  url: https://api.example.com/records   # <- 바꿀 것: 실제 API 엔드포인트
+  pagination: { mode: page, param: page, size_param: per_page, size: 100 }
+validate:
+  rules:
+    - field: id
+      not_null: true
+      unique: true
+  on_violation: quarantine
+sink:
+  type: postgres
+  dsn_env: PG_DSN   # <- 바꿀 것: Postgres DSN을 담은 환경변수 이름
+  table: records
+  merge_key: [id]

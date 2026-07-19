@@ -1,0 +1,13 @@
+# 실전 API 검증 1/5 — GitHub Issues API (docs/reference/api-coverage.md)
+# 검증 포인트: mode: link (RFC 5988 `Link: <url>; rel="next"` 헤더), static_token 인증.
+# 계약 테스트: packages/pugio/tests/test_real_world_apis.py::test_github_link_pagination_and_static_token_auth
+# 실행: GITHUB_TOKEN=xxx pugio run examples/real-world/github.yaml
+name: real-world-github
+source:
+  type: rest
+  url: https://api.github.com/repos/duckdb/duckdb/issues
+  pagination: { mode: link, size_param: per_page, size: 100 }
+  auth: { type: static_token, token_env: GITHUB_TOKEN }
+sink:
+  type: parquet
+  path: ./data/real-world/github-issues

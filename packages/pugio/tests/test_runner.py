@@ -1,6 +1,7 @@
 import sqlite3
 import textwrap
 from pathlib import Path
+from typing import Literal
 
 import httpx
 import pyarrow.parquet as pq
@@ -12,11 +13,14 @@ from arsenal_core.spec.models import (
     DatabaseSourceSpec,
     FileSourceSpec,
     PaginationSpec,
+    ParquetSinkSpec,
     PipelineSpec,
     PythonSourceSpec,
     RestSourceSpec,
     SinkSpec,
     SplitSpec,
+    ValidateRule,
+    ValidateSpec,
 )
 from arsenal_core.state import StateStore, UnitSpec
 from pugio.runner import run_pipeline
@@ -31,7 +35,7 @@ def make_spec(tmp_path: Path) -> PipelineSpec:
             url="https://api.test/items",
             pagination=PaginationSpec(mode="offset", size=2),
         ),
-        sink=SinkSpec(type="parquet", path=str(tmp_path / "out")),
+        sink=ParquetSinkSpec(type="parquet", path=str(tmp_path / "out")),
     )
 
 
@@ -97,6 +101,204 @@ def test_crash_and_resume_no_dup_no_loss(tmp_path: Path) -> None:
     assert all_ids == [1, 2, 3, 4, 5]  # 중복 0, 누락 0
 
 
+@respx.mock
+def test_cursor_crash_resume(tmp_path: Path) -> None:
+    """B6: 크래시 후 재실행 시 첫 요청이 영속된 커서를 실어 보낸다 — 처음부터 재시작하지
+    않는다. 두 실행에 걸쳐 중복 행도 없다.
+    """
+    chain: dict[str | None, tuple[list[dict[str, int]], str | None]] = {
+        None: ([{"id": 1}], "c1"),
+        "c1": ([{"id": 2}], "c2"),
+        "c2": ([{"id": 3}], None),
+    }
+    seen_afters: list[str | None] = []
+
+    def responder(request: httpx.Request) -> httpx.Response:
+        after = dict(request.url.params).get("after")
+        seen_afters.append(after)
+        rows, next_cursor = chain[after]
+        return httpx.Response(200, json={"data": rows, "meta": {"next": next_cursor}})
+
+    respx.get("https://api.test/cursor-items").mock(side_effect=responder)
+
+    spec = PipelineSpec(
+        name="cursor-t",
+        state_dir=tmp_path / ".arsenal",
+        source=RestSourceSpec(
+            type="rest",
+            url="https://api.test/cursor-items",
+            pagination=PaginationSpec(
+                mode="cursor",
+                size_param="limit",
+                size=1,
+                cursor_param="after",
+                cursor_path="meta.next",
+                record_path="data",
+            ),
+        ),
+        sink=ParquetSinkSpec(type="parquet", path=str(tmp_path / "out")),
+    )
+
+    def crash_after_first(done_count: int) -> None:
+        if done_count >= 1:
+            raise SimulatedCrash
+
+    with pytest.raises(SimulatedCrash):
+        run_pipeline(spec, on_unit_complete=crash_after_first)
+    assert seen_afters == [None]  # 크래시 전 딱 한 번만 요청됨
+
+    seen_afters.clear()
+    run_pipeline(spec)  # 같은 명령 그대로 재실행 (처음부터가 아니라 커서에서 재개)
+    assert seen_afters[0] == "c1"  # 재개 시 첫 요청이 영속된 커서를 실어 보낸다
+
+    files = sorted((tmp_path / "out").glob("*.parquet"))
+    rows: list[dict[str, int]] = []
+    for f in files:
+        table = pq.read_table(f)  # pyright: ignore[reportUnknownMemberType, reportUnknownVariableType]
+        rows.extend(table.to_pylist())  # pyright: ignore[reportUnknownMemberType, reportUnknownArgumentType]
+    all_ids = sorted(row["id"] for row in rows)
+    assert all_ids == [1, 2, 3]  # 중복 0, 누락 0
+
+
+@respx.mock
+def test_cursor_rerun_after_completion_is_noop(tmp_path: Path) -> None:
+    """M2-B (CRITICAL): 커서 트래버설이 next_cursor=None까지 완주한 뒤 재실행하면,
+    이전엔 마지막 실제 커서가 store에 남아 있어 재실행 시 그 unit이 is_done으로
+    skip되면서 fetch()가 절대 안 불려 _cursor_exhausted도 안 갱신되고 같은 unit이
+    영원히 재생산되는 무한루프였다 (크래시가 마지막 mark_done 직후에 나도 동일).
+
+    수정 후: 완료 시 SOURCE_EXHAUSTED 센티널을 커서로 영속 → 재실행 시 RestSource가
+    그 센티널로 seed되고 _cursor_units()가 unit을 하나도 안 내 즉시 종료(clean no-op).
+    HTTP 요청도 전혀 추가되지 않는다.
+    """
+    chain: dict[str | None, tuple[list[dict[str, int]], str | None]] = {
+        None: ([{"id": 1}], "c1"),
+        "c1": ([{"id": 2}], "c2"),
+        "c2": ([{"id": 3}], None),
+    }
+    call_count = 0
+
+    def responder(request: httpx.Request) -> httpx.Response:
+        nonlocal call_count
+        call_count += 1
+        after = dict(request.url.params).get("after")
+        rows, next_cursor = chain[after]
+        return httpx.Response(200, json={"data": rows, "meta": {"next": next_cursor}})
+
+    respx.get("https://api.test/cursor-rerun-items").mock(side_effect=responder)
+
+    spec = PipelineSpec(
+        name="cursor-rerun-t",
+        state_dir=tmp_path / ".arsenal",
+        source=RestSourceSpec(
+            type="rest",
+            url="https://api.test/cursor-rerun-items",
+            pagination=PaginationSpec(
+                mode="cursor",
+                size_param="limit",
+                size=1,
+                cursor_param="after",
+                cursor_path="meta.next",
+                record_path="data",
+            ),
+        ),
+        sink=ParquetSinkSpec(type="parquet", path=str(tmp_path / "out")),
+    )
+
+    report1 = run_pipeline(spec)  # 첫 실행: 3페이지 다 수집, next_cursor=None으로 완주
+    assert report1.written == 3
+    calls_after_first_run = call_count
+
+    # 재실행 — 수정 전엔 여기서 무한루프. 반드시 즉시 반환해야 한다.
+    report2 = run_pipeline(spec)
+    assert report2.fetched == 0
+    assert report2.written == 0
+    assert call_count == calls_after_first_run  # 새 HTTP 요청 0건
+
+    files = sorted((tmp_path / "out").glob("*.parquet"))
+    assert len(files) == 3  # 재실행이 중복 파일을 만들지 않음
+
+
+@respx.mock
+def test_cursor_crash_between_done_and_cursor_advance_resumes(tmp_path: Path) -> None:
+    """M2 최종 리뷰 FIX 1 회귀 테스트.
+
+    수정 전엔 mark_done()과 set_cursor()가 별개 트랜잭션이라, 그 사이에 크래시가
+    나면 unit은 done인데 커서는 그 unit을 만든 이전 값(또는 없음)에 멈춘 채로
+    남는다. 재실행 시 그 스테일 커서로 seed된 RestSource가 이미 done인 그 unit을
+    다시 내고, is_done skip 경로는 fetch()를 안 부르니 커서가 영원히 전진하지
+    못해 무한루프가 된다 — cursor/link의 모든 중간 페이지(마지막 페이지뿐 아니라)
+    에 영향을 준다.
+
+    mark_done_and_advance_cursor로 원자화한 뒤에는 이 크래시 창 자체가 없다 —
+    이 테스트는 (a) 크래시 직후 커서가 이미 다음 페이지 값으로 전진해 있고
+    (unit done과 동일 커밋), (b) 재실행이 정확히 나머지 unit만 수집하고 멈추며
+    (무한루프 없음), (c) 완주 후 재실행이 clean no-op임을 확인한다.
+
+    의도적으로 타임아웃 가드를 두지 않는다 — 회귀가 재발하면 이 테스트가 그냥
+    행(hang)하는 것이 허용된 실패 모드다(스펙 지시). 수정이 맞으면 빠르게 통과한다.
+    """
+    chain: dict[str | None, tuple[list[dict[str, int]], str | None]] = {
+        None: ([{"id": 1}], "c1"),
+        "c1": ([{"id": 2}], "c2"),
+        "c2": ([{"id": 3}], None),
+    }
+
+    def responder(request: httpx.Request) -> httpx.Response:
+        after = dict(request.url.params).get("after")
+        rows, next_cursor = chain[after]
+        return httpx.Response(200, json={"data": rows, "meta": {"next": next_cursor}})
+
+    respx.get("https://api.test/atomic-cursor-items").mock(side_effect=responder)
+
+    spec = PipelineSpec(
+        name="atomic-cursor-t",
+        state_dir=tmp_path / ".arsenal",
+        source=RestSourceSpec(
+            type="rest",
+            url="https://api.test/atomic-cursor-items",
+            pagination=PaginationSpec(
+                mode="cursor",
+                size_param="limit",
+                size=1,
+                cursor_param="after",
+                cursor_path="meta.next",
+                record_path="data",
+            ),
+        ),
+        sink=ParquetSinkSpec(type="parquet", path=str(tmp_path / "out")),
+    )
+
+    def crash_after_first(done_count: int) -> None:
+        if done_count >= 1:
+            raise SimulatedCrash
+
+    with pytest.raises(SimulatedCrash):
+        run_pipeline(spec, on_unit_complete=crash_after_first)
+
+    # 크래시 시점에 이미 unit 1은 done + 커서는 다음 페이지 값("c1")으로 전진해
+    # 있어야 한다 — 별개 트랜잭션이던 시절엔 이 지점에서 커서가 아직 스테일일 수
+    # 있는 창이 있었다.
+    assert spec.source.type == "rest"
+    store = StateStore(spec.state_dir / f"{spec.name}.db")
+    try:
+        assert store.get_cursor(spec.name, spec.source.url) == "c1"
+    finally:
+        store.close()
+
+    # 재실행 — 스테일 커서였다면 이미 done인 unit 1을 재-seed → is_done skip →
+    # fetch() 미호출 → 커서 미전진의 무한루프. 원자화 후엔 커서가 "c1"이라 unit
+    # 2("after=c1")부터 재개하며, 정확히 나머지 2개 unit만 수집하고 끝난다.
+    report = run_pipeline(spec)
+    assert report.fetched == 2
+    assert report.written == 2
+
+    # 완주 후 다시 실행하면 clean no-op (회귀 시 여기서 무한루프).
+    report2 = run_pipeline(spec)
+    assert report2.fetched == 0
+    assert report2.written == 0
+
+
 def test_run_pipeline_dispatches_file_source(tmp_path: Path) -> None:
     """runner._build_source가 file 타입을 FileSource로 올바르게 배선하는지 종단 검증."""
     (tmp_path / "a.csv").write_text("id,v\n1,x\n2,y\n")
@@ -104,7 +306,7 @@ def test_run_pipeline_dispatches_file_source(tmp_path: Path) -> None:
         name="file-t",
         state_dir=tmp_path / ".arsenal",
         source=FileSourceSpec(type="file", path=str(tmp_path / "*.csv")),
-        sink=SinkSpec(type="parquet", path=str(tmp_path / "out")),
+        sink=ParquetSinkSpec(type="parquet", path=str(tmp_path / "out")),
     )
     report = run_pipeline(spec)
     assert report.fetched == 1
@@ -137,7 +339,7 @@ def test_run_pipeline_dispatches_database_source(
             table="orders",
             split=SplitSpec(key="id", chunk=10),
         ),
-        sink=SinkSpec(type="parquet", path=str(tmp_path / "out")),
+        sink=ParquetSinkSpec(type="parquet", path=str(tmp_path / "out")),
     )
     report = run_pipeline(spec)
     assert report.fetched == 1
@@ -147,6 +349,23 @@ def test_run_pipeline_dispatches_database_source(
     table = pq.read_table(files[0])  # pyright: ignore[reportUnknownMemberType, reportUnknownVariableType]
     ids = sorted(row["id"] for row in table.to_pylist())  # pyright: ignore[reportUnknownMemberType, reportUnknownVariableType, reportUnknownArgumentType]
     assert ids == [1, 2, 3, 4, 5]
+
+
+@respx.mock
+def test_run_records_schema_snapshot(tmp_path: Path) -> None:
+    """M2-G: run 중 첫 non-empty batch의 스키마가 StateStore에 기록된다 (기록만 —
+    탐지/정책은 P1)."""
+    mock_pages([[{"id": 1}, {"id": 2}], [{"id": 3}]])
+    spec = make_spec(tmp_path)
+    run_pipeline(spec)
+
+    store = StateStore(spec.state_dir / f"{spec.name}.db")
+    try:
+        schema_json = store.last_schema(spec.name)
+    finally:
+        store.close()
+    assert schema_json is not None
+    assert "id" in schema_json
 
 
 def test_run_pipeline_dispatches_python_source(
@@ -182,7 +401,7 @@ def test_run_pipeline_dispatches_python_source(
         name="py-t",
         state_dir=tmp_path / ".arsenal",
         source=PythonSourceSpec(type="python", target="runner_test_source:RunnerTestSource"),
-        sink=SinkSpec(type="parquet", path=str(tmp_path / "out")),
+        sink=ParquetSinkSpec(type="parquet", path=str(tmp_path / "out")),
     )
     report = run_pipeline(spec)
     assert report.fetched == 1
@@ -247,7 +466,7 @@ def test_fetch_failure_propagates_and_marks_unit_failed(
         name="fail-t",
         state_dir=tmp_path / ".arsenal",
         source=PythonSourceSpec(type="python", target="failing_source:FailingSource"),
-        sink=SinkSpec(type="parquet", path=str(tmp_path / "out")),
+        sink=ParquetSinkSpec(type="parquet", path=str(tmp_path / "out")),
     )
 
     with pytest.raises(FatalError, match="boom"):
@@ -264,3 +483,163 @@ def test_fetch_failure_propagates_and_marks_unit_failed(
         assert rec.last_error is not None and "boom" in rec.last_error
     finally:
         store.close()
+
+
+def test_sink_write_failure_marks_unit_failed(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """sink.write가 예외를 던지면 mark_failed로 기록되고 예외가 전파된다 (M2-F FIX 7,
+    이전까지 sink.write는 runner의 try/except로 감싸지지 않아 unit이 'running'에
+    영원히 갇혔다)."""
+    (tmp_path / "a.csv").write_text("id,v\n1,x\n")
+    spec = PipelineSpec(
+        name="sink-fail-t",
+        state_dir=tmp_path / ".arsenal",
+        source=FileSourceSpec(type="file", path=str(tmp_path / "*.csv")),
+        sink=ParquetSinkSpec(type="parquet", path=str(tmp_path / "out")),
+    )
+
+    class FailingSink:
+        def write(self, unit: UnitSpec, batch: object) -> None:
+            raise FatalError("sink boom")
+
+    def fake_build_sink(sink_spec: SinkSpec) -> FailingSink:
+        return FailingSink()
+
+    monkeypatch.setattr("pugio.runner.build_sink", fake_build_sink)
+
+    with pytest.raises(FatalError, match="sink boom"):
+        run_pipeline(spec)
+
+    assert spec.source.type == "file"
+    uid = UnitSpec.create(
+        pipeline=spec.name, source=spec.source.path, unit_key="a.csv", payload={}
+    ).unit_id
+    store = StateStore(spec.state_dir / f"{spec.name}.db")
+    try:
+        assert store.status(uid) == "failed"
+    finally:
+        store.close()
+
+
+def _make_validate_file_spec(
+    tmp_path: Path, *, on_violation: Literal["block", "quarantine", "warn"]
+) -> PipelineSpec:
+    """3개 파일 unit — 정렬 순서상 두 번째(b.csv)가 not_null 위반을 낸다."""
+    (tmp_path / "a.csv").write_text("id,v\n1,x\n")
+    (tmp_path / "b.csv").write_text("id,v\n2,\n")  # v가 빈 문자열 → not_null 위반
+    (tmp_path / "c.csv").write_text("id,v\n3,z\n")
+    return PipelineSpec(
+        name="validate-t",
+        state_dir=tmp_path / ".arsenal",
+        source=FileSourceSpec(type="file", path=str(tmp_path / "*.csv")),
+        sink=ParquetSinkSpec(type="parquet", path=str(tmp_path / "out")),
+        validate=ValidateSpec(
+            rules=[ValidateRule(field="v", not_null=True)], on_violation=on_violation
+        ),
+    )
+
+
+def test_quarantine_isolates_unit_and_run_continues(tmp_path: Path) -> None:
+    spec = _make_validate_file_spec(tmp_path, on_violation="quarantine")
+    report = run_pipeline(spec)
+
+    assert report.fetched == 3
+    assert report.written == 2
+    assert report.quarantined == 1
+
+    store = StateStore(spec.state_dir / f"{spec.name}.db")
+    try:
+        counts = store.counts(spec.name)
+    finally:
+        store.close()
+    assert counts.get("quarantined") == 1
+    assert counts.get("done") == 2
+
+    dlq_files = list((tmp_path / ".arsenal" / "dlq" / spec.name).glob("*.parquet"))
+    assert len(dlq_files) == 1
+
+
+@respx.mock
+def test_quarantine_on_last_offset_page_stops_the_run(tmp_path: Path) -> None:
+    """M4 회귀 (api-to-postgres 레시피 E2E에서 발견): offset/page 페이지네이션은
+    `itertools.count`로 무한 열거되므로 루프를 끝내는 유일한 신호는 마지막 fetch의
+    `result.exhausted`(짧은 페이지)뿐이다. quarantine 분기의 `continue`가 그 체크를
+    건너뛰면, 검증 위반이 하필 그 마지막(짧은) 페이지에서 나는 순간 러너가 종료
+    신호를 영영 못 보고 존재하지 않는 다음 페이지를 무한히 요청한다. 이 테스트는
+    request_count로 실제 요청 수를 세어 회귀 시(고쳐지기 전) 3번째 이상 요청이
+    발생하지 않음을 못박는다 — 고쳐지기 전에는 이 테스트가 타임아웃/무한루프로
+    걸렸을 것이다."""
+    request_count = 0
+    # 두 번째(마지막) 페이지가 위반이자 짧은 페이지
+    pages = [[{"id": 1}, {"id": 2}], [{"id": None}]]
+
+    def responder(request: httpx.Request) -> httpx.Response:
+        nonlocal request_count
+        request_count += 1
+        offset = int(dict(request.url.params)["offset"])
+        idx = offset // 2
+        body = pages[idx] if idx < len(pages) else []
+        return httpx.Response(200, json=body)
+
+    respx.get("https://api.test/items").mock(side_effect=responder)
+
+    spec = PipelineSpec(
+        name="quarantine-exhaust",
+        state_dir=tmp_path / ".arsenal",
+        source=RestSourceSpec(
+            type="rest",
+            url="https://api.test/items",
+            pagination=PaginationSpec(mode="offset", size=2),
+        ),
+        sink=ParquetSinkSpec(type="parquet", path=str(tmp_path / "out")),
+        validate=ValidateSpec(
+            rules=[ValidateRule(field="id", not_null=True)], on_violation="quarantine"
+        ),
+    )
+
+    report = run_pipeline(spec)
+
+    assert report.fetched == 2
+    assert report.written == 1
+    assert report.quarantined == 1
+    assert request_count == 2  # 회귀 시 3, 4, 5... 무한 증가
+
+
+def test_block_policy_raises_fatal(tmp_path: Path) -> None:
+    """block 정책의 FatalError는 _fetch_with_auth_refresh를 감싼 except 바깥에서
+    던져지므로, 명시적으로 mark_failed하지 않으면 unit이 영원히 'running'에 갇힌다
+    (M2-E FIX 3). raise 이후 status가 'failed'여야 한다 — 'running'이면 회귀."""
+    spec = _make_validate_file_spec(tmp_path, on_violation="block")
+    with pytest.raises(FatalError):
+        run_pipeline(spec)
+
+    assert spec.source.type == "file"
+    uid = UnitSpec.create(
+        pipeline=spec.name, source=spec.source.path, unit_key="b.csv", payload={}
+    ).unit_id
+    store = StateStore(spec.state_dir / f"{spec.name}.db")
+    try:
+        assert store.status(uid) == "failed"
+    finally:
+        store.close()
+
+
+def test_warn_policy_writes_anyway(tmp_path: Path, caplog: pytest.LogCaptureFixture) -> None:
+    spec = _make_validate_file_spec(tmp_path, on_violation="warn")
+    with caplog.at_level("WARNING", logger="pugio.runner"):
+        report = run_pipeline(spec)
+
+    assert report.fetched == 3
+    assert report.written == 3
+    assert report.quarantined == 0
+
+    store = StateStore(spec.state_dir / f"{spec.name}.db")
+    try:
+        counts = store.counts(spec.name)
+    finally:
+        store.close()
+    assert counts.get("done") == 3
+
+    # M2-E FIX 6: warn 정책은 print(stderr) 대신 logging을 쓴다.
+    assert any("validation violations" in rec.message for rec in caplog.records)

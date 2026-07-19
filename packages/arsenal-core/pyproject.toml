@@ -3,7 +3,21 @@ name = "arsenal-core"
 version = "0.1.0"
 description = "Shared reliability core for DE Arsenal tools — state, identity, errors, spec, retry"
 requires-python = ">=3.11"
+license = "Apache-2.0"
 dependencies = ["pydantic>=2.7", "pyyaml>=6", "tenacity>=8.3"]
+classifiers = [
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "License :: OSI Approved :: Apache Software License",
+    "Operating System :: OS Independent",
+    "Intended Audience :: Developers",
+    "Topic :: Software Development :: Libraries :: Python Modules",
+]
+
+[project.urls]
+Homepage = "https://github.com/KooEric/de-arsenal"
+Repository = "https://github.com/KooEric/de-arsenal"
 
 [build-system]
 requires = ["hatchling"]

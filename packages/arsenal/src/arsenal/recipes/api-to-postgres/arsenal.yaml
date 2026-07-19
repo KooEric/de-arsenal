@@ -1,0 +1,3 @@
+name: api-to-postgres
+pipelines:
+  - collect.yaml

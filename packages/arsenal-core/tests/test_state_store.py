@@ -57,3 +57,40 @@ def test_mark_done_records_unit_metrics(tmp_path: Path) -> None:
     store.mark_done(u.unit_id, row_count=100, byte_count=2048, duration_ms=350)
     m = store.metrics(u.unit_id)
     assert (m.row_count, m.byte_count, m.duration_ms) == (100, 2048, 350)
+
+
+def test_mark_done_and_advance_cursor_atomic(tmp_path: Path) -> None:
+    """M2 최종 리뷰 FIX 1: done 마킹과 커서 전진이 한 커밋으로 묶여야 한다 —
+    별개 트랜잭션이면 그 사이 크래시 시 unit은 done인데 커서는 스테일 상태로
+    남아 재실행이 무한루프에 빠진다 (runner.py에서 상세 설명)."""
+    store = StateStore(tmp_path / "state.db")
+    u = make_unit("after=c1")
+    store.register(u)
+    store.mark_done_and_advance_cursor(
+        u.unit_id,
+        pipeline="p",
+        source="s",
+        cursor="c2",
+        row_count=10,
+        byte_count=100,
+        duration_ms=5,
+    )
+    assert store.is_done(u.unit_id) is True
+    assert store.get_cursor("p", "s") == "c2"
+    m = store.metrics(u.unit_id)
+    assert (m.row_count, m.byte_count, m.duration_ms) == (10, 100, 5)
+
+
+def test_mark_done_and_advance_cursor_survives_reopen(tmp_path: Path) -> None:
+    """두 UPDATE/INSERT가 진짜 하나의 커밋인지 — 재오픈(프로세스 재시작 시뮬레이션)
+    후에도 둘 다(또는 둘 다 아님)만 관측되어야 한다."""
+    db = tmp_path / "state.db"
+    store = StateStore(db)
+    u = make_unit("after=c1")
+    store.register(u)
+    store.mark_done_and_advance_cursor(u.unit_id, pipeline="p", source="s", cursor="c2")
+    store.close()
+
+    reopened = StateStore(db)
+    assert reopened.is_done(u.unit_id) is True
+    assert reopened.get_cursor("p", "s") == "c2"

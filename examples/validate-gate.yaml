@@ -1,0 +1,18 @@
+# 예제 — 검증 게이트: 위반 unit은 격리(quarantine)되어 DLQ로 빠지고, 파이프라인은
+# 나머지 unit으로 완주한다 (block/warn 정책은 docs/reference/api-coverage.md와
+# packages/pugio/tests/test_runner.py의 quarantine/block/warn 테스트 참고).
+# quickstart의 orders.csv를 그대로 재사용해 계정/네트워크 없이 돌아간다.
+# 실행: pugio run examples/validate-gate.yaml
+name: validate-gate-demo
+source:
+  type: file
+  path: ./examples/quickstart/orders.csv
+  format: csv
+sink:
+  type: parquet
+  path: ./data/orders_validated
+validate:
+  rules:
+    - { field: amount, not_null: true, min: 0 }
+    - { field: status, not_null: true }
+  on_violation: quarantine

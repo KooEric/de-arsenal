@@ -1,0 +1,167 @@
+{
+  "$defs": {
+    "CastStep": {
+      "additionalProperties": false,
+      "properties": {
+        "cast": {
+          "additionalProperties": {
+            "type": "string"
+          },
+          "title": "Cast",
+          "type": "object"
+        }
+      },
+      "required": [
+        "cast"
+      ],
+      "title": "CastStep",
+      "type": "object"
+    },
+    "DedupStep": {
+      "additionalProperties": false,
+      "properties": {
+        "dedup": {
+          "items": {
+            "type": "string"
+          },
+          "title": "Dedup",
+          "type": "array"
+        }
+      },
+      "required": [
+        "dedup"
+      ],
+      "title": "DedupStep",
+      "type": "object"
+    },
+    "DeriveStep": {
+      "additionalProperties": false,
+      "properties": {
+        "derive": {
+          "additionalProperties": {
+            "type": "string"
+          },
+          "title": "Derive",
+          "type": "object"
+        }
+      },
+      "required": [
+        "derive"
+      ],
+      "title": "DeriveStep",
+      "type": "object"
+    },
+    "FilterStep": {
+      "additionalProperties": false,
+      "properties": {
+        "filter": {
+          "title": "Filter",
+          "type": "string"
+        }
+      },
+      "required": [
+        "filter"
+      ],
+      "title": "FilterStep",
+      "type": "object"
+    },
+    "RenameStep": {
+      "additionalProperties": false,
+      "properties": {
+        "rename": {
+          "additionalProperties": {
+            "type": "string"
+          },
+          "title": "Rename",
+          "type": "object"
+        }
+      },
+      "required": [
+        "rename"
+      ],
+      "title": "RenameStep",
+      "type": "object"
+    },
+    "SelectStep": {
+      "additionalProperties": false,
+      "properties": {
+        "select": {
+          "items": {
+            "type": "string"
+          },
+          "title": "Select",
+          "type": "array"
+        }
+      },
+      "required": [
+        "select"
+      ],
+      "title": "SelectStep",
+      "type": "object"
+    }
+  },
+  "additionalProperties": false,
+  "properties": {
+    "name": {
+      "title": "Name",
+      "type": "string"
+    },
+    "input": {
+      "title": "Input",
+      "type": "string"
+    },
+    "map": {
+      "anyOf": [
+        {
+          "additionalProperties": {
+            "type": "string"
+          },
+          "type": "object"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Map"
+    },
+    "steps": {
+      "default": [],
+      "items": {
+        "anyOf": [
+          {
+            "$ref": "#/$defs/FilterStep"
+          },
+          {
+            "$ref": "#/$defs/RenameStep"
+          },
+          {
+            "$ref": "#/$defs/CastStep"
+          },
+          {
+            "$ref": "#/$defs/SelectStep"
+          },
+          {
+            "$ref": "#/$defs/DedupStep"
+          },
+          {
+            "$ref": "#/$defs/DeriveStep"
+          }
+        ]
+      },
+      "title": "Steps",
+      "type": "array"
+    },
+    "output": {
+      "title": "Output",
+      "type": "string"
+    }
+  },
+  "required": [
+    "name",
+    "input",
+    "output"
+  ],
+  "title": "TransformSpec",
+  "type": "object"
+}

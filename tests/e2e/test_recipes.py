@@ -5,9 +5,11 @@
 """
 
 import csv
+from collections.abc import Iterator
 from pathlib import Path
 
 import duckdb
+import psycopg
 import pytest
 import respx
 from arsenal.cli import app
@@ -97,6 +99,80 @@ def test_csv_cleanup_recipe_runs_end_to_end(tmp_path: Path) -> None:
     # dedup: [id] — 4개 입력 행 중 id=1이 중복이므로 3개 고유 id만 남는다.
     assert total == 3
     assert count == 3
+
+
+@pytest.fixture(scope="module")
+def api_to_postgres_pg_url() -> Iterator[str]:
+    """api-to-postgres 레시피 E2E 전용 Postgres 컨테이너.
+
+    testcontainers가 없는 환경(Docker 미가용)에서는 이 fixture를 쓰는 테스트만
+    스킵된다 — 나머지 레시피 E2E(github-issues/csv-cleanup)는 영향받지 않는다.
+    """
+    pgtc = pytest.importorskip("testcontainers.postgres")
+    with pgtc.PostgresContainer("postgres:16-alpine") as container:
+        yield container.get_connection_url(driver=None)
+
+
+def test_api_to_postgres_recipe_runs_end_to_end(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, api_to_postgres_pg_url: str
+) -> None:
+    """REST → validate 게이트 → Postgres upsert, 3종 레시피의 마지막 하나.
+
+    페이지네이션(mode=page)은 무한 generator라 종료 신호가 오직 마지막 fetch의
+    `exhausted`뿐이다 — 이 테스트는 바로 그 마지막 페이지를 검증 위반으로 만들어
+    quarantine 경로와 종료 경로가 동시에 걸리는 조합을 실제로 태운다.
+    """
+    monkeypatch.setenv("PG_DSN", api_to_postgres_pg_url)
+    dest = tmp_path / "api-pg-proj"
+
+    init_result = runner.invoke(app, ["init", "api-to-postgres", "--dest", str(dest)])
+    assert init_result.exit_code == 0, init_result.output
+
+    # 실제 레시피 기본값(size: 100)은 그대로 두되, 테스트에서만 페이지 크기를
+    # 줄여 "몇 페이지"를 실제로 오가게 한다.
+    collect_path = dest / "collect.yaml"
+    collect_path.write_text(collect_path.read_text().replace("size: 100", "size: 3"))
+
+    page1 = [{"id": 1, "name": "Alice"}, {"id": 2, "name": "Bob"}, {"id": 3, "name": "Carol"}]
+    # 마지막 페이지(len=2 < size=3 → exhausted) 이면서 동시에 id가 null인 위반
+    # 레코드를 담아, quarantine과 exhausted 종료가 같은 fetch에서 겹치게 한다.
+    page2 = [{"id": None, "name": "Bad"}, {"id": 4, "name": "Dana"}]
+
+    def run_once() -> None:
+        with respx.mock(assert_all_called=False) as respx_mock:
+            respx_mock.get(
+                "https://api.example.com/records", params={"page": 1, "per_page": 3}
+            ).mock(return_value=Response(200, json=page1))
+            respx_mock.get(
+                "https://api.example.com/records", params={"page": 2, "per_page": 3}
+            ).mock(return_value=Response(200, json=page2))
+            result = runner.invoke(app, ["run", "--project", str(dest)])
+        assert result.exit_code == 0, result.output
+
+    run_once()
+
+    with psycopg.connect(api_to_postgres_pg_url) as con, con.cursor() as cur:
+        cur.execute("SELECT id, name FROM records ORDER BY id")
+        rows = cur.fetchall()
+    # id=1,2,3만 적재된다 — page2(마지막 페이지)는 not_null/unique 위반으로
+    # 통째로 격리되어 id=4(Dana)도 함께 적재되지 않는다 (페이지 단위 격리).
+    assert rows == [(1, "Alice"), (2, "Bob"), (3, "Carol")]
+
+    dlq_dir = dest / ".arsenal" / "dlq" / "api-to-postgres"
+    dlq_files = list(dlq_dir.glob("*.parquet"))
+    assert len(dlq_files) == 1  # page2 하나만 격리
+
+    # 멱등성: 재실행해도 (이미 done인 page1은 skip, 여전히 quarantined인 page2만
+    # 재시도되어 다시 격리) Postgres 행 수는 그대로여야 한다 — 중복 upsert 없음.
+    run_once()
+
+    with psycopg.connect(api_to_postgres_pg_url) as con, con.cursor() as cur:
+        cur.execute("SELECT count(*) FROM records")
+        (count,) = cur.fetchone()  # pyright: ignore[reportGeneralTypeIssues]
+    assert count == 3
+
+    dlq_files_after = list(dlq_dir.glob("*.parquet"))
+    assert len(dlq_files_after) == 1  # 여전히 격리 1건, 중복 생성 없음
 
 
 def test_broken_recipe_fails_the_test(tmp_path: Path) -> None:

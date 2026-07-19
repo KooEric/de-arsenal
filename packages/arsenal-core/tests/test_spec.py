@@ -3,7 +3,7 @@ from pathlib import Path
 import pytest
 
 from arsenal_core.errors import FatalError
-from arsenal_core.spec import SinkSpec, load_pipeline
+from arsenal_core.spec import ParquetSinkSpec, load_pipeline
 
 VALID = """
 name: github-issues
@@ -79,7 +79,7 @@ def test_sink_spec_path_round_trips_uri_scheme_uncorrupted() -> None:
     pathlib.Path("s3://bucket/x")는 "s3:/bucket/x"로 무너진다 (슬래시 중복 제거).
     P1 httpfs/S3 싱크가 이 필드를 그대로 쓰므로 str로 왕복 보존되어야 한다.
     """
-    spec = SinkSpec(type="parquet", path="s3://bucket/prefix")
+    spec = ParquetSinkSpec(type="parquet", path="s3://bucket/prefix")
     assert spec.path == "s3://bucket/prefix"
 
 
@@ -91,5 +91,5 @@ def test_sink_spec_path_still_accepts_path_object(tmp_path: Path) -> None:
     YAML/딕셔너리 경유(model_validate)는 이 before-validator가 실제로 담당하는 실행
     경로다.
     """
-    spec = SinkSpec.model_validate({"type": "parquet", "path": tmp_path / "out"})
+    spec = ParquetSinkSpec.model_validate({"type": "parquet", "path": tmp_path / "out"})
     assert spec.path == str(tmp_path / "out")

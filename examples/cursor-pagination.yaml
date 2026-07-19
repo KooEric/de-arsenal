@@ -1,0 +1,19 @@
+# 예제 — cursor 페이지네이션 (mode: cursor).
+# url/cursor_path는 자리표시자입니다 — 실제 API에 맞춰 바꿔서 쓰세요. 계약 형태
+# 자체는 packages/pugio/tests/test_real_world_apis.py의 notion/slack 계약
+# 테스트가 실제 API 응답으로 검증합니다.
+# 실행: pugio run examples/cursor-pagination.yaml
+name: cursor-pagination-demo
+source:
+  type: rest
+  url: https://api.example.com/v1/records
+  pagination:
+    mode: cursor
+    size_param: limit
+    size: 100
+    cursor_param: after
+    cursor_path: meta.next_cursor
+    record_path: data
+sink:
+  type: parquet
+  path: ./data/cursor-demo

@@ -16,6 +16,7 @@ from arsenal_core.state import UnitSpec
 class FetchResult:
     batch: pa.RecordBatch | None  # None = 데이터 없음
     exhausted: bool  # True = 이 unit이 마지막, 더 이상 unit 없음
+    next_cursor: str | None = None  # M2 cursor 모드: 다음 페이지 요청에 실을 커서 값
 
 
 class Source(Protocol):
