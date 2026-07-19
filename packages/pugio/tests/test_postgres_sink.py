@@ -24,7 +24,7 @@ DSN_ENV = "PUGIO_TEST_PG_DSN"
 
 
 @pytest.fixture(scope="module")
-def pg_url() -> Iterator[str]:
+def pg_url(require_docker: None) -> Iterator[str]:
     with pgtc.PostgresContainer("postgres:16-alpine") as container:
         yield container.get_connection_url(driver=None)
 

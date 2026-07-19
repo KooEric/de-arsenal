@@ -23,7 +23,7 @@ DSN_ENV = "PUGIO_TEST_SCANNER_PG_DSN"
 
 
 @pytest.fixture(scope="module")
-def pg_url() -> Iterator[str]:
+def pg_url(require_docker: None) -> Iterator[str]:
     with pgtc.PostgresContainer("postgres:16-alpine") as container:
         url = container.get_connection_url(driver=None)
         with psycopg.connect(url) as con, con.cursor() as cur:
@@ -161,7 +161,7 @@ MYSQL_DSN_ENV = "PUGIO_TEST_SCANNER_MYSQL_DSN"
 
 
 @pytest.fixture(scope="module")
-def mysql_url() -> Iterator[str]:
+def mysql_url(require_docker: None) -> Iterator[str]:
     import duckdb
 
     try:
