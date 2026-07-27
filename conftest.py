@@ -18,17 +18,24 @@ import pytest
 
 
 def docker_available() -> bool:
-    """Check Docker daemon reachability without raising.
+    """Check that this runner can start the *Linux* containers our tests need.
 
     Returns False for any failure mode (daemon absent, socket missing,
     permission denied, etc.) rather than letting the caller crash.
+
+    Reachability alone is not enough: GitHub's `windows-latest` runner has a
+    live Docker daemon, but it is in Windows-container mode, so `ping()`
+    succeeds while starting a Linux image (postgres, and testcontainers' own
+    ryuk with its `/var/run/docker.sock` bind mount) fails at container
+    creation with `invalid volume specification` — an ERROR, not a skip. So
+    the daemon must also report `OSType == "linux"`.
     """
     try:
         import docker
 
         client = docker.from_env()
         client.ping()
-        return True
+        return str(client.info().get("OSType", "")).lower() == "linux"
     except Exception:
         return False
 

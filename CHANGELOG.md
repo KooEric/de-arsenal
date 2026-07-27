@@ -25,6 +25,14 @@ backward-compatible by policy (`arsenal-core` pinned `>=0.1,<0.2` across
   passing a `Path` still work via the coercion. A regression test asserts no
   spec field default is a `pathlib` path, so this cannot come back without
   Windows in the loop.
+- Windows CI: with the schema gate unblocked, `pytest` ran on `windows-latest`
+  for the first time and the 18 testcontainers (Postgres/MySQL) tests ERRORed
+  instead of skipping. The `docker_available()` guard added in `e4cefab` only
+  checked daemon reachability, and the Windows runner *does* have a live
+  daemon — in Windows-container mode, where starting a Linux image (and
+  testcontainers' ryuk, with its `/var/run/docker.sock` bind mount) fails with
+  `invalid volume specification`. The guard now also requires the daemon to
+  report `OSType == "linux"`.
 
 ## [0.1.0] - 2026-07-19
 
