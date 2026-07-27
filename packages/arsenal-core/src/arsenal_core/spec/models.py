@@ -204,10 +204,21 @@ class PipelineSpec(_Frozen):
     model_config = ConfigDict(frozen=True, extra="forbid", populate_by_name=True)
 
     name: str
-    state_dir: Path = Path(".arsenal")
+    # str로 보관 — ParquetSinkSpec.path와 같은 규약. Path 기본값은 JSON 스키마
+    # 직렬화가 호스트의 경로 flavour에 묶여, Windows에서 생성한 산출물이
+    # Linux/macOS 것과 달라진다(생성 문서 `--check` CI 게이트가 깨진다).
+    # 파일시스템 연산이 필요한 지점에서 Path(...)로 감싸 해석한다.
+    state_dir: str = ".arsenal"
     source: SourceSpec
     sink: SinkSpec
     validation: ValidateSpec | None = Field(default=None, alias="validate")
+
+    @field_validator("state_dir", mode="before")
+    @classmethod
+    def _coerce_state_dir_to_str(cls, v: object) -> object:
+        if isinstance(v, Path):
+            return str(v)
+        return v
 
     @field_validator("name")
     @classmethod

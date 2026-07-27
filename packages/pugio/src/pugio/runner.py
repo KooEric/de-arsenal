@@ -14,6 +14,7 @@ import logging
 import time
 from collections.abc import Callable
 from dataclasses import dataclass
+from pathlib import Path
 
 import httpx
 import pyarrow as pa
@@ -126,7 +127,7 @@ def run_pipeline(
     on_unit_complete: Callable[[int], None] | None = None,  # 테스트 훅 (크래시 주입)
     max_attempts: int = DEFAULT_MAX_ATTEMPTS,
 ) -> RunReport:
-    store = StateStore(spec.state_dir / f"{spec.name}.db")
+    store = StateStore(Path(spec.state_dir) / f"{spec.name}.db")
     source, auth = _build_source(spec, store)
     # SinkSpec은 discriminated union(parquet/duckdb/postgres, M2-A) — build_sink가
     # spec.type으로 알맞은 구현체를 만든다 (M2-F).

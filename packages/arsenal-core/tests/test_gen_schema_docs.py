@@ -8,7 +8,12 @@ schemas/, docs/reference/ 아티팩트를 건드리지 않고 격리 테스트�
 
 import subprocess
 import sys
-from pathlib import Path
+from pathlib import Path, PurePath
+
+from pydantic import BaseModel
+
+import gladius.spec
+from arsenal_core.spec import models as pipeline_models
 
 REPO_ROOT = Path(__file__).resolve().parents[3]
 SCRIPT = REPO_ROOT / "scripts" / "gen_schema_docs.py"
@@ -21,6 +26,39 @@ def _run(cwd: Path, *args: str) -> subprocess.CompletedProcess[str]:
         capture_output=True,
         text=True,
         encoding="utf-8",
+    )
+
+
+def _spec_models() -> list[type[BaseModel]]:
+    """생성 산출물($defs)에 들어가는 스펙 모델 전부 — pipeline 쪽과 transform 쪽."""
+    models: list[type[BaseModel]] = []
+    for module in (pipeline_models, gladius.spec):
+        for obj in vars(module).values():
+            if isinstance(obj, type) and issubclass(obj, BaseModel) and obj is not BaseModel:
+                models.append(obj)
+    assert models, "스펙 모델을 하나도 찾지 못했다 — 모듈 경로가 바뀌었는지 확인"
+    return models
+
+
+def test_no_field_default_is_a_host_flavoured_path() -> None:
+    """생성 산출물은 어느 OS에서 만들어도 바이트 동일해야 한다 (`--check`가 CI 게이트).
+
+    필드 기본값이 `pathlib.Path`면 그 직렬화가 호스트의 경로 flavour에 묶인다 —
+    Windows에서는 pydantic이 `WindowsPath` 기본값을 직렬화하지 못해 경고와 함께
+    `default` 키 자체를 스키마에서 빼버리고, 그 결과 Linux/macOS에서 커밋한
+    산출물과 어긋나 `--check`가 stale로 떨어진다. 경로형 기본값은 str로 둔다
+    (ParquetSinkSpec.path와 같은 규약).
+    """
+    offenders = [
+        f"{model.__name__}.{name} = {field.default!r}"
+        for model in _spec_models()
+        for name, field in model.model_fields.items()
+        if isinstance(field.default, PurePath)
+    ]
+
+    assert not offenders, (
+        "스펙 필드 기본값이 pathlib 경로다 — 생성 스키마가 플랫폼 의존이 된다: "
+        + ", ".join(offenders)
     )
 
 

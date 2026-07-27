@@ -16,12 +16,12 @@ from arsenal_core.state import UnitSpec
 from pugio.validate.gate import Violation
 
 
-def dlq_dir(state_dir: Path, pipeline: str) -> Path:
+def dlq_dir(state_dir: str | Path, pipeline: str) -> Path:
     return Path(state_dir) / "dlq" / pipeline
 
 
 def write_dlq(
-    state_dir: Path,
+    state_dir: str | Path,
     pipeline: str,
     unit: UnitSpec,
     batch: pa.RecordBatch,
@@ -48,7 +48,7 @@ def read_reason(json_path: Path) -> dict[str, object]:
     return json.loads(json_path.read_text(encoding="utf-8"))
 
 
-def remove_dlq(state_dir: Path, pipeline: str, unit_id: str) -> None:
+def remove_dlq(state_dir: str | Path, pipeline: str, unit_id: str) -> None:
     """parquet + json 둘 다 삭제 — 없으면 조용히 넘어간다 (재호출 안전)."""
     d = dlq_dir(state_dir, pipeline)
     for suffix in (".parquet", ".json"):

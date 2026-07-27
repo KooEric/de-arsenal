@@ -41,7 +41,7 @@ class _StopAfterNPages(Exception):
 def _spec(tmp_path: Path) -> PipelineSpec:
     return PipelineSpec(
         name="live-github",
-        state_dir=tmp_path / ".arsenal",
+        state_dir=str(tmp_path / ".arsenal"),
         source=RestSourceSpec(
             type="rest",
             url="https://api.github.com/repos/duckdb/duckdb/issues",

@@ -8,6 +8,24 @@ This project has not yet reached a public API stability commitment (see
 backward-compatible by policy (`arsenal-core` pinned `>=0.1,<0.2` across
 `pugio`/`gladius`/`de-arsenal`).
 
+## [Unreleased]
+
+### Fixed
+
+- Windows CI: `scripts/gen_schema_docs.py --check` failed on `windows-latest`
+  (`schemas/pipeline.json`, `docs/reference/pipeline-schema.md` reported
+  stale) while ubuntu/macOS passed. `PipelineSpec.state_dir` was declared
+  `Path = Path(".arsenal")`, and on Windows pydantic cannot serialize the
+  `WindowsPath` default (`PydanticJsonSchemaWarning: Default value .arsenal is
+  not JSON serializable`), so it drops the `default` key from the generated
+  schema — producing artifacts that differ from the committed (POSIX-generated)
+  ones. `state_dir` is now `str = ".arsenal"` with a `Path` → `str` coercion
+  validator, the same convention `ParquetSinkSpec.path` already used. YAML
+  users are unaffected (YAML always yields a string), and Python callers
+  passing a `Path` still work via the coercion. A regression test asserts no
+  spec field default is a `pathlib` path, so this cannot come back without
+  Windows in the loop.
+
 ## [0.1.0] - 2026-07-19
 
 First release. Covers milestones M1 (reliability core + collection) through

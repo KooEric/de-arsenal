@@ -51,7 +51,7 @@ GITHUB_URL = "https://api.github.com/repos/duckdb/duckdb/issues"
 def _github_spec(tmp_path: Path) -> PipelineSpec:
     return PipelineSpec(
         name="rw-github",
-        state_dir=tmp_path / ".arsenal",
+        state_dir=str(tmp_path / ".arsenal"),
         source=RestSourceSpec(
             type="rest",
             url=GITHUB_URL,
@@ -202,7 +202,7 @@ def test_stripe_escape_hatch_source_completes_pagination(
 
     spec = PipelineSpec(
         name="rw-stripe",
-        state_dir=tmp_path / ".arsenal",
+        state_dir=str(tmp_path / ".arsenal"),
         source=PythonSourceSpec(
             type="python",
             target="stripe_charges_source:StripeChargesSource",
@@ -229,7 +229,7 @@ DATA_GO_KR_URL = (
 def _data_go_kr_spec(tmp_path: Path) -> PipelineSpec:
     return PipelineSpec(
         name="rw-data-go-kr",
-        state_dir=tmp_path / ".arsenal",
+        state_dir=str(tmp_path / ".arsenal"),
         source=RestSourceSpec(
             type="rest",
             url=f"{DATA_GO_KR_URL}?serviceKey=test-service-key&_type=json",
@@ -284,7 +284,7 @@ NOTION_URL = "https://api.notion.com/v1/search"
 def _notion_spec(tmp_path: Path) -> PipelineSpec:
     return PipelineSpec(
         name="rw-notion",
-        state_dir=tmp_path / ".arsenal",
+        state_dir=str(tmp_path / ".arsenal"),
         source=RestSourceSpec(
             type="rest",
             url=NOTION_URL,
@@ -353,7 +353,7 @@ SLACK_PATH = "https://slack.com/api/conversations.history"
 def _slack_spec(tmp_path: Path) -> PipelineSpec:
     return PipelineSpec(
         name="rw-slack",
-        state_dir=tmp_path / ".arsenal",
+        state_dir=str(tmp_path / ".arsenal"),
         source=RestSourceSpec(
             type="rest",
             url=SLACK_URL,

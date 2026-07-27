@@ -31,7 +31,7 @@ def write_validate_spec(tmp_path: Path) -> Path:
     p = tmp_path / "pipe.yaml"
     p.write_text(
         VALIDATE_YAML.format(
-            state_dir=tmp_path / ".arsenal",
+            state_dir=str(tmp_path / ".arsenal"),
             glob=str(tmp_path / "*.csv"),
             out=tmp_path / "out",
         ),
@@ -64,7 +64,7 @@ sink:
   type: parquet
   path: {out}
 """.format(
-            state_dir=tmp_path / ".arsenal",
+            state_dir=str(tmp_path / ".arsenal"),
             glob=str(tmp_path / "clean.csv"),
             out=tmp_path / "out",
         ),
@@ -95,7 +95,7 @@ def test_dlq_retry_requeues_and_removes_files(tmp_path: Path) -> None:
     result = runner.invoke(app, ["dlq", "retry", str(spec_path), "--unit", unit_id])
     assert result.exit_code == 0
 
-    store = StateStore(spec.state_dir / f"{spec.name}.db")
+    store = StateStore(Path(spec.state_dir) / f"{spec.name}.db")
     try:
         rec = store.get(unit_id)
     finally:
@@ -138,7 +138,7 @@ def test_dlq_list_then_retry_by_unit_id(tmp_path: Path) -> None:
     assert retry_result.exit_code == 0
 
     spec = load_pipeline(spec_path)
-    store = StateStore(spec.state_dir / f"{spec.name}.db")
+    store = StateStore(Path(spec.state_dir) / f"{spec.name}.db")
     try:
         rec = store.get(unit_id)
     finally:
@@ -214,7 +214,7 @@ validate:
     assert "cursor/link" in retry_result.output
 
     spec = load_pipeline(spec_path)
-    store = StateStore(spec.state_dir / f"{spec.name}.db")
+    store = StateStore(Path(spec.state_dir) / f"{spec.name}.db")
     try:
         rec = store.get(unit_id)
     finally:

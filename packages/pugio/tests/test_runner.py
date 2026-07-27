@@ -29,7 +29,7 @@ from pugio.runner import run_pipeline
 def make_spec(tmp_path: Path) -> PipelineSpec:
     return PipelineSpec(
         name="t",
-        state_dir=tmp_path / ".arsenal",
+        state_dir=str(tmp_path / ".arsenal"),
         source=RestSourceSpec(
             type="rest",
             url="https://api.test/items",
@@ -123,7 +123,7 @@ def test_cursor_crash_resume(tmp_path: Path) -> None:
 
     spec = PipelineSpec(
         name="cursor-t",
-        state_dir=tmp_path / ".arsenal",
+        state_dir=str(tmp_path / ".arsenal"),
         source=RestSourceSpec(
             type="rest",
             url="https://api.test/cursor-items",
@@ -189,7 +189,7 @@ def test_cursor_rerun_after_completion_is_noop(tmp_path: Path) -> None:
 
     spec = PipelineSpec(
         name="cursor-rerun-t",
-        state_dir=tmp_path / ".arsenal",
+        state_dir=str(tmp_path / ".arsenal"),
         source=RestSourceSpec(
             type="rest",
             url="https://api.test/cursor-rerun-items",
@@ -253,7 +253,7 @@ def test_cursor_crash_between_done_and_cursor_advance_resumes(tmp_path: Path) ->
 
     spec = PipelineSpec(
         name="atomic-cursor-t",
-        state_dir=tmp_path / ".arsenal",
+        state_dir=str(tmp_path / ".arsenal"),
         source=RestSourceSpec(
             type="rest",
             url="https://api.test/atomic-cursor-items",
@@ -280,7 +280,7 @@ def test_cursor_crash_between_done_and_cursor_advance_resumes(tmp_path: Path) ->
     # 있어야 한다 — 별개 트랜잭션이던 시절엔 이 지점에서 커서가 아직 스테일일 수
     # 있는 창이 있었다.
     assert spec.source.type == "rest"
-    store = StateStore(spec.state_dir / f"{spec.name}.db")
+    store = StateStore(Path(spec.state_dir) / f"{spec.name}.db")
     try:
         assert store.get_cursor(spec.name, spec.source.url) == "c1"
     finally:
@@ -304,7 +304,7 @@ def test_run_pipeline_dispatches_file_source(tmp_path: Path) -> None:
     (tmp_path / "a.csv").write_text("id,v\n1,x\n2,y\n", encoding="utf-8")
     spec = PipelineSpec(
         name="file-t",
-        state_dir=tmp_path / ".arsenal",
+        state_dir=str(tmp_path / ".arsenal"),
         source=FileSourceSpec(type="file", path=str(tmp_path / "*.csv")),
         sink=ParquetSinkSpec(type="parquet", path=str(tmp_path / "out")),
     )
@@ -331,7 +331,7 @@ def test_run_pipeline_dispatches_database_source(
     monkeypatch.setenv("RUNNER_SRC_DB", str(db))
     spec = PipelineSpec(
         name="db-t",
-        state_dir=tmp_path / ".arsenal",
+        state_dir=str(tmp_path / ".arsenal"),
         source=DatabaseSourceSpec(
             type="database",
             dialect="sqlite",
@@ -359,7 +359,7 @@ def test_run_records_schema_snapshot(tmp_path: Path) -> None:
     spec = make_spec(tmp_path)
     run_pipeline(spec)
 
-    store = StateStore(spec.state_dir / f"{spec.name}.db")
+    store = StateStore(Path(spec.state_dir) / f"{spec.name}.db")
     try:
         schema_json = store.last_schema(spec.name)
     finally:
@@ -400,7 +400,7 @@ def test_run_pipeline_dispatches_python_source(
     monkeypatch.syspath_prepend(str(tmp_path))  # pyright: ignore[reportUnknownMemberType]
     spec = PipelineSpec(
         name="py-t",
-        state_dir=tmp_path / ".arsenal",
+        state_dir=str(tmp_path / ".arsenal"),
         source=PythonSourceSpec(type="python", target="runner_test_source:RunnerTestSource"),
         sink=ParquetSinkSpec(type="parquet", path=str(tmp_path / "out")),
     )
@@ -466,7 +466,7 @@ def test_fetch_failure_propagates_and_marks_unit_failed(
     monkeypatch.syspath_prepend(str(tmp_path))  # pyright: ignore[reportUnknownMemberType]
     spec = PipelineSpec(
         name="fail-t",
-        state_dir=tmp_path / ".arsenal",
+        state_dir=str(tmp_path / ".arsenal"),
         source=PythonSourceSpec(type="python", target="failing_source:FailingSource"),
         sink=ParquetSinkSpec(type="parquet", path=str(tmp_path / "out")),
     )
@@ -477,7 +477,7 @@ def test_fetch_failure_propagates_and_marks_unit_failed(
     expected_unit_id = UnitSpec.create(
         pipeline="fail-t", source="mem", unit_key="only", payload={}
     ).unit_id
-    store = StateStore(spec.state_dir / f"{spec.name}.db")
+    store = StateStore(Path(spec.state_dir) / f"{spec.name}.db")
     try:
         rec = store.get(expected_unit_id)
         assert rec.status == "failed"
@@ -496,7 +496,7 @@ def test_sink_write_failure_marks_unit_failed(
     (tmp_path / "a.csv").write_text("id,v\n1,x\n", encoding="utf-8")
     spec = PipelineSpec(
         name="sink-fail-t",
-        state_dir=tmp_path / ".arsenal",
+        state_dir=str(tmp_path / ".arsenal"),
         source=FileSourceSpec(type="file", path=str(tmp_path / "*.csv")),
         sink=ParquetSinkSpec(type="parquet", path=str(tmp_path / "out")),
     )
@@ -517,7 +517,7 @@ def test_sink_write_failure_marks_unit_failed(
     uid = UnitSpec.create(
         pipeline=spec.name, source=spec.source.path, unit_key="a.csv", payload={}
     ).unit_id
-    store = StateStore(spec.state_dir / f"{spec.name}.db")
+    store = StateStore(Path(spec.state_dir) / f"{spec.name}.db")
     try:
         assert store.status(uid) == "failed"
     finally:
@@ -533,7 +533,7 @@ def _make_validate_file_spec(
     (tmp_path / "c.csv").write_text("id,v\n3,z\n", encoding="utf-8")
     return PipelineSpec(
         name="validate-t",
-        state_dir=tmp_path / ".arsenal",
+        state_dir=str(tmp_path / ".arsenal"),
         source=FileSourceSpec(type="file", path=str(tmp_path / "*.csv")),
         sink=ParquetSinkSpec(type="parquet", path=str(tmp_path / "out")),
         validate=ValidateSpec(
@@ -550,7 +550,7 @@ def test_quarantine_isolates_unit_and_run_continues(tmp_path: Path) -> None:
     assert report.written == 2
     assert report.quarantined == 1
 
-    store = StateStore(spec.state_dir / f"{spec.name}.db")
+    store = StateStore(Path(spec.state_dir) / f"{spec.name}.db")
     try:
         counts = store.counts(spec.name)
     finally:
@@ -588,7 +588,7 @@ def test_quarantine_on_last_offset_page_stops_the_run(tmp_path: Path) -> None:
 
     spec = PipelineSpec(
         name="quarantine-exhaust",
-        state_dir=tmp_path / ".arsenal",
+        state_dir=str(tmp_path / ".arsenal"),
         source=RestSourceSpec(
             type="rest",
             url="https://api.test/items",
@@ -620,7 +620,7 @@ def test_block_policy_raises_fatal(tmp_path: Path) -> None:
     uid = UnitSpec.create(
         pipeline=spec.name, source=spec.source.path, unit_key="b.csv", payload={}
     ).unit_id
-    store = StateStore(spec.state_dir / f"{spec.name}.db")
+    store = StateStore(Path(spec.state_dir) / f"{spec.name}.db")
     try:
         assert store.status(uid) == "failed"
     finally:
@@ -636,7 +636,7 @@ def test_warn_policy_writes_anyway(tmp_path: Path, caplog: pytest.LogCaptureFixt
     assert report.written == 3
     assert report.quarantined == 0
 
-    store = StateStore(spec.state_dir / f"{spec.name}.db")
+    store = StateStore(Path(spec.state_dir) / f"{spec.name}.db")
     try:
         counts = store.counts(spec.name)
     finally:

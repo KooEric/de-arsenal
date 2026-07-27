@@ -207,7 +207,7 @@ def _patch_build_auth(monkeypatch: pytest.MonkeyPatch, provider: "FlippingProvid
 def _auth_test_spec(tmp_path: Path, url: str) -> PipelineSpec:
     return PipelineSpec(
         name="auth-t",
-        state_dir=tmp_path / ".arsenal",
+        state_dir=str(tmp_path / ".arsenal"),
         source=RestSourceSpec(
             type="rest",
             url=url,
@@ -290,7 +290,7 @@ def test_transient_5xx_still_retried(tmp_path: Path) -> None:
 
     spec = PipelineSpec(
         name="transient-t",
-        state_dir=tmp_path / ".arsenal",
+        state_dir=str(tmp_path / ".arsenal"),
         source=RestSourceSpec(
             type="rest",
             url="https://api.test/transient-5xx-items",

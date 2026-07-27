@@ -42,7 +42,7 @@ def status(spec_path: Path) -> None:
     except ArsenalError as e:
         typer.echo(f"error: {e}", err=True)
         raise typer.Exit(1) from e
-    store = StateStore(spec.state_dir / f"{spec.name}.db")
+    store = StateStore(Path(spec.state_dir) / f"{spec.name}.db")
     try:
         counts = store.counts(spec.name)
     finally:
@@ -68,7 +68,7 @@ def dlq_list(spec_path: Path) -> None:
     except ArsenalError as e:
         typer.echo(f"error: {e}", err=True)
         raise typer.Exit(1) from e
-    store = StateStore(spec.state_dir / f"{spec.name}.db")
+    store = StateStore(Path(spec.state_dir) / f"{spec.name}.db")
     try:
         records = store.quarantined(spec.name)
     finally:
@@ -110,7 +110,7 @@ def dlq_retry(spec_path: Path, unit: str = typer.Option(..., "--unit")) -> None:
             err=True,
         )
         raise typer.Exit(1)
-    store = StateStore(spec.state_dir / f"{spec.name}.db")
+    store = StateStore(Path(spec.state_dir) / f"{spec.name}.db")
     try:
         updated = store.requeue(unit)
     finally:
