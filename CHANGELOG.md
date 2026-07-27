@@ -8,7 +8,11 @@ This project has not yet reached a public API stability commitment (see
 backward-compatible by policy (`arsenal-core` pinned `>=0.1,<0.2` across
 `pugio`/`gladius`/`de-arsenal`).
 
-## [Unreleased]
+## [0.1.1] - 2026-07-27
+
+Patch release: `windows-latest` CI is green for the first time (282 passed,
+21 skipped — identical to Linux/macOS). Both fixes are CI/packaging-level;
+no pipeline behaviour changes.
 
 ### Fixed
 

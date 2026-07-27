@@ -1,6 +1,6 @@
 [project]
 name = "arsenal-core"
-version = "0.1.0"
+version = "0.1.1"
 description = "Shared reliability core for DE Arsenal tools — state, identity, errors, spec, retry"
 requires-python = ">=3.11"
 license = "Apache-2.0"

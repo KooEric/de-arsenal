@@ -4,4 +4,4 @@ map/steps 선언 → SQL 컴파일 → DuckDB 벡터화 실행. 단일 노드 �
 구조: spec.py compile/ engine.py cli.py (docs/02-architecture.md)
 """
 
-__version__ = "0.1.0"
+__version__ = "0.1.1"

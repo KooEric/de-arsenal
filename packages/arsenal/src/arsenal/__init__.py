@@ -4,4 +4,4 @@
 구현: docs/plans/2026-07-08-m4-integration-release.md Task 4.0~4.1
 """
 
-__version__ = "0.1.0"
+__version__ = "0.1.1"

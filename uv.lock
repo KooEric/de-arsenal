@@ -44,7 +44,7 @@ wheels = [
 
 [[package]]
 name = "arsenal-core"
-version = "0.1.0"
+version = "0.1.1"
 source = { editable = "packages/arsenal-core" }
 dependencies = [
     { name = "pydantic" },
@@ -242,7 +242,7 @@ toml = [
 
 [[package]]
 name = "de-arsenal"
-version = "0.1.0"
+version = "0.1.1"
 source = { editable = "packages/arsenal" }
 dependencies = [
     { name = "arsenal-core" },
@@ -382,7 +382,7 @@ wheels = [
 
 [[package]]
 name = "gladius"
-version = "0.1.0"
+version = "0.1.1"
 source = { editable = "packages/gladius" }
 dependencies = [
     { name = "arsenal-core" },
@@ -625,7 +625,7 @@ wheels = [
 
 [[package]]
 name = "pugio"
-version = "0.1.0"
+version = "0.1.1"
 source = { editable = "packages/pugio" }
 dependencies = [
     { name = "arsenal-core" },

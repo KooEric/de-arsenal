@@ -11,7 +11,7 @@ arsenal run                        # 수집→검증→변환. 끊겨도 재실�
 arsenal query "SELECT * FROM './data/clean/*.parquet' LIMIT 10"
 ```
 
-> **상태: v0.1.0 (P0) 코드 완성 · 태그 완료.** 수집(pugio)·변환(gladius)·우산 CLI(arsenal)가 모두 동작한다. PyPI 배포만 보류 중(`gladius` 이름 선점 해결 후) — 현재는 소스에서 바로 실행 가능하다.
+> **상태: v0.1.1 (P0) 코드 완성 · 태그 완료 · CI 전 플랫폼(Linux/macOS/Windows) 초록.** 수집(pugio)·변환(gladius)·우산 CLI(arsenal)가 모두 동작한다. PyPI 배포만 보류 중(`gladius` 이름 선점 해결 후) — 현재는 소스에서 바로 실행 가능하다.
 
 Databricks·Snowflake 수준의 **완성도**를, 그들과 정반대의 **형태**로. 거대 플랫폼이 백 가지를 80점으로 하는 동안, 우리는 한 가지를 100점으로. 신뢰성(멱등·재개·검증)이 기본값이고, 마진 없는 비용 구조([docs/07](docs/07-cost-efficiency.md))가 아키텍처에서 나온다.
 
@@ -21,9 +21,9 @@ Databricks·Snowflake 수준의 **완성도**를, 그들과 정반대의 **형�
 
 | 무기 | 담당 영역 | 우선순위 | 상태 |
 |---|---|---|---|
-| **Arsenal** (우산 CLI) | 단일 진입점 — init/run/query, 원클릭 레시피 3종 | P0 (M4) | ✅ v0.1.0 |
-| **Pugio** | 수집·전송 (ETL 엔진) | P0 | ✅ v0.1.0 |
-| **Gladius** | 변환·쿼리 (핵심 처리) | P0 | ✅ v0.1.0 |
+| **Arsenal** (우산 CLI) | 단일 진입점 — init/run/query, 원클릭 레시피 3종 | P0 (M4) | ✅ v0.1.1 |
+| **Pugio** | 수집·전송 (ETL 엔진) | P0 | ✅ v0.1.1 |
+| **Gladius** | 변환·쿼리 (핵심 처리) | P0 | ✅ v0.1.1 |
 | **Spatha** | 오케스트레이션 (의존성·스케줄링) | P0(멱등 코어)/P1 | ✅ 멱등 재실행(코어) · 📋 DAG P1 |
 | **Scutum** | 데이터 품질·검증·보호 | P0(멱등 가드)/P1 | ✅ 코어 내장 (검증 게이트·DLQ·멱등) |
 | **Scorpio** | 관측성 (모니터링·lineage) | P1 | 📋 계획 (스키마 스냅샷 기록은 코어에) |
@@ -63,7 +63,7 @@ Databricks·Snowflake 수준의 **완성도**를, 그들과 정반대의 **형�
 
 ## 시작하기 (소스에서)
 
-v0.1.0 (P0) 완성 — 수집·변환·쿼리·우산 CLI가 모두 동작한다. PyPI 배포 전까지는 소스에서 실행한다.
+v0.1.1 (P0) 완성 — 수집·변환·쿼리·우산 CLI가 모두 동작한다. PyPI 배포 전까지는 소스에서 실행한다.
 
 ```bash
 uv sync

@@ -4,4 +4,4 @@
 구조: docs/02-architecture.md 참조.
 """
 
-__version__ = "0.1.0"
+__version__ = "0.1.1"

@@ -4,4 +4,4 @@
 구조: sources/ sinks/ auth/ validate/ runner.py cli.py (docs/02-architecture.md)
 """
 
-__version__ = "0.1.0"
+__version__ = "0.1.1"
