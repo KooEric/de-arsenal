@@ -1,4 +1,4 @@
-"""StateStore 스키마 스냅샷 기록 (M2-G) — 변경분만 append, 탐지/정책은 P1 스코프 밖."""
+"""StateStore 스키마 스냅샷 기록과 P1 드리프트 비교의 기반 테스트."""
 
 import sqlite3
 from pathlib import Path

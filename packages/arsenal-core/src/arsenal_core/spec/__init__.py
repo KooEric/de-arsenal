@@ -1,6 +1,8 @@
 from arsenal_core.spec.loader import load_pipeline
 from arsenal_core.spec.models import (
     AuthSpec,
+    ContractColumnSpec,
+    ContractSpec,
     DatabaseSourceSpec,
     DuckDBSinkSpec,
     FileSourceSpec,
@@ -20,6 +22,8 @@ from arsenal_core.spec.models import (
 
 __all__ = [
     "AuthSpec",
+    "ContractColumnSpec",
+    "ContractSpec",
     "DatabaseSourceSpec",
     "DuckDBSinkSpec",
     "FileSourceSpec",

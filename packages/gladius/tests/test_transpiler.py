@@ -1,5 +1,6 @@
 """steps → SQL 트랜스파일러 스냅샷 테스트 (M3 Task 3.3)."""
 
+from pathlib import Path
 from typing import Any
 
 import duckdb
@@ -53,6 +54,59 @@ def test_full_chain_compiles_to_cte_pipeline() -> None:
 def test_map_becomes_first_projection() -> None:
     sql = compile_sql(make(steps=[], map_={"issue_no": "number"}))
     assert 's1 AS (SELECT number AS "issue_no" FROM s0)' in sql
+
+
+def test_sql_step_replaces_input_placeholder_with_previous_cte() -> None:
+    sql = compile_sql(
+        make(steps=[{"filter": "state = 'open'"}, {"sql": "SELECT * FROM {input} LIMIT 10"}])
+    )
+    assert "s2 AS (SELECT * FROM s1 LIMIT 10)" in sql
+
+
+def test_python_udf_step_compiles_to_private_function_call() -> None:
+    sql = compile_sql(
+        make(
+            steps=[
+                {
+                    "python": "my_transforms:slugify",
+                    "args": ["title"],
+                    "output": "slug",
+                    "return_type": "VARCHAR",
+                }
+            ]
+        )
+    )
+    assert 's1 AS (SELECT *, "__gladius_python_udf_0"("title") AS "slug" FROM s0)' in sql
+
+
+def test_sql_step_compiles_to_valid_duckdb_sql(tmp_path_factory: pytest.TempPathFactory) -> None:
+    data_dir = tmp_path_factory.mktemp("sql-step-data")
+    pq.write_table(  # pyright: ignore[reportUnknownMemberType]
+        pa.table({"id": [1, 2], "amount": [5, 20]}), data_dir / "a.parquet"
+    )
+    sql = compile_sql(
+        TransformSpec.model_validate(
+            {
+                "name": "sql",
+                "input": str(data_dir),
+                "output": str(data_dir / "out"),
+                "steps": [{"sql": "SELECT id FROM {input} WHERE amount > 10"}],
+            }
+        )
+    )
+    con = duckdb.connect()
+    try:
+        assert con.execute(sql).fetchall() == [(2,)]
+    finally:
+        con.close()
+
+
+def test_compile_can_target_explicit_incremental_input_files(tmp_path: Path) -> None:
+    spec = make(steps=[{"select": ["id"]}])
+    paths = [tmp_path / "a.parquet", tmp_path / "b.parquet"]
+    sql = compile_sql(spec, paths)
+    assert "read_parquet(['" in sql
+    assert "a.parquet" in sql and "b.parquet" in sql
 
 
 def test_single_quote_in_input_path_is_escaped() -> None:

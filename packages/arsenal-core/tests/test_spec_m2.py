@@ -13,6 +13,8 @@ from arsenal_core.errors import FatalError
 from arsenal_core.spec.loader import load_pipeline
 from arsenal_core.spec.models import (
     AuthSpec,
+    ContractSpec,
+    DltSourceSpec,
     DuckDBSinkSpec,
     PaginationSpec,
     PipelineSpec,
@@ -98,6 +100,40 @@ def test_pipeline_validate_alias() -> None:
 def test_pipeline_without_validate_is_none() -> None:
     spec = PipelineSpec.model_validate(_minimal_pipeline_dict())
     assert spec.validation is None
+
+
+def test_schema_drift_policy_defaults_to_allow() -> None:
+    spec = PipelineSpec.model_validate(_minimal_pipeline_dict())
+    assert spec.schema_drift == "allow"
+
+
+def test_schema_drift_policy_accepts_warn_and_block() -> None:
+    raw = _minimal_pipeline_dict()
+    raw["schema_drift"] = "warn"
+    assert PipelineSpec.model_validate(raw).schema_drift == "warn"
+    raw["schema_drift"] = "block"
+    assert PipelineSpec.model_validate(raw).schema_drift == "block"
+
+
+def test_data_contract_spec_is_validated() -> None:
+    raw = _minimal_pipeline_dict()
+    raw["contract"] = {
+        "columns": [{"name": "id", "type": "int64", "nullable": False}],
+        "on_violation": "quarantine",
+    }
+    spec = PipelineSpec.model_validate(raw)
+    assert isinstance(spec.contract, ContractSpec)
+    assert spec.contract.on_violation == "quarantine"
+
+
+def test_dlt_source_spec_is_discriminated_and_validates_batch_size() -> None:
+    raw = _minimal_pipeline_dict()
+    raw["source"] = {"type": "dlt", "target": "my_source:source", "batch_size": 5}
+    spec = PipelineSpec.model_validate(raw)
+    assert isinstance(spec.source, DltSourceSpec)
+    assert spec.source.batch_size == 5
+    with pytest.raises(ValidationError):
+        DltSourceSpec(type="dlt", target="my_source:source", batch_size=0)
 
 
 def test_auth_spec_static_requires_token_env() -> None:

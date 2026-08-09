@@ -44,10 +44,16 @@ Arsenal(Pugio/Gladius)은 분산 엔진을 만들지 않는다([설계 원칙 1]
 |---|---|---|
 | 실시간 스트리밍 (Hasta) | P2 | Pugio/Gladius는 배치. Hasta는 폴링 마이크로배치(초~분)부터 시작하고, 밀리초급 실시간은 전용 인프라 없이는 P2 이후에도 불가함을 미리 밝혀둔다 ([07-cost-efficiency.md](07-cost-efficiency.md) "줄여주지 못하는 비용"). |
 | 분산 실행 (Ballista) | P2 | 단일 노드 벡터화 밖(TB급·고동시성)은 처음부터 지원 범위 밖 — Executor 인터페이스로 백엔드 교체는 P2 계획이며, 그 인프라 비용은 사용자가 선택적으로 진다. |
-| 스키마 드리프트 감지+정책 | P1 | P0는 수집 시 **스키마 스냅샷 기록만** 한다(비교·경고·차단 정책 없음). [01-scope.md](01-scope.md) M2 절 "스키마 스냅샷 기록 (드리프트 감지·정책은 P1, 기록만 P0)" 참고. |
-| 증분 변환 (`incremental: by_unit/by_key`) | P1 | Gladius는 현재 매 실행 전체 재계산. 증분 처리 설계는 [07-cost-efficiency.md](07-cost-efficiency.md) "증분 처리 전략" 절에 이미 스펙 초안이 있다. |
-| dlt/dbt 인터롭 | P1 | `type: python` 탈출구(P0)가 dlt 래퍼의 기반 메커니즘이지만, `type: dlt` 소스와 `arsenal.yaml`의 `- dbt: ./project` 단계는 아직 없다 ([01-scope.md](01-scope.md) P1 표, ADR #6/#7 — `docs/plans/2026-07-12-draft-handoff.md`). |
-| S3/GCS sink | P1 | 현재 sink는 로컬 경로(parquet/duckdb) 또는 직접 연결(postgres)만. `Sink` 프로토콜은 경로 무관하게 설계돼 있어 DuckDB httpfs 차용으로 확장할 자리는 이미 있다. |
+| 스키마 드리프트 감지+정책 | P1 | `schema_drift`로 `allow`/`warn`/`block`을 선택한다. `warn`은 경고 후 최신 스냅샷을 기록하고, `block`은 해당 unit을 failed 처리해 적재를 막는다. 현재는 첫 non-empty batch의 필드명·타입·nullable 비교만 지원한다. |
+| 증분 변환 (`incremental: by_unit/by_key`) | P1 | 입력 파일 시그니처와 변환 스펙 해시를 SQLite에 기록한다. 신규 파일은 `by_unit`에서 append하고 `by_key`에서는 신규 결과가 기존 키를 덮어쓴다. 기존 파일 변경·삭제 또는 스펙 변경은 안전성을 위해 전체 재계산한다. `by_key`는 소스에서 삭제된 행을 추론하지 않는다. |
+| Python UDF step | P1 | `steps`의 `python`, `args`, `output`으로 `module:function`을 등록하고 SQL 호출로 컴파일한다. 실행 환경에는 `gladius[python]`(numpy)가 필요하며, 함수의 부작용·분산 실행·벡터화는 보장하지 않는다. |
+| `pugio status --cost` | P1 | 완료된 unit의 누적 행 수·바이트·처리 시간과 마지막 완료 시각을 보여준다. `--max-age-seconds`를 함께 주면 freshness 상태와 stale alert를 출력한다. 단가 환산·외부 알림 전송·분산 집계는 P2 범위다. |
+| lineage | P1 | Pugio run 시작 시 source type/ref와 sink type/ref를 상태 DB에 최신 edge로 기록한다. column-level lineage·알림·다중 파이프라인 graph 조회는 아직 없다. |
+| Onager small-file compaction/backfill | P1 | `onager compact`가 로컬 Parquet 디렉터리의 target 크기 미만 파일을 자동 선정하고 `--dry-run`, `--max-input-bytes`, JSONL 실행 로그를 제공한다. Scutum file lock의 bounded retry/backoff와 성공 전 원본 backup을 사용하며, `run_backfill`은 snapshot workspace에서 실행되고 explicit `promote_backfill` 전에는 활성 dataset을 바꾸지 않는다. S3/GCS URI는 지원하지 않는다. |
+| Spatha workflow | P1 | `Workflow`가 중복·미존재 dependency와 cycle을 검증하고, 준비 신호·실행 window·priority를 반영한 `ready_tasks`/`run_ready`와 task lock retry를 제공한다. 외부 신호 감시 데몬은 없다. |
+| Scutum data contract | P1 | `PipelineSpec.contract`가 `DataContract.check(RecordBatch)`와 연결되어 필드 존재·Arrow 타입·실제 null 값·추가 필드를 검사하고 block/quarantine/warn 정책을 적용한다. `FileLock`은 lock 충돌 retry/backoff를 제공한다. |
+| dlt/dbt 인터롭 | P1 | `type: dlt` 래퍼와 `arsenal.yaml`의 `- dbt: ./project` 단계가 optional extra로 제공된다. dlt는 소스 함수·리소스의 인증/페이지네이션을 사용하고, dbt 단계는 `dbt run`만 호출한다(`deps`/`test`/`build` orchestration은 아직 없음). |
+| S3/GCS sink | P1 | `sink.type: parquet`의 `s3://`, `gcs://`, `gs://` 경로를 DuckDB `httpfs`로 쓸 수 있다. unit ID 기반 결정적 객체 키로 멱등성을 보장하지만, 원격 객체 교체의 cross-provider 원자성은 보장하지 않는다. |
 
 ## sink별 멱등 보장 범위
 

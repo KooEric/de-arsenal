@@ -21,7 +21,7 @@ _ENV_PATTERN = re.compile(r"\$\{(\w+)\}")
 # 태그를 끼워 넣는다(예: ("source","rest","url")) — 사용자에게는 YAML 그대로의
 # 경로(source.url)가 더 읽기 쉽고, M1 에러 메시지와도 하위 호환된다.
 _UNION_TAGS: dict[str, frozenset[str]] = {
-    "source": frozenset({"rest", "file", "database", "python"}),
+    "source": frozenset({"rest", "file", "database", "python", "dlt"}),
     "sink": frozenset({"parquet", "duckdb", "postgres"}),
 }
 

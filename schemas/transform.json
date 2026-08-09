@@ -65,6 +65,90 @@
       "title": "FilterStep",
       "type": "object"
     },
+    "IncrementalSpec": {
+      "additionalProperties": false,
+      "description": "Incremental execution mode and optional upsert key.",
+      "properties": {
+        "mode": {
+          "enum": [
+            "by_unit",
+            "by_key"
+          ],
+          "title": "Mode",
+          "type": "string"
+        },
+        "key": {
+          "anyOf": [
+            {
+              "items": {
+                "type": "string"
+              },
+              "type": "array"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "Columns used to keep the newest transformed row in by_key mode.",
+          "title": "Key"
+        }
+      },
+      "required": [
+        "mode"
+      ],
+      "title": "IncrementalSpec",
+      "type": "object"
+    },
+    "PythonUdfStep": {
+      "additionalProperties": false,
+      "description": "Register a user function and append its result as a new column.",
+      "properties": {
+        "python": {
+          "title": "Python",
+          "type": "string"
+        },
+        "args": {
+          "items": {
+            "type": "string"
+          },
+          "minItems": 1,
+          "title": "Args",
+          "type": "array"
+        },
+        "output": {
+          "title": "Output",
+          "type": "string"
+        },
+        "arg_types": {
+          "anyOf": [
+            {
+              "items": {
+                "type": "string"
+              },
+              "type": "array"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Arg Types"
+        },
+        "return_type": {
+          "default": "VARCHAR",
+          "title": "Return Type",
+          "type": "string"
+        }
+      },
+      "required": [
+        "python",
+        "args",
+        "output"
+      ],
+      "title": "PythonUdfStep",
+      "type": "object"
+    },
     "RenameStep": {
       "additionalProperties": false,
       "properties": {
@@ -97,6 +181,21 @@
         "select"
       ],
       "title": "SelectStep",
+      "type": "object"
+    },
+    "SqlStep": {
+      "additionalProperties": false,
+      "description": "Raw SQL escape hatch; ``{input}`` is replaced with the previous CTE.",
+      "properties": {
+        "sql": {
+          "title": "Sql",
+          "type": "string"
+        }
+      },
+      "required": [
+        "sql"
+      ],
+      "title": "SqlStep",
       "type": "object"
     }
   },
@@ -146,11 +245,33 @@
           },
           {
             "$ref": "#/$defs/DeriveStep"
+          },
+          {
+            "$ref": "#/$defs/SqlStep"
+          },
+          {
+            "$ref": "#/$defs/PythonUdfStep"
           }
         ]
       },
       "title": "Steps",
       "type": "array"
+    },
+    "incremental": {
+      "anyOf": [
+        {
+          "$ref": "#/$defs/IncrementalSpec"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null
+    },
+    "state_dir": {
+      "default": ".gladius",
+      "title": "State Dir",
+      "type": "string"
     },
     "output": {
       "title": "Output",

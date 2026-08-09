@@ -178,7 +178,7 @@ def generate_artifacts() -> dict[Path, str]:
         title="Pipeline YAML Reference",
         intro=(
             "A pipeline YAML file declares one `PipelineSpec`: a name, a `source` "
-            "(discriminated by `type`: `rest` | `file` | `database` | `python`), a `sink` "
+            "(discriminated by `type`: `rest` | `file` | `database` | `python` | `dlt`), a `sink` "
             "(discriminated by `type`: `parquet` | `duckdb` | `postgres`), and an optional "
             "`validate` block. Every table below is generated from the corresponding "
             "Pydantic model's JSON Schema."
@@ -191,7 +191,8 @@ def generate_artifacts() -> dict[Path, str]:
         intro=(
             "A transform YAML file declares one `TransformSpec`: a name, an `input` and "
             "`output` Parquet path, an optional `map` of derived columns, and an ordered "
-            "list of `steps` (`filter` | `rename` | `cast` | `select` | `dedup` | `derive`). "
+            "list of `steps` (`filter` | `rename` | `cast` | `select` | `dedup` | `derive` | "
+            "`sql` | `python`). "
             "Every table below is generated from the corresponding Pydantic model's JSON "
             "Schema."
         ),

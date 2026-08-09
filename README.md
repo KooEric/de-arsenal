@@ -11,7 +11,7 @@ arsenal run                        # 수집→검증→변환. 끊겨도 재실�
 arsenal query "SELECT * FROM './data/clean/*.parquet' LIMIT 10"
 ```
 
-> **상태: v0.1.1 (P0) 코드 완성 · 태그 완료 · CI 전 플랫폼(Linux/macOS/Windows) 초록.** 수집(pugio)·변환(gladius)·우산 CLI(arsenal)가 모두 동작한다. PyPI 배포만 보류 중(`gladius` 이름 선점 해결 후) — 현재는 소스에서 바로 실행 가능하다.
+> **상태: v0.1.1 + P1 구현 진행분.** 수집·변환·우산 CLI와 P1의 dlt/dbt, schema drift, cloud sink, UDF, 관측성·오케스트레이션·백필·계약 패키지가 동작한다. PyPI 배포는 `gladius` 이름 선점 해결 후 진행한다.
 
 Databricks·Snowflake 수준의 **완성도**를, 그들과 정반대의 **형태**로. 거대 플랫폼이 백 가지를 80점으로 하는 동안, 우리는 한 가지를 100점으로. 신뢰성(멱등·재개·검증)이 기본값이고, 마진 없는 비용 구조([docs/07](docs/07-cost-efficiency.md))가 아키텍처에서 나온다.
 
@@ -24,10 +24,10 @@ Databricks·Snowflake 수준의 **완성도**를, 그들과 정반대의 **형�
 | **Arsenal** (우산 CLI) | 단일 진입점 — init/run/query, 원클릭 레시피 3종 | P0 (M4) | ✅ v0.1.1 |
 | **Pugio** | 수집·전송 (ETL 엔진) | P0 | ✅ v0.1.1 |
 | **Gladius** | 변환·쿼리 (핵심 처리) | P0 | ✅ v0.1.1 |
-| **Spatha** | 오케스트레이션 (의존성·스케줄링) | P0(멱등 코어)/P1 | ✅ 멱등 재실행(코어) · 📋 DAG P1 |
-| **Scutum** | 데이터 품질·검증·보호 | P0(멱등 가드)/P1 | ✅ 코어 내장 (검증 게이트·DLQ·멱등) |
-| **Scorpio** | 관측성 (모니터링·lineage) | P1 | 📋 계획 (스키마 스냅샷 기록은 코어에) |
-| **Onager** | 백필·대규모 재처리 | P1 | 📋 계획 |
+| **Spatha** | 오케스트레이션 (의존성·스케줄링) | P0(멱등 코어)/P1 | ✅ signal DAG · priority · window · lock |
+| **Scutum** | 데이터 품질·검증·보호 | P0(멱등 가드)/P1 | ✅ contract · DLQ 정책 · lock retry/backoff |
+| **Scorpio** | 관측성 (모니터링·lineage) | P1 | ✅ lineage · freshness alert · cost 요약 |
+| **Onager** | 백필·대규모 재처리 | P1 | ✅ isolated backfill · small-file compaction |
 | **Hasta** | 스트리밍·CDC | P2 | 📋 계획 |
 | **Pilum** | 디스패치·reverse ETL | P2 | 📋 계획 |
 | **Ballista** | 대규모 분산 처리 | P2 | 📋 계획 |
@@ -72,6 +72,7 @@ uv sync
 export GITHUB_TOKEN=ghp_...
 uv run pugio run examples/github-issues.yaml
 uv run pugio status examples/github-issues.yaml   # unit 상태 요약 (done/pending/failed/quarantined)
+uv run pugio status examples/github-issues.yaml --cost --max-age-seconds 86400
 
 # 2) 변환 (gladius) — 선언형 map/steps가 SQL로 컴파일되어 DuckDB에서 실행
 uv run gladius compile examples/transform.yaml    # 생성될 SQL을 그대로 확인 (마법 없음)

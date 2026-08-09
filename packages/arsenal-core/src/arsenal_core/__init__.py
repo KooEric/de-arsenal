@@ -5,3 +5,6 @@
 """
 
 __version__ = "0.1.1"
+from arsenal_core.schema import SchemaChange, SchemaDiff, compare_schema_snapshots
+
+__all__ = ["SchemaChange", "SchemaDiff", "compare_schema_snapshots"]

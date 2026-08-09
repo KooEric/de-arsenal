@@ -62,3 +62,120 @@ def test_output_still_accepts_path_object() -> None:
         {"name": "m", "input": "./in", "output": Path("./out"), "map": {"a": "b"}}
     )
     assert spec.output == "out"
+
+
+def test_sql_escape_hatch_requires_input_placeholder() -> None:
+    spec = TransformSpec.model_validate(
+        {
+            "name": "sql",
+            "input": "./in",
+            "output": "./out",
+            "steps": [{"sql": "SELECT * FROM {input} WHERE amount > 10"}],
+        }
+    )
+    assert spec.steps[0].sql == "SELECT * FROM {input} WHERE amount > 10"  # type: ignore[union-attr]
+
+
+def test_sql_escape_hatch_rejects_unsafe_shape() -> None:
+    with pytest.raises(ValidationError, match="exactly one"):
+        TransformSpec.model_validate(
+            {
+                "name": "sql",
+                "input": "./in",
+                "output": "./out",
+                "steps": [{"sql": "SELECT * FROM input"}],
+            }
+        )
+
+
+def test_python_udf_step_validates_target_and_types() -> None:
+    spec = TransformSpec.model_validate(
+        {
+            "name": "udf",
+            "input": "./in",
+            "output": "./out",
+            "steps": [
+                {
+                    "python": "my_transforms:slugify",
+                    "args": ["title"],
+                    "arg_types": ["VARCHAR"],
+                    "output": "slug",
+                    "return_type": "VARCHAR",
+                }
+            ],
+        }
+    )
+    assert spec.steps[0].python == "my_transforms:slugify"  # type: ignore[union-attr]
+
+    with pytest.raises(ValidationError, match="module:function"):
+        TransformSpec.model_validate(
+            {
+                "name": "udf",
+                "input": "./in",
+                "output": "./out",
+                "steps": [{"python": "my_transforms.slugify", "args": ["title"], "output": "slug"}],
+            }
+        )
+
+    with pytest.raises(ValidationError, match="arg_types"):
+        TransformSpec.model_validate(
+            {
+                "name": "udf",
+                "input": "./in",
+                "output": "./out",
+                "steps": [
+                    {
+                        "python": "my_transforms:slugify",
+                        "args": ["title", "language"],
+                        "arg_types": ["VARCHAR"],
+                        "output": "slug",
+                    }
+                ],
+            }
+        )
+    with pytest.raises(ValidationError, match="without"):
+        TransformSpec.model_validate(
+            {
+                "name": "sql",
+                "input": "./in",
+                "output": "./out",
+                "steps": [{"sql": "SELECT * FROM {input}; DROP TABLE x"}],
+            }
+        )
+
+
+def test_incremental_modes_and_key_validation() -> None:
+    by_unit = TransformSpec.model_validate(
+        {
+            "name": "inc",
+            "input": "./in",
+            "output": "./out",
+            "incremental": {"mode": "by_unit"},
+            "steps": [{"select": ["id"]}],
+        }
+    )
+    assert by_unit.incremental is not None
+    assert by_unit.incremental.mode == "by_unit"
+
+    by_key = TransformSpec.model_validate(
+        {
+            "name": "inc",
+            "input": "./in",
+            "output": "./out",
+            "incremental": {"mode": "by_key", "key": ["id"]},
+            "steps": [{"select": ["id"]}],
+        }
+    )
+    assert by_key.incremental is not None
+    assert by_key.incremental.key == ["id"]
+
+    with pytest.raises(ValidationError, match="requires"):
+        TransformSpec.model_validate(
+            {
+                "name": "inc",
+                "input": "./in",
+                "output": "./out",
+                "incremental": {"mode": "by_key"},
+                "steps": [{"select": ["id"]}],
+            }
+        )

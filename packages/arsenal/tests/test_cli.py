@@ -21,6 +21,13 @@ transforms:
   - transform.yaml
 """
 
+DBT_MANIFEST = """\
+name: my-project
+pipelines: []
+transforms:
+  - dbt: ./dbt_project
+"""
+
 
 def test_manifest_parses_and_paths_resolve_relative_to_file(tmp_path: Path) -> None:
     (tmp_path / "arsenal.yaml").write_text(MANIFEST, encoding="utf-8")
@@ -28,6 +35,13 @@ def test_manifest_parses_and_paths_resolve_relative_to_file(tmp_path: Path) -> N
     assert proj.name == "my-project"
     assert proj.pipelines[0] == tmp_path / "collect.yaml"
     assert proj.transforms[0] == tmp_path / "transform.yaml"
+
+
+def test_manifest_resolves_dbt_project_reference(tmp_path: Path) -> None:
+    (tmp_path / "arsenal.yaml").write_text(DBT_MANIFEST, encoding="utf-8")
+    proj = load_project(tmp_path / "arsenal.yaml")
+    assert len(proj.transforms) == 1
+    assert proj.transforms[0].dbt == tmp_path / "dbt_project"  # type: ignore[union-attr]
 
 
 def test_load_project_missing_manifest_raises_fatal_error(tmp_path: Path) -> None:
@@ -64,6 +78,22 @@ def test_run_executes_pipelines_then_transforms(
     result = runner.invoke(app, ["run", "--project", str(tmp_path)])
     assert result.exit_code == 0, result.output
     assert calls == ["collect:collect.yaml", "transform:transform.yaml"]
+
+
+def test_run_executes_dbt_reference_after_pipelines(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    (tmp_path / "arsenal.yaml").write_text(DBT_MANIFEST, encoding="utf-8")
+    (tmp_path / "dbt_project").mkdir()
+    calls: list[str] = []
+
+    def fake_run_dbt(path: Path) -> None:
+        calls.append(path.name)
+
+    monkeypatch.setattr("arsenal.cli._run_dbt", fake_run_dbt)
+    result = runner.invoke(app, ["run", "--project", str(tmp_path)])
+    assert result.exit_code == 0, result.output
+    assert calls == ["dbt_project"]
 
 
 def test_run_bad_manifest_exits_with_clean_error(tmp_path: Path) -> None:

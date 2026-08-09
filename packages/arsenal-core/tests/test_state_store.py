@@ -59,6 +59,39 @@ def test_mark_done_records_unit_metrics(tmp_path: Path) -> None:
     assert (m.row_count, m.byte_count, m.duration_ms) == (100, 2048, 350)
 
 
+def test_pipeline_metrics_aggregate_completed_units(tmp_path: Path) -> None:
+    store = StateStore(tmp_path / "state.db")
+    first, second = make_unit("offset=0"), make_unit("offset=100")
+    store.register(first)
+    store.register(second)
+    store.mark_done(first.unit_id, row_count=100, byte_count=2048, duration_ms=350)
+    store.mark_done(second.unit_id, row_count=25, byte_count=512, duration_ms=75)
+
+    metrics = store.pipeline_metrics("p")
+
+    assert metrics.completed_units == 2
+    assert (metrics.row_count, metrics.byte_count, metrics.duration_ms) == (125, 2560, 425)
+    assert metrics.last_completed_at is not None
+
+
+def test_lineage_is_upserted_and_survives_reopen(tmp_path: Path) -> None:
+    db = tmp_path / "state.db"
+    store = StateStore(db)
+    store.record_lineage(
+        "p",
+        source_type="rest",
+        source_ref="https://api.test/items",
+        sink_type="parquet",
+        sink_ref="out",
+    )
+    store.close()
+
+    reopened = StateStore(db)
+    lineage = reopened.lineage("p")
+    assert lineage is not None
+    assert (lineage.source_type, lineage.source_ref) == ("rest", "https://api.test/items")
+
+
 def test_mark_done_and_advance_cursor_atomic(tmp_path: Path) -> None:
     """M2 최종 리뷰 FIX 1: done 마킹과 커서 전진이 한 커밋으로 묶여야 한다 —
     별개 트랜잭션이면 그 사이 크래시 시 unit은 done인데 커서는 스테일 상태로

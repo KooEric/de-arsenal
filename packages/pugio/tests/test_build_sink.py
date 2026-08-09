@@ -5,7 +5,13 @@ import pytest
 
 from arsenal_core.errors import FatalError
 from arsenal_core.spec.models import DuckDBSinkSpec, ParquetSinkSpec, PostgresSinkSpec
-from pugio.sinks import DuckDBSink, ParquetSink, PostgresSink, build_sink
+from pugio.sinks import (
+    DuckDBSink,
+    ObjectStorageParquetSink,
+    ParquetSink,
+    PostgresSink,
+    build_sink,
+)
 
 
 def test_build_sink_returns_parquet(tmp_path: Path) -> None:
@@ -20,6 +26,14 @@ def test_build_sink_returns_duckdb(tmp_path: Path) -> None:
     )
     sink = build_sink(spec)
     assert isinstance(sink, DuckDBSink)
+
+
+@pytest.mark.parametrize(
+    "path", ["s3://bucket/prefix", "gcs://bucket/prefix", "gs://bucket/prefix"]
+)
+def test_build_sink_returns_object_storage_parquet(path: str) -> None:
+    sink = build_sink(ParquetSinkSpec(type="parquet", path=path))
+    assert isinstance(sink, ObjectStorageParquetSink)
 
 
 def test_build_sink_returns_postgres() -> None:

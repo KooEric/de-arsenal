@@ -1,7 +1,7 @@
 """파이프라인 YAML의 Pydantic 모델. 선언이 인터페이스다 — extra는 거부.
 
 YAML 전체 형태: docs/02-architecture.md "파이프라인 YAML 스펙"
-SourceSpec은 discriminated union(rest/file/database/python)이다. 기존 이름
+SourceSpec은 discriminated union(rest/file/database/python/dlt)이다. 기존 이름
 `SourceSpec`은 union 별칭으로 유지해 M1 코드의 import가 깨지지 않게 한다 — 단,
 `SourceSpec(type="rest", ...)` 같은 직접 생성자 호출은 더 이상 불가하다
 (Annotated[Union[...], ...]는 호출 불가). REST 소스를 직접 만들 때는
@@ -124,8 +124,18 @@ class PythonSourceSpec(_Frozen):
     options: dict[str, Any] = {}  # 생성자 첫 인자로 전달
 
 
+class DltSourceSpec(_Frozen):
+    """Optional dlt source adapter (target is a user-owned source function)."""
+
+    type: Literal["dlt"]
+    target: str  # "package.module:source_function"
+    options: dict[str, Any] = {}
+    resources: list[str] | None = None
+    batch_size: int = Field(default=10_000, gt=0)
+
+
 SourceSpec = Annotated[
-    RestSourceSpec | FileSourceSpec | DatabaseSourceSpec | PythonSourceSpec,
+    RestSourceSpec | FileSourceSpec | DatabaseSourceSpec | PythonSourceSpec | DltSourceSpec,
     Field(discriminator="type"),
 ]
 
@@ -200,6 +210,18 @@ class ValidateSpec(_Frozen):
     on_violation: Literal["block", "quarantine", "warn"] = "quarantine"
 
 
+class ContractColumnSpec(_Frozen):
+    name: str
+    type: str = Field(description="Arrow type string, for example int64 or string")
+    nullable: bool = True
+
+
+class ContractSpec(_Frozen):
+    columns: list[ContractColumnSpec] = Field(min_length=1)
+    allow_extra: bool = False
+    on_violation: Literal["block", "quarantine", "warn"] = "block"
+
+
 class PipelineSpec(_Frozen):
     model_config = ConfigDict(frozen=True, extra="forbid", populate_by_name=True)
 
@@ -212,6 +234,11 @@ class PipelineSpec(_Frozen):
     source: SourceSpec
     sink: SinkSpec
     validation: ValidateSpec | None = Field(default=None, alias="validate")
+    contract: ContractSpec | None = None
+    schema_drift: Literal["allow", "warn", "block"] = Field(
+        default="allow",
+        description="Policy when the observed source schema differs from the last snapshot.",
+    )
 
     @field_validator("state_dir", mode="before")
     @classmethod

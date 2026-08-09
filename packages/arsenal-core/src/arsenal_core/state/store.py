@@ -45,6 +45,14 @@ CREATE TABLE IF NOT EXISTS schema_snapshots (
     captured_at TEXT NOT NULL,
     schema_json TEXT NOT NULL
 );
+CREATE TABLE IF NOT EXISTS lineage (
+    pipeline    TEXT PRIMARY KEY,
+    source_type TEXT NOT NULL,
+    source_ref  TEXT NOT NULL,
+    sink_type   TEXT NOT NULL,
+    sink_ref    TEXT NOT NULL,
+    updated_at  TEXT NOT NULL
+);
 """
 
 
@@ -87,6 +95,27 @@ class UnitMetrics:
     row_count: int | None
     byte_count: int | None
     duration_ms: int | None
+
+
+@dataclass(frozen=True)
+class PipelineMetrics:
+    """Cumulative completed-unit metrics used by Scorpio/status reporting."""
+
+    completed_units: int
+    row_count: int
+    byte_count: int
+    duration_ms: int
+    last_completed_at: str | None
+
+
+@dataclass(frozen=True)
+class LineageRecord:
+    pipeline: str
+    source_type: str
+    source_ref: str
+    sink_type: str
+    sink_ref: str
+    updated_at: str
 
 
 class StateStore:
@@ -281,6 +310,53 @@ class StateStore:
             "SELECT status, count(*) FROM units WHERE pipeline=? GROUP BY status", (pipeline,)
         ).fetchall()
         return dict(rows)
+
+    def pipeline_metrics(self, pipeline: str) -> PipelineMetrics:
+        """Return cumulative rows/bytes/time and freshness for completed units."""
+        row = self._conn.execute(
+            "SELECT count(*), COALESCE(sum(row_count), 0), COALESCE(sum(byte_count), 0), "
+            "COALESCE(sum(duration_ms), 0), max(updated_at) FROM units "
+            "WHERE pipeline=? AND status='done'",
+            (pipeline,),
+        ).fetchone()
+        if row is None:  # pragma: no cover - aggregate queries always return one row
+            return PipelineMetrics(0, 0, 0, 0, None)
+        return PipelineMetrics(
+            completed_units=int(row[0]),
+            row_count=int(row[1]),
+            byte_count=int(row[2]),
+            duration_ms=int(row[3]),
+            last_completed_at=row[4],
+        )
+
+    def record_lineage(
+        self,
+        pipeline: str,
+        *,
+        source_type: str,
+        source_ref: str,
+        sink_type: str,
+        sink_ref: str,
+    ) -> None:
+        """Upsert the latest source-to-sink edge observed by a pipeline run."""
+        self._conn.execute(
+            "INSERT INTO lineage "
+            "(pipeline, source_type, source_ref, sink_type, sink_ref, updated_at) "
+            "VALUES (?, ?, ?, ?, ?, ?) "
+            "ON CONFLICT(pipeline) DO UPDATE SET source_type=excluded.source_type, "
+            "source_ref=excluded.source_ref, sink_type=excluded.sink_type, "
+            "sink_ref=excluded.sink_ref, updated_at=excluded.updated_at",
+            (pipeline, source_type, source_ref, sink_type, sink_ref, _now()),
+        )
+        self._conn.commit()
+
+    def lineage(self, pipeline: str) -> LineageRecord | None:
+        row = self._conn.execute(
+            "SELECT pipeline, source_type, source_ref, sink_type, sink_ref, updated_at "
+            "FROM lineage WHERE pipeline=?",
+            (pipeline,),
+        ).fetchone()
+        return LineageRecord(*row) if row else None
 
     def close(self) -> None:
         self._conn.close()

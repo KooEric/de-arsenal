@@ -4,18 +4,20 @@
 """
 
 import contextlib
+import importlib
 import json
 import os
 import sys
 from collections.abc import Generator
 from importlib import resources
 from pathlib import Path
+from typing import Any
 
 import duckdb
 import pyarrow.csv as pa_csv
 import typer
 
-from arsenal.project import load_project
+from arsenal.project import DbtProjectRef, load_project
 from arsenal_core.errors import ArsenalError, FatalError
 from arsenal_core.spec import load_pipeline
 from gladius import engine as gladius_engine
@@ -112,6 +114,25 @@ def _run_transform(path: Path) -> None:
     typer.echo(f"  transform {path.name}: {out}")
 
 
+def _run_dbt(path: Path) -> None:
+    """Run a dbt-duckdb project through dbt's in-process CLI API."""
+    if not path.is_dir():
+        raise FatalError(f"dbt project not found: {path}")
+    try:
+        dbt_main: Any = importlib.import_module("dbt.cli.main")
+        dbt_runner: Any = dbt_main.dbtRunner
+    except (ImportError, AttributeError) as e:
+        raise FatalError("dbt stage requires the 'dbt' extra: pip install de-arsenal[dbt]") from e
+    try:
+        result: Any = dbt_runner().invoke(["run", "--project-dir", str(path)])
+    except Exception as e:
+        raise FatalError(f"dbt run failed for {path}: {e}") from e
+    if not result.success:
+        detail = str(getattr(result, "exception", "unknown dbt error"))
+        raise FatalError(f"dbt run failed for {path}: {detail}")
+    typer.echo(f"  dbt {path}: run succeeded")
+
+
 @app.command()
 def run(project: Path = Path(".")) -> None:
     """arsenal.yaml 순서대로 수집→변환 일괄 실행. 재실행 = 재개."""
@@ -121,8 +142,11 @@ def run(project: Path = Path(".")) -> None:
         with _chdir(proj_dir):
             for pipeline_path in proj.pipelines:
                 _run_pipeline(pipeline_path)
-            for transform_path in proj.transforms:
-                _run_transform(transform_path)
+            for transform in proj.transforms:
+                if isinstance(transform, DbtProjectRef):
+                    _run_dbt(transform.dbt)
+                else:
+                    _run_transform(transform)
     except ArsenalError as e:
         raise _fatal(e) from e
     typer.echo(f"done: {len(proj.pipelines)} pipeline(s), {len(proj.transforms)} transform(s)")

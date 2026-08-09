@@ -9,7 +9,8 @@
 uv build --all-packages
 ```
 
-4개 패키지(`arsenal-core`, `pugio`, `gladius`, `de-arsenal`) 전부 sdist+wheel
+8개 패키지(`arsenal-core`, `pugio`, `gladius`, `de-arsenal`, `scorpio`, `scutum`,
+`spatha`, `onager`) 전부 sdist+wheel
 생성 성공. wheel 메타데이터에 `License-Expression: Apache-2.0`, Python 3.11/3.12
 분류자, `License :: OSI Approved :: Apache Software License` 분류자,
 `Project-URL: Homepage`/`Repository`(→ `https://github.com/KooEric/de-arsenal`)가
@@ -21,15 +22,15 @@ uv build --all-packages
 없는 이름을 가리키므로, `uv sync`/`uv pip install -e`류로는 "진짜 배포된 것처럼"
 검증할 수 없다. 대신:
 
-1. `uv build --all-packages`로 4개 wheel을 만든다.
+1. `uv build --all-packages`로 8개 wheel을 만든다.
 2. `uv venv`로 완전히 새 가상환경을 만든다(이 저장소 밖, 스크래치 디렉터리).
-3. `uv pip install <4개 wheel 경로를 동시에>`로 설치 — 이러면 pip가 로컬 파일
-   4개를 후보로 각 패키지의 `Requires-Dist`(`arsenal-core>=0.1,<0.2` 등)를
+3. `uv pip install <필요한 wheel 경로를 동시에>`로 설치 — 이러면 pip가 로컬 파일을
+   후보로 각 패키지의 `Requires-Dist`(`arsenal-core>=0.1,<0.2` 등)를
    실제 의존성 리졸버로 풀고, PyPI에서 나머지(`pydantic`, `duckdb`, `httpx`,
    `pyarrow`, `typer` 등)를 내려받는다 — editable/workspace 지름길이 전혀 없다.
 4. `arsenal --help` / `pugio --help` / `gladius --help` 각각 실행.
 
-**결과**: 4개 wheel 설치 성공(26개 패키지, PyPI에서 실제 다운로드). 세 CLI 모두
+**기존 결과**: 핵심 4개 wheel 설치 성공(26개 패키지, PyPI에서 실제 다운로드). 세 CLI 모두
 `--help` 정상 출력, exit code 0.
 
 **검증 중 발견하고 고친 버그**: `pugio/sinks/__init__.py`가 최상단에서
@@ -94,9 +95,11 @@ curl -s -o /dev/null -w "%{http_code}" https://pypi.org/pypi/<name>/json
 ## LICENSE / README
 
 - 루트 `LICENSE`: Apache License 2.0 전문, 신규 생성(`Copyright 2026 KooEric`).
-- 4개 패키지 `pyproject.toml`에 `license = "Apache-2.0"`(SPDX 표현식, PEP 639)
+- 핵심 4개 패키지 `pyproject.toml`에 `license = "Apache-2.0"`(SPDX 표현식, PEP 639)
   + 표준 classifiers + `project.urls`(Homepage/Repository) 추가.
-- 4개 패키지 각각 `README.md` 신규 작성(무엇인지 1문단 + 사용 예 1개 + 문서 링크).
+- 핵심 4개 패키지 각각 `README.md` 신규 작성(무엇인지 1문단 + 사용 예 1개 + 문서 링크).
+- P1 패키지(`onager`, `scorpio`, `scutum`, `spatha`)도 `uv build --all-packages`와
+  개별 README를 갖춘다. clean-venv 설치 스모크는 이 8개 wheel 조합으로 별도 재실행해야 한다.
 
 ## 로컬에서 끝낼 수 없는 것 (사용자 인프라/판단 필요)
 

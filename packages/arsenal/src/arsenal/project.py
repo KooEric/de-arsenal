@@ -12,12 +12,18 @@ from pydantic import BaseModel, ConfigDict, ValidationError
 from arsenal_core.errors import FatalError
 
 
+class DbtProjectRef(BaseModel):
+    model_config = ConfigDict(frozen=True, extra="forbid")
+
+    dbt: Path
+
+
 class ArsenalProject(BaseModel):
     model_config = ConfigDict(frozen=True, extra="forbid")
 
     name: str
     pipelines: list[Path] = []  # pugio 스펙들 — 순서대로 실행
-    transforms: list[Path] = []  # gladius 스펙들 — pipelines 완료 후 순서대로
+    transforms: list[Path | DbtProjectRef] = []  # gladius/dbt 단계 — 순서대로
 
 
 def load_project(manifest_path: Path) -> ArsenalProject:
@@ -48,8 +54,15 @@ def load_project(manifest_path: Path) -> ArsenalProject:
     if not base.is_absolute():
         base = base.absolute()
 
+    transforms: list[Path | DbtProjectRef] = []
+    for transform in parsed.transforms:
+        if isinstance(transform, Path):
+            transforms.append(base / transform)
+        else:
+            transforms.append(DbtProjectRef(dbt=base / transform.dbt))
+
     return ArsenalProject(
         name=parsed.name,
         pipelines=[base / p for p in parsed.pipelines],
-        transforms=[base / t for t in parsed.transforms],
+        transforms=transforms,
     )
