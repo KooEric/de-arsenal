@@ -15,23 +15,27 @@ import time
 from collections.abc import Callable
 from dataclasses import dataclass
 from pathlib import Path
+from typing import Any, Protocol
 
 import httpx
 import pyarrow as pa
+from scutum import ContractColumn, DataContract
 
 from arsenal_core.errors import AuthExpiredError, FatalError
 from arsenal_core.retry import DEFAULT_MAX_ATTEMPTS, with_retry
-from arsenal_core.spec.models import PipelineSpec
+from arsenal_core.schema import compare_schema_snapshots
+from arsenal_core.spec.models import ContractSpec, PipelineSpec
 from arsenal_core.state import SOURCE_EXHAUSTED, StateStore, UnitSpec
 from pugio.auth import AuthProvider, build_auth
 from pugio.dlq import write_dlq
 from pugio.sinks import build_sink
 from pugio.sources.base import FetchResult, Source
 from pugio.sources.database import DatabaseSource
+from pugio.sources.dlt import load_dlt_source
 from pugio.sources.file import FileSource
 from pugio.sources.python_source import load_python_source
 from pugio.sources.rest import RestSource
-from pugio.validate.gate import check
+from pugio.validate.gate import Violation, check
 
 logger = logging.getLogger("pugio.runner")
 
@@ -47,7 +51,7 @@ class RunReport:
 def _schema_json(batch: pa.RecordBatch) -> str:
     """batch 스키마를 결정적 JSON으로 직렬화 (필드 순서 = 스키마 필드 순서).
 
-    schema_snapshots 기록용 (M2-G) — 탐지/정책은 P1, 여기는 기록만 한다.
+    schema_snapshots 기록용. 이전 스냅샷과 비교해 P1 드리프트 정책도 적용한다.
     """
     return json.dumps(
         [{"name": f.name, "type": str(f.type), "nullable": f.nullable} for f in batch.schema]
@@ -58,6 +62,33 @@ def _fetch_with_retry(source: Source, unit: UnitSpec, max_attempts: int) -> Fetc
     """with_retry(source.fetch(unit)) 래퍼 — 루프 안 클로저(B023 loop-variable 함정)를
     피하려고 top-level 함수로 뺐다."""
     return with_retry(functools.partial(source.fetch, unit), max_attempts=max_attempts)
+
+
+class _ModelDumpable(Protocol):
+    def model_dump(self) -> dict[str, Any]: ...
+
+
+def _lineage_ref(model: _ModelDumpable) -> tuple[str, str]:
+    """Extract a stable human-readable reference from a source or sink spec."""
+    data = model.model_dump()
+    kind = str(data["type"])
+    for field in ("url", "path", "table", "target"):
+        if field in data:
+            return kind, str(data[field])
+    return kind, kind
+
+
+def _build_contract(spec: ContractSpec | None, name: str) -> DataContract | None:
+    if spec is None:
+        return None
+    return DataContract(
+        name=name,
+        columns=[
+            ContractColumn(name=column.name, type=column.type, nullable=column.nullable)
+            for column in spec.columns
+        ],
+        allow_extra=spec.allow_extra,
+    )
 
 
 def _build_source(spec: PipelineSpec, store: StateStore) -> tuple[Source, AuthProvider | None]:
@@ -99,6 +130,8 @@ def _build_source(spec: PipelineSpec, store: StateStore) -> tuple[Source, AuthPr
         return DatabaseSource(src, pipeline=spec.name), None
     if src.type == "python":
         return load_python_source(src, pipeline=spec.name), None
+    if src.type == "dlt":
+        return load_dlt_source(src, pipeline=spec.name), None
     raise FatalError(f"unknown source type: {src.type}")  # pragma: no cover
 
 
@@ -132,6 +165,16 @@ def run_pipeline(
     # SinkSpec은 discriminated union(parquet/duckdb/postgres, M2-A) — build_sink가
     # spec.type으로 알맞은 구현체를 만든다 (M2-F).
     sink = build_sink(spec.sink)
+    source_type, source_ref = _lineage_ref(spec.source)
+    sink_type, sink_ref = _lineage_ref(spec.sink)
+    store.record_lineage(
+        spec.name,
+        source_type=source_type,
+        source_ref=source_ref,
+        sink_type=sink_type,
+        sink_ref=sink_ref,
+    )
+    contract = _build_contract(spec.contract, spec.name)
     fetched = written = skipped = done_count = quarantined = 0
     schema_recorded = False  # 이번 run에서 스냅샷 기록 여부 (첫 non-empty batch에서 한 번만)
 
@@ -150,8 +193,46 @@ def run_pipeline(
                 raise
             fetched += 1
             if not schema_recorded and result.batch is not None:
-                store.snapshot_schema(spec.name, _schema_json(result.batch))
+                schema_json = _schema_json(result.batch)
+                previous_schema = store.last_schema(spec.name)
+                if previous_schema is not None:
+                    drift = compare_schema_snapshots(previous_schema, schema_json)
+                    if drift.has_changes:
+                        message = f"schema drift for pipeline {spec.name!r}: {drift.summary()}"
+                        if spec.schema_drift == "block":
+                            store.mark_failed(unit.unit_id, message)
+                            raise FatalError(message)
+                        if spec.schema_drift == "warn":
+                            logger.warning(message)
+                store.snapshot_schema(spec.name, schema_json)
                 schema_recorded = True
+            if contract is not None and result.batch is not None:
+                contract_report = contract.check(result.batch)
+                if not contract_report.ok:
+                    violations = [
+                        Violation("contract", violation.field, 1)
+                        for violation in contract_report.violations
+                    ]
+                    policy = spec.contract.on_violation if spec.contract is not None else "block"
+                    if policy == "block":
+                        message = f"contract failed for unit {unit.unit_key}: {violations}"
+                        store.mark_failed(unit.unit_id, message)
+                        raise FatalError(message)
+                    if policy == "warn":
+                        logger.warning(
+                            "contract violations in unit %s: %s", unit.unit_key, violations
+                        )
+                    if policy == "quarantine":
+                        write_dlq(spec.state_dir, spec.name, unit, result.batch, violations)
+                        reason = "; ".join(
+                            f"{violation.rule}:{violation.field}={violation.count}"
+                            for violation in violations
+                        )
+                        store.mark_quarantined(unit.unit_id, reason)
+                        quarantined += 1
+                        if result.exhausted:
+                            break
+                        continue
             if spec.validation is not None and result.batch is not None:
                 report = check(result.batch, spec.validation.rules)
                 if not report.ok:

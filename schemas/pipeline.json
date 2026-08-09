@@ -72,6 +72,64 @@
       "title": "AuthSpec",
       "type": "object"
     },
+    "ContractColumnSpec": {
+      "additionalProperties": false,
+      "properties": {
+        "name": {
+          "title": "Name",
+          "type": "string"
+        },
+        "type": {
+          "description": "Arrow type string, for example int64 or string",
+          "title": "Type",
+          "type": "string"
+        },
+        "nullable": {
+          "default": true,
+          "title": "Nullable",
+          "type": "boolean"
+        }
+      },
+      "required": [
+        "name",
+        "type"
+      ],
+      "title": "ContractColumnSpec",
+      "type": "object"
+    },
+    "ContractSpec": {
+      "additionalProperties": false,
+      "properties": {
+        "columns": {
+          "items": {
+            "$ref": "#/$defs/ContractColumnSpec"
+          },
+          "minItems": 1,
+          "title": "Columns",
+          "type": "array"
+        },
+        "allow_extra": {
+          "default": false,
+          "title": "Allow Extra",
+          "type": "boolean"
+        },
+        "on_violation": {
+          "default": "block",
+          "enum": [
+            "block",
+            "quarantine",
+            "warn"
+          ],
+          "title": "On Violation",
+          "type": "string"
+        }
+      },
+      "required": [
+        "columns"
+      ],
+      "title": "ContractSpec",
+      "type": "object"
+    },
     "DatabaseSourceSpec": {
       "additionalProperties": false,
       "description": "\uc6b4\uc601 DB \uc18c\uc2a4 (M2 Task 2.12 / M2-G).\n\ndialect=\"sqlite\"\ub294 Python \ud45c\uc900 sqlite3 \ub4dc\ub77c\uc774\ubc84. dialect=\"postgres\"/\"mysql\"\uc740\nDuckDB scanner(ATTACH, docs/09 \uc218 1)\ub85c \uad6c\ud604\ub41c\ub2e4.",
@@ -110,6 +168,54 @@
         "split"
       ],
       "title": "DatabaseSourceSpec",
+      "type": "object"
+    },
+    "DltSourceSpec": {
+      "additionalProperties": false,
+      "description": "Optional dlt source adapter (target is a user-owned source function).",
+      "properties": {
+        "type": {
+          "const": "dlt",
+          "title": "Type",
+          "type": "string"
+        },
+        "target": {
+          "title": "Target",
+          "type": "string"
+        },
+        "options": {
+          "additionalProperties": true,
+          "default": {},
+          "title": "Options",
+          "type": "object"
+        },
+        "resources": {
+          "anyOf": [
+            {
+              "items": {
+                "type": "string"
+              },
+              "type": "array"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Resources"
+        },
+        "batch_size": {
+          "default": 10000,
+          "exclusiveMinimum": 0,
+          "title": "Batch Size",
+          "type": "integer"
+        }
+      },
+      "required": [
+        "type",
+        "target"
+      ],
+      "title": "DltSourceSpec",
       "type": "object"
     },
     "DuckDBSinkSpec": {
@@ -548,6 +654,7 @@
       "discriminator": {
         "mapping": {
           "database": "#/$defs/DatabaseSourceSpec",
+          "dlt": "#/$defs/DltSourceSpec",
           "file": "#/$defs/FileSourceSpec",
           "python": "#/$defs/PythonSourceSpec",
           "rest": "#/$defs/RestSourceSpec"
@@ -566,6 +673,9 @@
         },
         {
           "$ref": "#/$defs/PythonSourceSpec"
+        },
+        {
+          "$ref": "#/$defs/DltSourceSpec"
         }
       ],
       "title": "Source"
@@ -602,6 +712,28 @@
         }
       ],
       "default": null
+    },
+    "contract": {
+      "anyOf": [
+        {
+          "$ref": "#/$defs/ContractSpec"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null
+    },
+    "schema_drift": {
+      "default": "allow",
+      "description": "Policy when the observed source schema differs from the last snapshot.",
+      "enum": [
+        "allow",
+        "warn",
+        "block"
+      ],
+      "title": "Schema Drift",
+      "type": "string"
     }
   },
   "required": [

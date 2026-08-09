@@ -16,24 +16,29 @@ select step은 CTE가 아니라 최종 SELECT로 처리한다. 마지막 위치�
 집합 위에서 동작하게 한다.
 """
 
+from collections.abc import Sequence
+from pathlib import Path
+
 from gladius.compile.ident import normalize_type, quote_ident, quote_str_literal
 from gladius.spec import (
     CastStep,
     DedupStep,
     DeriveStep,
     FilterStep,
+    PythonUdfStep,
     RenameStep,
     SelectStep,
+    SqlStep,
     Step,
     TransformSpec,
 )
+from gladius.udf import udf_name
 
 
-def compile_sql(spec: TransformSpec) -> str:
+def compile_sql(spec: TransformSpec, input_files: Sequence[Path] | None = None) -> str:
     """TransformSpec을 실행 가능한 DuckDB SQL 문자열로 컴파일한다."""
-    src = str(spec.input).rstrip("/")
-    src_glob = quote_str_literal(f"{src}/**/*.parquet")
-    ctes = [f"s0 AS (SELECT * FROM read_parquet({src_glob}, union_by_name=true))"]
+    source = _input_source(spec, input_files)
+    ctes = [f"s0 AS (SELECT * FROM read_parquet({source}, union_by_name=true))"]
     idx = 0
     if spec.map:
         idx += 1
@@ -45,12 +50,22 @@ def compile_sql(spec: TransformSpec) -> str:
         if isinstance(step, SelectStep) and is_last:
             continue  # 마지막 select는 CTE가 아니라 최종 SELECT에서 처리
         idx += 1
-        ctes.append(f"s{idx} AS ({_compile_step(step, f's{idx - 1}')})")
+        ctes.append(f"s{idx} AS ({_compile_step(step, f's{idx - 1}', i)})")
     final = _final_select(steps, f"s{idx}")
     return "WITH " + ",\n".join(ctes) + "\n" + final
 
 
-def _compile_step(step: Step, prev: str) -> str:
+def _input_source(spec: TransformSpec, input_files: Sequence[Path] | None) -> str:
+    if input_files is None:
+        src = str(spec.input).rstrip("/")
+        return quote_str_literal(f"{src}/**/*.parquet")
+    if len(input_files) == 1:
+        return quote_str_literal(str(input_files[0]))
+    values = ", ".join(quote_str_literal(str(path)) for path in input_files)
+    return "[" + values + "]"
+
+
+def _compile_step(step: Step, prev: str, step_index: int) -> str:
     match step:
         case FilterStep(filter=cond):
             return f"SELECT * FROM {prev} WHERE {cond}"
@@ -76,6 +91,14 @@ def _compile_step(step: Step, prev: str) -> str:
         case SelectStep(select=cols):
             projected = ", ".join(quote_ident(c) for c in cols)
             return f"SELECT {projected} FROM {prev}"
+        case SqlStep(sql=expression):
+            return expression.replace("{input}", prev)
+        case PythonUdfStep(args=args, output=output):
+            arguments = ", ".join(quote_ident(argument) for argument in args)
+            return (
+                f"SELECT *, {quote_ident(udf_name(step_index))}({arguments}) "
+                f"AS {quote_ident(output)} FROM {prev}"
+            )
 
 
 def _final_select(steps: list[Step], last: str) -> str:

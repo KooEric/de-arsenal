@@ -23,7 +23,7 @@
 ### M0 — 부트스트랩
 
 **포함:**
-- uv workspace 모노레포: `packages/arsenal-core`, `packages/pugio`, `packages/gladius`
+- uv workspace 모노레포: `packages/arsenal-core`, `packages/pugio`, `packages/gladius`, `packages/scorpio`, `packages/scutum`, `packages/spatha`, `packages/onager`
 - ruff(lint+format), pyright(타입 체크), pytest(+coverage 80% 게이트)
 - GitHub Actions CI: lint → typecheck → test 매트릭스(macOS/Linux, Python 3.11/3.12)
 - pre-commit 훅
@@ -104,10 +104,10 @@
 | Pugio | 스키마 드리프트 감지 + 정책(통과·경고·차단), **dlt 소스 래퍼**(`type: dlt` — 검증된 커넥터 수백 개 흡수, [09](09-oss-leverage.md) 수 2), **S3/GCS sink**(DuckDB httpfs 차용) |
 | Arsenal | **dbt 인터롭** — `arsenal.yaml`의 `- dbt: ./project` 실행 단계(dbt-duckdb 차용, [09](09-oss-leverage.md) 수 3) |
 | Gladius | SQL 탈출구(steps 안 `sql:` step), Python 탈출구(UDF), **증분 변환**(`incremental: by_unit/by_key` — 신규분만 재계산, [07](07-cost-efficiency.md) 참조) — 쿼리 모드는 M3로 앞당겨짐 |
-| Spatha | 독립 패키지 분리: 데이터 준비 신호 기반 의존성 DAG, 우선순위 큐·실행 윈도우 |
-| Scorpio | 신규: lineage 자동 기록, freshness·지연 메트릭, 알림, `--cost` 요약(P0에 기록한 단위 지표 노출) |
-| Onager | 신규: 백필 격리 실행, Small File compaction(후보 자동 선정·dry_run·안전장치) |
-| Scutum | 독립 패키지 분리: data contract, lock 충돌 retry/backoff 흡수 |
+| Spatha | 독립 패키지 분리: 데이터 준비 신호 기반 의존성 DAG, 우선순위 큐·실행 윈도우 — 결정적 DAG 계획·실행 순서 제공 |
+| Scorpio | 신규: lineage 자동 기록, freshness·지연 메트릭, 알림, `--cost` 요약(P0에 기록한 단위 지표 노출) — freshness threshold alert 제공 |
+| Onager | 신규: 백필 격리 실행, Small File compaction(후보 자동 선정·dry_run·안전장치) — 로컬 Parquet compaction 제공 |
+| Scutum | 독립 패키지 분리: data contract, lock 충돌 retry/backoff 흡수 — Arrow data contract 제공 |
 | Ballista | 처리 한계선 문서화 지속 갱신 |
 
 ## P2 — 고급·대규모 (방향만 확정)

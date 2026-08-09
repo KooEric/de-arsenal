@@ -46,6 +46,27 @@ def test_status_command(tmp_path: Path) -> None:
     assert "done" in result.output
 
 
+@respx.mock
+def test_status_cost_command(tmp_path: Path) -> None:
+    respx.get("https://api.test/items").respond(json=[{"id": 1}])
+    spec = write_spec(tmp_path)
+    runner.invoke(app, ["run", str(spec)])
+    result = runner.invoke(app, ["status", str(spec), "--cost"])
+    assert result.exit_code == 0
+    assert "cost:" in result.output
+    assert "rows=1" in result.output
+
+
+@respx.mock
+def test_status_freshness_command(tmp_path: Path) -> None:
+    respx.get("https://api.test/items").respond(json=[{"id": 1}])
+    spec = write_spec(tmp_path)
+    runner.invoke(app, ["run", str(spec)])
+    result = runner.invoke(app, ["status", str(spec), "--max-age-seconds", "3600"])
+    assert result.exit_code == 0
+    assert "freshness: status=fresh" in result.output
+
+
 def test_invalid_spec_exits_nonzero(tmp_path: Path) -> None:
     bad = tmp_path / "bad.yaml"
     bad.write_text("name: x\n", encoding="utf-8")

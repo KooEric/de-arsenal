@@ -1,13 +1,14 @@
 """변환 YAML의 Pydantic 모델 — map/steps 선언 (M3 Task 3.1).
 
-하강 경로 (설계 원칙 5): map → steps → SQL(P1 `sql:` step) → Python(P1 UDF).
+하강 경로 (설계 원칙 5): map → steps → SQL(`sql:` step) → Python(`python:` UDF).
 각 step은 트랜스파일러에서 CTE 하나로 컴파일된다 (docs/02-architecture.md).
-증분 변환(P1): `incremental: {mode: by_unit|by_key}` 필드 예약 (docs/07).
+증분 변환(P1): `incremental: {mode: by_unit|by_key}`로 신규 입력만 재계산한다 (docs/07).
 """
 
 from pathlib import Path
+from typing import Literal
 
-from pydantic import BaseModel, ConfigDict, field_validator, model_validator
+from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
 
 class _Frozen(BaseModel):
@@ -38,7 +39,77 @@ class DeriveStep(_Frozen):
     derive: dict[str, str]  # {new_column: SQL 식}
 
 
-Step = FilterStep | RenameStep | CastStep | SelectStep | DedupStep | DeriveStep
+class SqlStep(_Frozen):
+    """Raw SQL escape hatch; ``{input}`` is replaced with the previous CTE."""
+
+    sql: str
+
+    @field_validator("sql")
+    @classmethod
+    def _must_reference_input(cls, value: str) -> str:
+        if not value.strip():
+            raise ValueError("sql step must not be empty")
+        if value.count("{input}") != 1:
+            raise ValueError("sql step must contain exactly one {input} placeholder")
+        if ";" in value:
+            raise ValueError("sql step must contain one SELECT expression without ';'")
+        return value
+
+
+class PythonUdfStep(_Frozen):
+    """Register a user function and append its result as a new column."""
+
+    python: str
+    args: list[str] = Field(min_length=1)
+    output: str
+    arg_types: list[str] | None = None
+    return_type: str = "VARCHAR"
+
+    @field_validator("python")
+    @classmethod
+    def _target_is_importable_shape(cls, value: str) -> str:
+        if value.count(":") != 1:
+            raise ValueError("python UDF target must use module:function form")
+        module, function = value.split(":")
+        if not module or not function:
+            raise ValueError("python UDF target must use module:function form")
+        return value
+
+    @model_validator(mode="after")
+    def _validate_types(self) -> "PythonUdfStep":
+        if self.arg_types is not None and len(self.arg_types) != len(self.args):
+            raise ValueError("python UDF arg_types must match args length")
+        if not self.output:
+            raise ValueError("python UDF output must not be empty")
+        return self
+
+
+Step = (
+    FilterStep
+    | RenameStep
+    | CastStep
+    | SelectStep
+    | DedupStep
+    | DeriveStep
+    | SqlStep
+    | PythonUdfStep
+)
+
+
+class IncrementalSpec(_Frozen):
+    """Incremental execution mode and optional upsert key."""
+
+    mode: Literal["by_unit", "by_key"]
+    key: list[str] | None = Field(
+        default=None,
+        description="Columns used to keep the newest transformed row in by_key mode.",
+    )
+
+    @model_validator(mode="after")
+    def _key_required_for_by_key(self) -> "IncrementalSpec":
+        if self.mode == "by_key" and not self.key:
+            raise ValueError("incremental.by_key requires a non-empty key")
+        return self
 
 
 class TransformSpec(_Frozen):
@@ -49,14 +120,14 @@ class TransformSpec(_Frozen):
     input: str
     map: dict[str, str] | None = None  # {new_column: source_expr} — steps보다 먼저 적용
     steps: list[Step] = []
+    incremental: IncrementalSpec | None = None
+    state_dir: str = ".gladius"
     # 출력 디렉터리. str로 보관 — Path로 파싱하면 "s3://bucket/x" 같은 URI 스킴이
     # "s3:/bucket/x"로 정규화되어 훼손된다 (P1 httpfs/S3 싱크가 이 필드를 그대로
     # 쓴다). 엔진이 mkdir/os.replace/rmtree 같은 파일시스템 연산이 필요한 지점에서
     # Path(...)로 감싸 해석한다.
     output: str
-    # P1 예약: incremental, sql/python 탈출구
-
-    @field_validator("input", "output", mode="before")
+    @field_validator("input", "output", "state_dir", mode="before")
     @classmethod
     def _coerce_path_fields_to_str(cls, v: object) -> object:
         if isinstance(v, Path):
@@ -68,3 +139,10 @@ class TransformSpec(_Frozen):
         if not self.map and not self.steps:
             raise ValueError("transform spec requires at least one of 'map' or 'steps'")
         return self
+
+    @field_validator("name")
+    @classmethod
+    def _name_is_path_safe(cls, value: str) -> str:
+        if "/" in value or "\\" in value or ".." in value:
+            raise ValueError("transform name must not contain '/', '\\\\', or '..'")
+        return value

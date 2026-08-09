@@ -17,6 +17,8 @@ classifiers = [
 
 [project.optional-dependencies]
 postgres = ["pugio[postgres]"]
+dlt = ["pugio[dlt]"]
+dbt = ["dbt-duckdb>=1.8,<2"]
 
 [project.urls]
 Homepage = "https://github.com/KooEric/de-arsenal"

@@ -7,9 +7,12 @@ import httpx
 import pyarrow.parquet as pq
 import pytest
 import respx
+from _pytest.logging import LogCaptureFixture
 
 from arsenal_core.errors import FatalError
 from arsenal_core.spec.models import (
+    ContractColumnSpec,
+    ContractSpec,
     DatabaseSourceSpec,
     FileSourceSpec,
     PaginationSpec,
@@ -39,7 +42,68 @@ def make_spec(tmp_path: Path) -> PipelineSpec:
     )
 
 
-def mock_pages(pages: list[list[dict[str, int]]]) -> None:
+@respx.mock
+def test_schema_drift_block_marks_unit_failed(tmp_path: Path) -> None:
+    spec = make_spec(tmp_path).model_copy(update={"schema_drift": "block"})
+    store = StateStore(Path(spec.state_dir) / f"{spec.name}.db")
+    store.snapshot_schema(spec.name, '[{"name":"id","type":"int64","nullable":false}]')
+    store.close()
+    mock_pages([[{"id": 1, "label": "new"}]])
+
+    with pytest.raises(FatalError, match="schema drift"):
+        run_pipeline(spec)
+
+    reopened = StateStore(Path(spec.state_dir) / f"{spec.name}.db")
+    try:
+        records = reopened.counts(spec.name)
+        assert records == {"failed": 1}
+    finally:
+        reopened.close()
+
+
+@respx.mock
+def test_data_contract_block_marks_unit_failed(tmp_path: Path) -> None:
+    spec = make_spec(tmp_path).model_copy(
+        update={
+            "contract": ContractSpec(
+                columns=[ContractColumnSpec(name="id", type="int64", nullable=False)]
+            )
+        }
+    )
+    mock_pages([[{"id": 1, "extra": "not allowed"}]])
+
+    with pytest.raises(FatalError, match="contract failed"):
+        run_pipeline(spec)
+
+    reopened = StateStore(Path(spec.state_dir) / f"{spec.name}.db")
+    try:
+        assert reopened.counts(spec.name) == {"failed": 1}
+    finally:
+        reopened.close()
+
+
+@respx.mock
+def test_schema_drift_warn_continues_and_records_new_snapshot(
+    tmp_path: Path, caplog: LogCaptureFixture
+) -> None:
+    spec = make_spec(tmp_path).model_copy(update={"schema_drift": "warn"})
+    store = StateStore(Path(spec.state_dir) / f"{spec.name}.db")
+    store.snapshot_schema(spec.name, '[{"name":"id","type":"int64","nullable":false}]')
+    store.close()
+    mock_pages([[{"id": 1, "label": "new"}]])
+
+    report = run_pipeline(spec)
+    assert report.written == 1
+    assert "schema drift" in caplog.text
+
+    reopened = StateStore(Path(spec.state_dir) / f"{spec.name}.db")
+    try:
+        assert '"label"' in (reopened.last_schema(spec.name) or "")
+    finally:
+        reopened.close()
+
+
+def mock_pages(pages: list[list[dict[str, object]]]) -> None:
     """offset 파라미터에 따라 해당 페이지를 응답하는 목 API."""
 
     def responder(request: httpx.Request) -> httpx.Response:
@@ -353,8 +417,7 @@ def test_run_pipeline_dispatches_database_source(
 
 @respx.mock
 def test_run_records_schema_snapshot(tmp_path: Path) -> None:
-    """M2-G: run 중 첫 non-empty batch의 스키마가 StateStore에 기록된다 (기록만 —
-    탐지/정책은 P1)."""
+    """run 중 첫 non-empty batch의 스키마가 기록되고 드리프트 비교에 사용된다."""
     mock_pages([[{"id": 1}, {"id": 2}], [{"id": 3}]])
     spec = make_spec(tmp_path)
     run_pipeline(spec)

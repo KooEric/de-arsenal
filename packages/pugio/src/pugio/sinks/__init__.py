@@ -20,6 +20,7 @@ from arsenal_core.errors import FatalError
 from arsenal_core.spec.models import SinkSpec
 from pugio.sinks.base import Sink
 from pugio.sinks.duckdb import DuckDBSink
+from pugio.sinks.object_storage import ObjectStorageParquetSink, is_object_store_path
 from pugio.sinks.parquet import ParquetSink
 
 if TYPE_CHECKING:
@@ -28,6 +29,8 @@ if TYPE_CHECKING:
 
 def build_sink(spec: SinkSpec) -> Sink:
     if spec.type == "parquet":
+        if is_object_store_path(spec.path):
+            return ObjectStorageParquetSink(spec.path)
         # spec.path는 str(URI 스킴 보존용) — 로컬 파일시스템 싱크는 여기서 Path로 감싼다.
         return ParquetSink(Path(spec.path))
     if spec.type == "duckdb":
@@ -58,4 +61,11 @@ def __getattr__(name: str) -> Any:  # noqa: ANN401 - PEP 562 lazy re-export
     raise AttributeError(f"module {__name__!r} has no attribute {name!r}")
 
 
-__all__ = ["DuckDBSink", "ParquetSink", "PostgresSink", "Sink", "build_sink"]
+__all__ = [
+    "DuckDBSink",
+    "ObjectStorageParquetSink",
+    "ParquetSink",
+    "PostgresSink",
+    "Sink",
+    "build_sink",
+]

@@ -7,6 +7,7 @@ M2 확장: retry, dlq list/retry 서브커맨드 (docs/02-architecture.md "CLI �
 from pathlib import Path
 
 import typer
+from scorpio import assess_freshness
 
 from arsenal_core.errors import ArsenalError
 from arsenal_core.spec import load_pipeline
@@ -35,8 +36,17 @@ def run(spec_path: Path) -> None:
 
 
 @app.command()
-def status(spec_path: Path) -> None:
-    """unit 상태 요약."""
+def status(
+    spec_path: Path,
+    cost: bool = typer.Option(False, "--cost", help="누적 행·바이트·처리 시간·freshness 표시"),
+    max_age_seconds: float | None = typer.Option(
+        None,
+        "--max-age-seconds",
+        min=0.001,
+        help="freshness 경보 임계값; stale이면 alert를 출력한다",
+    ),
+) -> None:
+    """unit 상태 요약. ``--cost``로 P0 단위 지표의 누적값도 표시한다."""
     try:
         spec = load_pipeline(spec_path)
     except ArsenalError as e:
@@ -45,6 +55,15 @@ def status(spec_path: Path) -> None:
     store = StateStore(Path(spec.state_dir) / f"{spec.name}.db")
     try:
         counts = store.counts(spec.name)
+        metrics = store.pipeline_metrics(spec.name) if cost else None
+        freshness = (
+            assess_freshness(
+                store.pipeline_metrics(spec.name).last_completed_at,
+                max_age_seconds=max_age_seconds,
+            )
+            if max_age_seconds is not None
+            else None
+        )
     finally:
         store.close()
     if not counts:
@@ -52,6 +71,20 @@ def status(spec_path: Path) -> None:
         return
     for state, n in sorted(counts.items()):
         typer.echo(f"{state}: {n}")
+    if metrics is not None:
+        typer.echo(
+            f"cost: units={metrics.completed_units} rows={metrics.row_count} "
+            f"bytes={metrics.byte_count} duration_ms={metrics.duration_ms} "
+            f"last_completed_at={metrics.last_completed_at or 'none'}"
+        )
+    if freshness is not None:
+        typer.echo(
+            f"freshness: status={freshness.status} "
+            f"age_seconds={freshness.age_seconds if freshness.age_seconds is not None else 'none'} "
+            f"limit_seconds={freshness.max_age_seconds}"
+        )
+        if freshness.alert:
+            typer.echo(f"alert: freshness {freshness.message}", err=True)
 
 
 @dlq_app.command("list")

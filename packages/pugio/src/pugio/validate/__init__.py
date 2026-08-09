@@ -6,5 +6,6 @@
 - 위반 정책: block(중단) / quarantine(DLQ 격리 후 계속) / warn(경고만)
 - DLQ: .arsenal/dlq/에 위반 unit parquet + 사유 저장, `pugio dlq list/retry`
 
-P1에서 Scutum 독립 패키지로 분리한다. M1에서는 자리만 예약.
+기존 `validate.rules` 게이트를 유지한다. P1의 schema contract와 lock 보호는
+독립 패키지 Scutum에서 제공한다.
 """

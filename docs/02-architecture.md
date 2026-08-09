@@ -22,9 +22,13 @@ de-arsenal/
 │   │       ├── sources/        # Source 프로토콜 + rest.py, file.py, database.py, python_source.py
 │   │       ├── sinks/          # Sink 프로토콜 + parquet.py, duckdb.py, postgres.py
 │   │       ├── auth/           # AuthProvider + refresh hook
-│   │       ├── validate/       # 검증 게이트 (P1에서 Scutum으로 분리)
+│   │       ├── validate/       # 기존 규칙 gate (contract는 Scutum으로 분리)
 │   │       ├── runner.py       # 수집 루프
 │   │       └── cli.py
+│   ├── scutum/                 # data contract + lock retry/backoff
+│   ├── scorpio/                # freshness·lineage 운영 관측
+│   ├── spatha/                 # signal-aware dependency DAG
+│   ├── onager/                 # isolated backfill + compaction
 │   ├── gladius/                # 변환·쿼리
 │   │   └── src/gladius/
 │   │       ├── spec.py         # 변환 YAML 모델
@@ -47,8 +51,9 @@ de-arsenal/
 
 ```text
 pugio ──→ arsenal-core ←── gladius
-  │                            │
-  └────── Arrow/Parquet ───────┘   (파일 규약으로만 연결, import 없음)
+  ├──→ scorpio
+  └──→ scutum ←── spatha/onager
+       (모든 도구는 Arrow/Parquet 파일 규약으로도 연결)
 ```
 
 pugio와 gladius는 서로 import하지 않는다. 데이터 파일(Parquet)과 상태 규약으로만 맞물린다 — 이것이 "독립하되 시너지"의 구현.
