@@ -76,9 +76,7 @@ def test_python_udf_step_compiles_to_private_function_call() -> None:
             ]
         )
     )
-    assert (
-        's1 AS (SELECT *, "__gladius_python_udf_0"("title") AS "slug" FROM s0)' in sql
-    )
+    assert 's1 AS (SELECT *, "__gladius_python_udf_0"("title") AS "slug" FROM s0)' in sql
 
 
 def test_sql_step_compiles_to_valid_duckdb_sql(tmp_path_factory: pytest.TempPathFactory) -> None:

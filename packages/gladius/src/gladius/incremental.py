@@ -40,9 +40,7 @@ class IncrementalStore:
         self._conn.commit()
 
     def spec_hash(self) -> str | None:
-        row = self._conn.execute(
-            "SELECT value FROM metadata WHERE key='spec_hash'"
-        ).fetchone()
+        row = self._conn.execute("SELECT value FROM metadata WHERE key='spec_hash'").fetchone()
         return str(row[0]) if row else None
 
     def reset(self, spec_hash: str) -> None:

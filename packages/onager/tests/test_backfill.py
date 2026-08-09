@@ -28,10 +28,9 @@ def test_backfill_isolated_until_explicit_promotion(tmp_path: Path) -> None:
     assert pq.read_table(  # pyright: ignore[reportUnknownMemberType, reportUnknownVariableType]
         dataset / "part.parquet"
     ).column("id").to_pylist() == [1]  # pyright: ignore[reportUnknownMemberType]
-    assert (
-        (workspace.root / "status.json").read_text(encoding="utf-8").strip()
-        == '{"status": "ready"}'
-    )
+    assert (workspace.root / "status.json").read_text(
+        encoding="utf-8"
+    ).strip() == '{"status": "ready"}'
 
     promote_backfill(workspace, dataset)
     assert pq.read_table(  # pyright: ignore[reportUnknownMemberType, reportUnknownVariableType]

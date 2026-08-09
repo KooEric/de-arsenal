@@ -57,8 +57,6 @@ def test_dlt_source_missing_optional_dependency_is_friendly(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     monkeypatch.setitem(sys.modules, "dlt", None)
-    source = load_dlt_source(
-        DltSourceSpec(type="dlt", target="missing:source"), pipeline="p"
-    )
+    source = load_dlt_source(DltSourceSpec(type="dlt", target="missing:source"), pipeline="p")
     with pytest.raises(FatalError, match=r"dlt.*extra"):
         next(source.units())

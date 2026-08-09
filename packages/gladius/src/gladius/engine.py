@@ -108,9 +108,7 @@ def _run_incremental(spec: TransformSpec) -> Path:
             if incremental.mode == "by_unit":
                 _append_incremental_part(output, new_part, pending)
             else:
-                _merge_incremental_output(
-                    con, output, new_part, tmp_output, incremental.key or []
-                )
+                _merge_incremental_output(con, output, new_part, tmp_output, incremental.key or [])
             store.mark_processed(pending)
         except duckdb.Error as e:
             raise FatalError(

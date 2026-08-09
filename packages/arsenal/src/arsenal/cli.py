@@ -122,9 +122,7 @@ def _run_dbt(path: Path) -> None:
         dbt_main: Any = importlib.import_module("dbt.cli.main")
         dbt_runner: Any = dbt_main.dbtRunner
     except (ImportError, AttributeError) as e:
-        raise FatalError(
-            "dbt stage requires the 'dbt' extra: pip install de-arsenal[dbt]"
-        ) from e
+        raise FatalError("dbt stage requires the 'dbt' extra: pip install de-arsenal[dbt]") from e
     try:
         result: Any = dbt_runner().invoke(["run", "--project-dir", str(path)])
     except Exception as e:

@@ -28,7 +28,9 @@ def test_build_sink_returns_duckdb(tmp_path: Path) -> None:
     assert isinstance(sink, DuckDBSink)
 
 
-@pytest.mark.parametrize("path", ["s3://bucket/prefix", "gcs://bucket/prefix", "gs://bucket/prefix"])
+@pytest.mark.parametrize(
+    "path", ["s3://bucket/prefix", "gcs://bucket/prefix", "gs://bucket/prefix"]
+)
 def test_build_sink_returns_object_storage_parquet(path: str) -> None:
     sink = build_sink(ParquetSinkSpec(type="parquet", path=path))
     assert isinstance(sink, ObjectStorageParquetSink)

@@ -33,9 +33,7 @@ class DltSource:
         try:
             importlib.import_module("dlt")
         except ImportError as e:
-            raise FatalError(
-                "dlt source requires the 'dlt' extra: pip install pugio[dlt]"
-            ) from e
+            raise FatalError("dlt source requires the 'dlt' extra: pip install pugio[dlt]") from e
         module_name, separator, function_name = self._spec.target.partition(":")
         if not separator:
             raise FatalError(

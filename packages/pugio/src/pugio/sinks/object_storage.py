@@ -44,9 +44,7 @@ class ObjectStorageParquetSink:
                 "(FORMAT PARQUET, COMPRESSION ZSTD)"
             )
         except (duckdb.IOException, duckdb.TransactionException) as e:
-            raise RetryableError(
-                f"object storage write failed for unit {unit.unit_id}: {e}"
-            ) from e
+            raise RetryableError(f"object storage write failed for unit {unit.unit_id}: {e}") from e
         except duckdb.Error as e:
             raise FatalError(f"object storage write failed: {e}") from e
         finally:

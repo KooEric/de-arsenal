@@ -19,9 +19,7 @@ def test_plan_is_topological_and_priority_stable() -> None:
 
 
 def test_run_calls_tasks_in_plan_order() -> None:
-    workflow = Workflow(
-        tasks=[TaskSpec(name="a"), TaskSpec(name="b", depends_on=["a"])]
-    )
+    workflow = Workflow(tasks=[TaskSpec(name="a"), TaskSpec(name="b", depends_on=["a"])])
     seen: list[str] = []
 
     assert workflow.run(lambda task: seen.append(task.name)) == ["a", "b"]

@@ -127,6 +127,7 @@ class TransformSpec(_Frozen):
     # 쓴다). 엔진이 mkdir/os.replace/rmtree 같은 파일시스템 연산이 필요한 지점에서
     # Path(...)로 감싸 해석한다.
     output: str
+
     @field_validator("input", "output", "state_dir", mode="before")
     @classmethod
     def _coerce_path_fields_to_str(cls, v: object) -> object:
