@@ -62,6 +62,7 @@ Databricks·Snowflake 수준의 **완성도**를, 그들과 정반대의 **형�
 | [docs/plans/](docs/plans/) | 마일스톤별 상세 TDD 구현 계획 |
 | [docs/roadmap.md](docs/roadmap.md) | 원본 로드맵 (문제 정의 전체) |
 | [docs/release.md](docs/release.md) | v0.2.0 버전·빌드·PyPI 릴리스 절차 |
+| [docs/dogfooding.md](docs/dogfooding.md) | 실제 반복 업무로 검증하는 2주 도그푸딩 runbook |
 
 ## 시작하기 (소스에서)
 
