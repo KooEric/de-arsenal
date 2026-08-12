@@ -1,5 +1,12 @@
 """Onager — safe small-file compaction for local Parquet datasets."""
 
+from importlib.metadata import PackageNotFoundError, version
+
+try:
+    __version__ = version("onager")
+except PackageNotFoundError:
+    __version__ = "0.2.0"
+
 from onager.backfill import (
     BackfillWorkspace,
     create_backfill_workspace,

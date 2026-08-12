@@ -1,4 +1,4 @@
-# Gladius
+# Gladius (`de-gladius`)
 
 > 군단병 주력검. 가장 자주 쓰는 변환·쿼리 도구.
 
@@ -11,8 +11,10 @@ SQL을 그대로 확인할 수 있어 마법이 없다. `gladius query`로 수�
 ## 설치
 
 ```bash
-pip install gladius
+pip install de-gladius
 ```
+
+배포명은 `de-gladius`지만 Python import와 CLI는 기존처럼 `gladius`다.
 
 ## 사용 예
 

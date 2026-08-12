@@ -6,7 +6,7 @@ requires-python = ">=3.11"
 dependencies = [
     "arsenal-core",
     "pugio[postgres]",
-    "gladius",
+    "de-gladius",
     "de-arsenal",
     "onager",
     "scutum",
@@ -20,7 +20,7 @@ members = ["packages/*"]
 [tool.uv.sources]
 arsenal-core = { workspace = true }
 pugio = { workspace = true }
-gladius = { workspace = true }
+de-gladius = { workspace = true }
 de-arsenal = { workspace = true }
 onager = { workspace = true }
 scutum = { workspace = true }

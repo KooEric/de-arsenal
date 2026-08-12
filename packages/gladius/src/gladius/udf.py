@@ -35,7 +35,7 @@ def register_python_udfs(con: duckdb.DuckDBPyConnection, spec: TransformSpec) ->
         except duckdb.Error as e:
             raise FatalError(
                 f"cannot register Python UDF {step.python!r}; "
-                "install gladius[python] and check the function signature: "
+                "install de-gladius[python] and check the function signature: "
                 f"{e}"
             ) from e
 

@@ -4,7 +4,12 @@
 구조: docs/02-architecture.md 참조.
 """
 
-__version__ = "0.1.1"
+from importlib.metadata import PackageNotFoundError, version
+
+try:
+    __version__ = version("arsenal-core")
+except PackageNotFoundError:
+    __version__ = "0.2.0"
 from arsenal_core.schema import SchemaChange, SchemaDiff, compare_schema_snapshots
 
 __all__ = ["SchemaChange", "SchemaDiff", "compare_schema_snapshots"]

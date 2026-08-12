@@ -4,4 +4,9 @@
 구현: docs/plans/2026-07-08-m4-integration-release.md Task 4.0~4.1
 """
 
-__version__ = "0.1.1"
+from importlib.metadata import PackageNotFoundError, version
+
+try:
+    __version__ = version("de-arsenal")
+except PackageNotFoundError:
+    __version__ = "0.2.0"

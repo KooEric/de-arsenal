@@ -11,7 +11,7 @@ arsenal run                        # 수집→검증→변환. 끊겨도 재실�
 arsenal query "SELECT * FROM './data/clean/*.parquet' LIMIT 10"
 ```
 
-> **상태: v0.1.1 + P1 구현 진행분.** 수집·변환·우산 CLI와 P1의 dlt/dbt, schema drift, cloud sink, UDF, 관측성·오케스트레이션·백필·계약 패키지가 동작한다. PyPI 배포는 `gladius` 이름 선점 해결 후 진행한다.
+> **상태: v0.2.0 릴리스 준비.** 수집·변환·우산 CLI와 P1의 dlt/dbt, schema drift, cloud sink, UDF, 관측성·오케스트레이션·백필·계약 패키지가 동작한다. 변환 패키지의 PyPI 배포명은 `de-gladius`이며 import와 CLI는 `gladius`를 유지한다.
 
 Databricks·Snowflake 수준의 **완성도**를, 그들과 정반대의 **형태**로. 거대 플랫폼이 백 가지를 80점으로 하는 동안, 우리는 한 가지를 100점으로. 신뢰성(멱등·재개·검증)이 기본값이고, 마진 없는 비용 구조([docs/07](docs/07-cost-efficiency.md))가 아키텍처에서 나온다.
 
@@ -21,9 +21,9 @@ Databricks·Snowflake 수준의 **완성도**를, 그들과 정반대의 **형�
 
 | 무기 | 담당 영역 | 우선순위 | 상태 |
 |---|---|---|---|
-| **Arsenal** (우산 CLI) | 단일 진입점 — init/run/query, 원클릭 레시피 3종 | P0 (M4) | ✅ v0.1.1 |
-| **Pugio** | 수집·전송 (ETL 엔진) | P0 | ✅ v0.1.1 |
-| **Gladius** | 변환·쿼리 (핵심 처리) | P0 | ✅ v0.1.1 |
+| **Arsenal** (우산 CLI) | 단일 진입점 — init/run/query, 원클릭 레시피 3종 | P0 (M4) | ✅ v0.2.0 준비 |
+| **Pugio** | 수집·전송 (ETL 엔진) | P0 + P1 | ✅ v0.2.0 준비 |
+| **Gladius** | 변환·쿼리 (핵심 처리) | P0 + P1 | ✅ v0.2.0 준비 |
 | **Spatha** | 오케스트레이션 (의존성·스케줄링) | P0(멱등 코어)/P1 | ✅ signal DAG · priority · window · lock |
 | **Scutum** | 데이터 품질·검증·보호 | P0(멱등 가드)/P1 | ✅ contract · DLQ 정책 · lock retry/backoff |
 | **Scorpio** | 관측성 (모니터링·lineage) | P1 | ✅ lineage · freshness alert · cost 요약 |
@@ -58,12 +58,14 @@ Databricks·Snowflake 수준의 **완성도**를, 그들과 정반대의 **형�
 | [docs/07-cost-efficiency.md](docs/07-cost-efficiency.md) | 저비용 고효율 설계 — 비용 구조, 증분 처리, 효율 목표치 |
 | [docs/08-limits.md](docs/08-limits.md) | 정직한 한계선 — 단일 노드 처리 envelope, 미지원 범위, sink별 멱등 보장 |
 | [docs/09-oss-leverage.md](docs/09-oss-leverage.md) | 오픈소스 차용 전략 — 차용 지도, dlt·dbt 인터롭, 쓸만함 판정 기준 |
+| [docs/tools.md](docs/tools.md) | 도구별 사용 시점·빠른 시작·장점 비교 |
 | [docs/plans/](docs/plans/) | 마일스톤별 상세 TDD 구현 계획 |
 | [docs/roadmap.md](docs/roadmap.md) | 원본 로드맵 (문제 정의 전체) |
+| [docs/release.md](docs/release.md) | v0.2.0 버전·빌드·PyPI 릴리스 절차 |
 
 ## 시작하기 (소스에서)
 
-v0.1.1 (P0) 완성 — 수집·변환·쿼리·우산 CLI가 모두 동작한다. PyPI 배포 전까지는 소스에서 실행한다.
+v0.2.0 (P1) 릴리스 준비 — 수집·변환·쿼리·우산 CLI와 확장 패키지가 동작한다. 릴리스 절차는 [docs/release.md](docs/release.md)를 따른다.
 
 ```bash
 uv sync

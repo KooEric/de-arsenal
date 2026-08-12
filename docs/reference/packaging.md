@@ -1,7 +1,7 @@
-# 패키징 릴리스 체크리스트 (M4 Task 4.5)
+# 패키징 릴리스 체크리스트 (v0.2.0)
 
-이 문서는 v0.1.0 패키징 검증(로컬에서 할 수 있는 것)의 결과와, 사용자(레포
-소유자)의 인프라·판단이 필요한 나머지를 구분해 기록한다.
+이 문서는 v0.2.0 패키징 검증과 PyPI 게시 전 확인사항을 기록한다. 실제
+태그 릴리스 절차는 [docs/release.md](../release.md)를 기준으로 한다.
 
 ## uv build
 
@@ -9,7 +9,7 @@
 uv build --all-packages
 ```
 
-8개 패키지(`arsenal-core`, `pugio`, `gladius`, `de-arsenal`, `scorpio`, `scutum`,
+8개 패키지(`arsenal-core`, `pugio`, `de-gladius`, `de-arsenal`, `scorpio`, `scutum`,
 `spatha`, `onager`) 전부 sdist+wheel
 생성 성공. wheel 메타데이터에 `License-Expression: Apache-2.0`, Python 3.11/3.12
 분류자, `License :: OSI Approved :: Apache Software License` 분류자,
@@ -25,13 +25,14 @@ uv build --all-packages
 1. `uv build --all-packages`로 8개 wheel을 만든다.
 2. `uv venv`로 완전히 새 가상환경을 만든다(이 저장소 밖, 스크래치 디렉터리).
 3. `uv pip install <필요한 wheel 경로를 동시에>`로 설치 — 이러면 pip가 로컬 파일을
-   후보로 각 패키지의 `Requires-Dist`(`arsenal-core>=0.1,<0.2` 등)를
+   후보로 각 패키지의 `Requires-Dist`(`arsenal-core>=0.2,<0.3` 등)를
    실제 의존성 리졸버로 풀고, PyPI에서 나머지(`pydantic`, `duckdb`, `httpx`,
    `pyarrow`, `typer` 등)를 내려받는다 — editable/workspace 지름길이 전혀 없다.
 4. `arsenal --help` / `pugio --help` / `gladius --help` 각각 실행.
 
-**기존 결과**: 핵심 4개 wheel 설치 성공(26개 패키지, PyPI에서 실제 다운로드). 세 CLI 모두
-`--help` 정상 출력, exit code 0.
+**v0.2.0 결과 (2026-08-11)**: 8개 wheel을 새 가상환경에 동시 설치했다. `arsenal`,
+`pugio`, `gladius`의 `--help`가 모두 exit code 0으로 동작했고, `import gladius`는
+`0.2.0`을 반환했다. 즉 배포명 `de-gladius`와 기존 import/CLI 경로가 함께 검증됐다.
 
 **검증 중 발견하고 고친 버그**: `pugio/sinks/__init__.py`가 최상단에서
 `PostgresSink`를 import하고 있었는데, `postgres` extra(`psycopg`)는 optional
@@ -49,8 +50,8 @@ uv build --all-packages
 
 ## arsenal-core 버전 핀
 
-`pugio`/`gladius`/`de-arsenal` 세 패키지의 `[project] dependencies`에서
-`arsenal-core`를 `arsenal-core>=0.1,<0.2`로 고정(스펙 하위 호환 정책과 일치).
+`pugio`/`de-gladius`/`de-arsenal` 세 패키지의 `[project] dependencies`에서
+`arsenal-core`를 `arsenal-core>=0.2,<0.3`로 고정(스펙 하위 호환 정책과 일치).
 워크스페이스 소스 해석(`[tool.uv.sources]`)은 그대로 유지되므로 로컬 개발은
 `uv sync`가 여전히 workspace 멤버를 직접 쓴다 — 이 핀은 게시된 메타데이터
 전용이다. `uv lock --check`으로 락파일 일관성 확인 완료.
@@ -68,7 +69,7 @@ uv build --all-packages
 Task 4.5)이므로, **push 후 실제 GitHub Actions 실행에서 windows-latest job이
 녹색인지 확인이 필요하다.**
 
-## PyPI 이름 확인
+## PyPI 배포명
 
 ```bash
 curl -s -o /dev/null -w "%{http_code}" https://pypi.org/pypi/<name>/json
@@ -79,18 +80,10 @@ curl -s -o /dev/null -w "%{http_code}" https://pypi.org/pypi/<name>/json
 |---|---|---|
 | `de-arsenal` | 404 | 사용 가능 |
 | `pugio` | 404 | 사용 가능 |
-| `gladius` | **200** | **선점됨** — "Gladius" (Tangled Group, Inc, 순수 Python 웹앱 프레임워크, 최신 0.3.5). 우리 `gladius`와 무관한 기존 패키지. |
+| `de-gladius` | 404 (2026-08-11) | 사용 가능 확인. Python import와 CLI는 기존 `gladius` 유지 |
 
-**`gladius`는 이름이 선점되어 있다.** 지금 패키지 이름을 바꾸지는 않는다(범위
-밖 결정) — PyPI에 실제로 배포하려는 시점에 아래 중 하나를 **사용자가 결정**해야
-한다:
-
-- 접두 전략으로 배포명만 변경: 예 `arsenal-gladius` (import 이름 `gladius`는
-  유지, `[project] name`만 바꾸는 방식 — pugio에는 아직 충돌이 없으니 일관성을
-  위해 `arsenal-pugio`도 함께 바꿀지 결정 필요)
-  * 참고로 `de-arsenal` 배포명은 이미 `arsenal-*` 접두 관례가 아니라 `de-`
-    접두라 완전히 통일하기는 어렵다 — 명명 규칙 자체를 재검토할 필요가 있음.
-- 또는 PyPI에 문의해 이름 이전/분쟁 절차를 밟는다(가능성 낮음, 시간 소요).
+`gladius` 배포명은 다른 프로젝트가 사용 중이므로 `de-gladius`로 확정했다.
+`packages/gladius/src/gladius`와 `gladius` CLI는 변경하지 않는다.
 
 ## LICENSE / README
 
@@ -104,6 +97,5 @@ curl -s -o /dev/null -w "%{http_code}" https://pypi.org/pypi/<name>/json
 ## 로컬에서 끝낼 수 없는 것 (사용자 인프라/판단 필요)
 
 1. **Windows CI 그린 확인** — push 후 실제 GitHub Actions 실행 결과를 봐야 함.
-2. **PyPI 게시(publish)** — 이 태스크는 `uv build`까지만. `gladius` 이름 충돌
-   해소 결정이 선행돼야 하고, 실제 업로드(`uv publish`/`twine`)는 계정·토큰이
-   필요한 별도 단계로 이 세션에서 수행하지 않았다.
+2. **PyPI 게시(publish)** — `v0.2.0` 태그 push 후 release workflow가 수행한다.
+   사전에 GitHub `pypi` environment와 PyPI Trusted Publisher 설정이 필요하다.

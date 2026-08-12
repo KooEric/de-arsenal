@@ -1,10 +1,22 @@
 [project]
 name = "scorpio"
-version = "0.1.1"
+version = "0.2.0"
 description = "Scorpio — freshness, lineage and operational alerts"
+readme = "README.md"
 requires-python = ">=3.11"
 license = "Apache-2.0"
 dependencies = []
+classifiers = [
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "License :: OSI Approved :: Apache Software License",
+    "Operating System :: OS Independent",
+]
+
+[project.urls]
+Homepage = "https://github.com/KooEric/de-arsenal"
+Repository = "https://github.com/KooEric/de-arsenal"
 
 [build-system]
 requires = ["hatchling"]

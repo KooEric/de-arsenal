@@ -4,4 +4,9 @@ map/steps 선언 → SQL 컴파일 → DuckDB 벡터화 실행. 단일 노드 �
 구조: spec.py compile/ engine.py cli.py (docs/02-architecture.md)
 """
 
-__version__ = "0.1.1"
+from importlib.metadata import PackageNotFoundError, version
+
+try:
+    __version__ = version("de-gladius")
+except PackageNotFoundError:
+    __version__ = "0.2.0"

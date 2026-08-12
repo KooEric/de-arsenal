@@ -46,7 +46,7 @@ Arsenal(Pugio/Gladius)은 분산 엔진을 만들지 않는다([설계 원칙 1]
 | 분산 실행 (Ballista) | P2 | 단일 노드 벡터화 밖(TB급·고동시성)은 처음부터 지원 범위 밖 — Executor 인터페이스로 백엔드 교체는 P2 계획이며, 그 인프라 비용은 사용자가 선택적으로 진다. |
 | 스키마 드리프트 감지+정책 | P1 | `schema_drift`로 `allow`/`warn`/`block`을 선택한다. `warn`은 경고 후 최신 스냅샷을 기록하고, `block`은 해당 unit을 failed 처리해 적재를 막는다. 현재는 첫 non-empty batch의 필드명·타입·nullable 비교만 지원한다. |
 | 증분 변환 (`incremental: by_unit/by_key`) | P1 | 입력 파일 시그니처와 변환 스펙 해시를 SQLite에 기록한다. 신규 파일은 `by_unit`에서 append하고 `by_key`에서는 신규 결과가 기존 키를 덮어쓴다. 기존 파일 변경·삭제 또는 스펙 변경은 안전성을 위해 전체 재계산한다. `by_key`는 소스에서 삭제된 행을 추론하지 않는다. |
-| Python UDF step | P1 | `steps`의 `python`, `args`, `output`으로 `module:function`을 등록하고 SQL 호출로 컴파일한다. 실행 환경에는 `gladius[python]`(numpy)가 필요하며, 함수의 부작용·분산 실행·벡터화는 보장하지 않는다. |
+| Python UDF step | P1 | `steps`의 `python`, `args`, `output`으로 `module:function`을 등록하고 SQL 호출로 컴파일한다. 실행 환경에는 `de-gladius[python]`(numpy)가 필요하며, 함수의 부작용·분산 실행·벡터화는 보장하지 않는다. |
 | `pugio status --cost` | P1 | 완료된 unit의 누적 행 수·바이트·처리 시간과 마지막 완료 시각을 보여준다. `--max-age-seconds`를 함께 주면 freshness 상태와 stale alert를 출력한다. 단가 환산·외부 알림 전송·분산 집계는 P2 범위다. |
 | lineage | P1 | Pugio run 시작 시 source type/ref와 sink type/ref를 상태 DB에 최신 edge로 기록한다. column-level lineage·알림·다중 파이프라인 graph 조회는 아직 없다. |
 | Onager small-file compaction/backfill | P1 | `onager compact`가 로컬 Parquet 디렉터리의 target 크기 미만 파일을 자동 선정하고 `--dry-run`, `--max-input-bytes`, JSONL 실행 로그를 제공한다. Scutum file lock의 bounded retry/backoff와 성공 전 원본 backup을 사용하며, `run_backfill`은 snapshot workspace에서 실행되고 explicit `promote_backfill` 전에는 활성 dataset을 바꾸지 않는다. S3/GCS URI는 지원하지 않는다. |

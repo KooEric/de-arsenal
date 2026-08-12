@@ -1,5 +1,9 @@
 # M4: 통합·릴리스 (v0.1.0) 구현 계획
 
+> **Historical record:** v0.1.0/v0.1.1 tags were created. The active release
+> process is [v0.2.0 release.md](../release.md): the transform distribution is
+> now `de-gladius`, while the `gladius` import and CLI remain unchanged.
+
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 >
 > **초안 상태**: M1~M3 완료 후 실제 산출물 기준으로 갱신해 실행한다. 이 마일스톤은 코드보다 검증·문서가 주라 태스크 수준으로 유지한다.
@@ -123,7 +127,7 @@ app.add_typer(gladius_app, name="transform", help="변환 (gladius)")
 - [x] 깨끗한 venv에서 wheel 설치 → `arsenal --help`, `pugio --help`, `gladius --help` 동작 확인 (editable 의존 누수 검출 — `psycopg` 지연 import 버그 발견·수정)
 - [x] `arsenal-core` 버전 핀: pugio/gladius가 `arsenal-core>=0.1,<0.2`로 의존 (스펙 하위 호환 정책과 일치)
 - [x] **CI 매트릭스에 windows-latest 추가** — `.github/workflows/ci.yml`에 반영, YAML 문법 로컬 검증 완료. **실제 GitHub Actions에서 windows-latest job이 초록인지는 push 후에만 확인 가능 — 로컬에서는 검증 불가 (사용자 액션 대기).**
-- [x] PyPI 이름 확인: `de-arsenal`·`pugio`·`gladius` 선점 여부 조회 완료 — `de-arsenal`/`pugio`는 미점유, `gladius`는 이미 무관한 기존 패키지가 점유 중. **충돌 해소(접두 전략 채택 여부)는 게시 시점에 저장소 소유자가 결정 — 이 세션에서 이름을 바꾸지 않음.**
+- [x] PyPI 이름 확인 및 결정: 기존 `gladius`는 선점돼 있어, v0.2.0부터 배포명을 `de-gladius`로 사용한다. import와 CLI는 `gladius`를 유지한다.
 - [x] LICENSE(Apache-2.0) 확정, 각 패키지 README 작성
 - [x] Commit: `chore: packaging metadata and windows ci for v0.1.0` (실제 커밋 메시지: `chore: packaging metadata, windows ci, license, readmes, and honest limits doc` — `dc98da8`)
 
@@ -131,7 +135,7 @@ app.add_typer(gladius_app, name="transform", help="변환 (gladius)")
 
 - [x] CHANGELOG.md 작성 (M1~M4 요약, 스펙 필드 목록) — 본 세션에서 `CHANGELOG.md` 작성 완료
 - [x] 전체 게이트 + e2e 1회 — 아래 "전체 게이트 결과" 참고. **`RUN_LIVE=1` 실 GitHub API 스모크는 미실행** — 이 세션에 GitHub 토큰이 없어 의도적으로 생략(기본값이 스킵이므로 스킵 자체는 정상 동작, 다만 "실 API 1회 확인"이라는 의미의 라이브 스모크는 아직 수행되지 않음)
-- [ ] `git tag v0.1.0` — **태그 생성은 사용자 승인 대기 (이 작업 지시에서 명시적으로 금지됨).** PyPI 배포는 태그 후 별도 판단(계정 확보·`gladius` 이름 충돌 해소 결정 선행) — **이 역시 사용자 결정 대기, 미착수.**
+- [x] `git tag v0.1.0` — 생성·push 완료. v0.2.0부터는 [release workflow](../../.github/workflows/release.yml)가 검증·빌드·게시한다.
 - [ ] 10분 테스트: 문서만 보고 quickstart를 처음부터 재현 (실패 지점은 곧 문서 버그) — **자동화된 E2E(`tests/e2e/test_quickstart.py`)는 통과하지만, 사람이 문서만 보고 처음부터 수동 재현하는 테스트는 사용자 액션이 필요해 미실행.**
 
 ## M4 DoD
@@ -142,4 +146,4 @@ app.add_typer(gladius_app, name="transform", help="변환 (gladius)")
 - [x] wheel 설치만으로 세 CLI(arsenal/pugio/gladius) 동작 (클린 venv에서 `--help` 전부 확인 — `docs/reference/packaging.md`)
 - [x] Windows CI 초록 (v0.1.1에서 달성 — run 30275875765, `windows-latest` 3.11/3.12 둘 다 282 passed·21 skipped로 Linux/macOS와 동일. v0.1.0 시점에는 빨간불이었고 원인 2건은 CHANGELOG 0.1.1 참조)
 - [x] v0.1.0 태그 (생성·push 완료. 후속 v0.1.1 태그도 동일)
-- [ ] PyPI 게시 (`gladius` 이름 충돌 해소 결정 + 사용자의 계정/토큰 필요 — 게시 시점 판단으로 보류, 미착수)
+- [ ] PyPI 게시 — `de-gladius` 배포명으로 전환 완료. GitHub `pypi` environment와 PyPI Trusted Publisher 설정 후 v0.2.0 태그 push로 수행한다.
