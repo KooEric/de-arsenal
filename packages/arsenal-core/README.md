@@ -9,16 +9,20 @@ DE Arsenal(Pugio·Gladius·Arsenal)이 공유하는 신뢰성 코어 라이브�
 ## 사용 예
 
 ```python
+from pathlib import Path
+
 from arsenal_core.state import UnitSpec, StateStore
 from arsenal_core.errors import RetryableError, FatalError
 
 # 결정적 unit_id: 같은 (pipeline, source, unit_key) → 항상 같은 id → 재실행 시 중복 방지
-unit = UnitSpec.create(pipeline="github-issues", source="issues", unit_key="page=1")
+unit = UnitSpec.create(
+    pipeline="github-issues", source="issues", unit_key="page=1", payload={}
+)
 
-store = StateStore("./state/github-issues.db")
-if not store.is_done(unit.unit_id):
-    ...  # fetch → write
-    store.mark_done(unit.unit_id, row_count=100, byte_count=8192)
+store = StateStore(Path("./state/github-issues.db"))
+store.register(unit)
+...  # fetch → write
+store.mark_done(unit.unit_id, row_count=100, byte_count=8192)
 store.close()
 ```
 

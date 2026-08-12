@@ -15,7 +15,7 @@ members = [
     "arsenal-core",
     "de-arsenal",
     "de-arsenal-workspace",
-    "gladius",
+    "de-gladius",
     "onager",
     "pugio",
     "scorpio",
@@ -74,7 +74,7 @@ wheels = [
 
 [[package]]
 name = "arsenal-core"
-version = "0.1.1"
+version = "0.2.0"
 source = { editable = "packages/arsenal-core" }
 dependencies = [
     { name = "pydantic" },
@@ -444,11 +444,11 @@ wheels = [
 
 [[package]]
 name = "de-arsenal"
-version = "0.1.1"
+version = "0.2.0"
 source = { editable = "packages/arsenal" }
 dependencies = [
     { name = "arsenal-core" },
-    { name = "gladius" },
+    { name = "de-gladius" },
     { name = "pugio" },
     { name = "typer" },
 ]
@@ -468,7 +468,7 @@ postgres = [
 requires-dist = [
     { name = "arsenal-core", editable = "packages/arsenal-core" },
     { name = "dbt-duckdb", marker = "extra == 'dbt'", specifier = ">=1.8,<2" },
-    { name = "gladius", editable = "packages/gladius" },
+    { name = "de-gladius", editable = "packages/gladius" },
     { name = "pugio", editable = "packages/pugio" },
     { name = "pugio", extras = ["dlt"], marker = "extra == 'dlt'", editable = "packages/pugio" },
     { name = "pugio", extras = ["postgres"], marker = "extra == 'postgres'", editable = "packages/pugio" },
@@ -483,7 +483,7 @@ source = { virtual = "." }
 dependencies = [
     { name = "arsenal-core" },
     { name = "de-arsenal" },
-    { name = "gladius" },
+    { name = "de-gladius" },
     { name = "onager" },
     { name = "pugio", extra = ["postgres"] },
     { name = "scorpio" },
@@ -506,7 +506,7 @@ dev = [
 requires-dist = [
     { name = "arsenal-core", editable = "packages/arsenal-core" },
     { name = "de-arsenal", editable = "packages/arsenal" },
-    { name = "gladius", editable = "packages/gladius" },
+    { name = "de-gladius", editable = "packages/gladius" },
     { name = "onager", editable = "packages/onager" },
     { name = "pugio", extras = ["postgres"], editable = "packages/pugio" },
     { name = "scorpio", editable = "packages/scorpio" },
@@ -524,6 +524,33 @@ dev = [
     { name = "ruff", specifier = ">=0.6" },
     { name = "testcontainers", extras = ["postgres"], specifier = ">=4.7" },
 ]
+
+[[package]]
+name = "de-gladius"
+version = "0.2.0"
+source = { editable = "packages/gladius" }
+dependencies = [
+    { name = "arsenal-core" },
+    { name = "duckdb" },
+    { name = "pyarrow" },
+    { name = "typer" },
+]
+
+[package.optional-dependencies]
+python = [
+    { name = "numpy", version = "2.4.6", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version < '3.12'" },
+    { name = "numpy", version = "2.5.2", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version >= '3.12'" },
+]
+
+[package.metadata]
+requires-dist = [
+    { name = "arsenal-core", editable = "packages/arsenal-core" },
+    { name = "duckdb", specifier = ">=1.0" },
+    { name = "numpy", marker = "extra == 'python'", specifier = ">=1.26" },
+    { name = "pyarrow", specifier = ">=17" },
+    { name = "typer", specifier = ">=0.12" },
+]
+provides-extras = ["python"]
 
 [[package]]
 name = "deepdiff"
@@ -688,33 +715,6 @@ sdist = { url = "https://files.pythonhosted.org/packages/8c/8a/b70b84cc78f9059d6
 wheels = [
     { url = "https://files.pythonhosted.org/packages/c7/96/147a2771ab655b9353781fb2f95c94eaf1d8576dccc991c1a61d0d355067/giturlparse-0.15.0-py2.py3-none-any.whl", hash = "sha256:76d2e6983b037356ab99b30683e533ac3db96409b68e2163a20fc3aff6446f10", size = 16683, upload-time = "2026-06-16T07:28:55.184Z" },
 ]
-
-[[package]]
-name = "gladius"
-version = "0.1.1"
-source = { editable = "packages/gladius" }
-dependencies = [
-    { name = "arsenal-core" },
-    { name = "duckdb" },
-    { name = "pyarrow" },
-    { name = "typer" },
-]
-
-[package.optional-dependencies]
-python = [
-    { name = "numpy", version = "2.4.6", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version < '3.12'" },
-    { name = "numpy", version = "2.5.2", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version >= '3.12'" },
-]
-
-[package.metadata]
-requires-dist = [
-    { name = "arsenal-core", editable = "packages/arsenal-core" },
-    { name = "duckdb", specifier = ">=1.0" },
-    { name = "numpy", marker = "extra == 'python'", specifier = ">=1.26" },
-    { name = "pyarrow", specifier = ">=17" },
-    { name = "typer", specifier = ">=0.12" },
-]
-provides-extras = ["python"]
 
 [[package]]
 name = "h11"
@@ -1299,7 +1299,7 @@ wheels = [
 
 [[package]]
 name = "onager"
-version = "0.1.1"
+version = "0.2.0"
 source = { editable = "packages/onager" }
 dependencies = [
     { name = "arsenal-core" },
@@ -1584,7 +1584,7 @@ wheels = [
 
 [[package]]
 name = "pugio"
-version = "0.1.1"
+version = "0.2.0"
 source = { editable = "packages/pugio" }
 dependencies = [
     { name = "arsenal-core" },
@@ -2274,12 +2274,12 @@ wheels = [
 
 [[package]]
 name = "scorpio"
-version = "0.1.1"
+version = "0.2.0"
 source = { editable = "packages/scorpio" }
 
 [[package]]
 name = "scutum"
-version = "0.1.1"
+version = "0.2.0"
 source = { editable = "packages/scutum" }
 dependencies = [
     { name = "arsenal-core" },
@@ -2427,7 +2427,7 @@ wheels = [
 
 [[package]]
 name = "spatha"
-version = "0.1.1"
+version = "0.2.0"
 source = { editable = "packages/spatha" }
 dependencies = [
     { name = "pydantic" },

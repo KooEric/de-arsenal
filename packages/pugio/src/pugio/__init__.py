@@ -4,4 +4,9 @@
 구조: sources/ sinks/ auth/ validate/ runner.py cli.py (docs/02-architecture.md)
 """
 
-__version__ = "0.1.1"
+from importlib.metadata import PackageNotFoundError, version
+
+try:
+    __version__ = version("pugio")
+except PackageNotFoundError:
+    __version__ = "0.2.0"

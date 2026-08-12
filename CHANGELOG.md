@@ -5,8 +5,29 @@ All notable changes to this project are documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 This project has not yet reached a public API stability commitment (see
 [Known limitations](#known-limitations)); spec-field additions are
-backward-compatible by policy (`arsenal-core` pinned `>=0.1,<0.2` across
-`pugio`/`gladius`/`de-arsenal`).
+backward-compatible by policy (`arsenal-core` pinned `>=0.2,<0.3` across
+`pugio`/`de-gladius`/`de-arsenal`).
+
+## [0.2.0] - Unreleased
+
+P1 platform release. The workspace packages now share the `0.2.0` version.
+The transform package is published as `de-gladius`; its Python import package
+and `gladius` CLI remain unchanged.
+
+### Added
+
+- Schema snapshot comparison and drift reporting in `arsenal-core`.
+- Incremental transforms and Python UDF steps in Gladius.
+- Object-storage and dlt source capabilities in Pugio.
+- Onager compaction/backfill, Scorpio freshness checks, Scutum data contracts
+  and locks, and Spatha workflow planning.
+- Tag-driven release verification, distribution builds, and PyPI publishing.
+
+### Changed
+
+- The PyPI distribution name `gladius` is replaced by `de-gladius`; existing
+  `import gladius`, `gladius` CLI, and source directory names remain stable.
+- Published inter-package dependency ranges now target `>=0.2,<0.3`.
 
 ## [0.1.1] - 2026-07-27
 
@@ -197,9 +218,6 @@ Full detail: [docs/08-limits.md](docs/08-limits.md).
   failure as one of these — unlike the direct Postgres sink, which already
   separates sqlstate `28xxx` (auth) into `FatalError`. Net effect: wasted
   retries until backoff is exhausted, not incorrect data.
-- **PyPI name collision**: `de-arsenal` and `pugio` are unclaimed;
-  `gladius` is already registered by an unrelated project. No rename has
-  been made in this repo — see
-  [docs/reference/packaging.md](docs/reference/packaging.md) for the
-  prefix-strategy options. This is a publish-time decision for the
-  repository owner, not resolved by this release.
+- **PyPI naming**: the `gladius` distribution name is owned by an unrelated
+  project. v0.2.0 resolves this with the `de-gladius` distribution name while
+  preserving the `gladius` import path and CLI.
