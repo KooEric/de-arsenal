@@ -1,6 +1,6 @@
 [project]
 name = "onager"
-version = "0.2.0"
+version = "0.2.1"
 description = "Onager — safe local Parquet small-file compaction"
 readme = "README.md"
 requires-python = ">=3.11"

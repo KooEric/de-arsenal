@@ -16,9 +16,9 @@ members = [
     "de-arsenal",
     "de-arsenal-workspace",
     "de-gladius",
+    "de-scorpio",
     "onager",
     "pugio",
-    "scorpio",
     "scutum",
     "spatha",
 ]
@@ -74,7 +74,7 @@ wheels = [
 
 [[package]]
 name = "arsenal-core"
-version = "0.2.0"
+version = "0.2.1"
 source = { editable = "packages/arsenal-core" }
 dependencies = [
     { name = "pydantic" },
@@ -444,7 +444,7 @@ wheels = [
 
 [[package]]
 name = "de-arsenal"
-version = "0.2.0"
+version = "0.2.1"
 source = { editable = "packages/arsenal" }
 dependencies = [
     { name = "arsenal-core" },
@@ -484,9 +484,9 @@ dependencies = [
     { name = "arsenal-core" },
     { name = "de-arsenal" },
     { name = "de-gladius" },
+    { name = "de-scorpio" },
     { name = "onager" },
     { name = "pugio", extra = ["postgres"] },
-    { name = "scorpio" },
     { name = "scutum" },
     { name = "spatha" },
 ]
@@ -507,9 +507,9 @@ requires-dist = [
     { name = "arsenal-core", editable = "packages/arsenal-core" },
     { name = "de-arsenal", editable = "packages/arsenal" },
     { name = "de-gladius", editable = "packages/gladius" },
+    { name = "de-scorpio", editable = "packages/scorpio" },
     { name = "onager", editable = "packages/onager" },
     { name = "pugio", extras = ["postgres"], editable = "packages/pugio" },
-    { name = "scorpio", editable = "packages/scorpio" },
     { name = "scutum", editable = "packages/scutum" },
     { name = "spatha", editable = "packages/spatha" },
 ]
@@ -527,7 +527,7 @@ dev = [
 
 [[package]]
 name = "de-gladius"
-version = "0.2.0"
+version = "0.2.1"
 source = { editable = "packages/gladius" }
 dependencies = [
     { name = "arsenal-core" },
@@ -551,6 +551,11 @@ requires-dist = [
     { name = "typer", specifier = ">=0.12" },
 ]
 provides-extras = ["python"]
+
+[[package]]
+name = "de-scorpio"
+version = "0.2.1"
+source = { editable = "packages/scorpio" }
 
 [[package]]
 name = "deepdiff"
@@ -1299,7 +1304,7 @@ wheels = [
 
 [[package]]
 name = "onager"
-version = "0.2.0"
+version = "0.2.1"
 source = { editable = "packages/onager" }
 dependencies = [
     { name = "arsenal-core" },
@@ -1584,14 +1589,14 @@ wheels = [
 
 [[package]]
 name = "pugio"
-version = "0.2.0"
+version = "0.2.1"
 source = { editable = "packages/pugio" }
 dependencies = [
     { name = "arsenal-core" },
+    { name = "de-scorpio" },
     { name = "duckdb" },
     { name = "httpx" },
     { name = "pyarrow" },
-    { name = "scorpio" },
     { name = "typer" },
 ]
 
@@ -1609,13 +1614,13 @@ postgres = [
 [package.metadata]
 requires-dist = [
     { name = "arsenal-core", editable = "packages/arsenal-core" },
+    { name = "de-scorpio", editable = "packages/scorpio" },
     { name = "dlt", marker = "extra == 'dlt'", specifier = ">=1.29,<2" },
     { name = "duckdb", specifier = ">=1.0" },
     { name = "fastexcel", marker = "extra == 'excel'", specifier = ">=0.11" },
     { name = "httpx", specifier = ">=0.27" },
     { name = "psycopg", extras = ["binary"], marker = "extra == 'postgres'", specifier = ">=3.1" },
     { name = "pyarrow", specifier = ">=17" },
-    { name = "scorpio", editable = "packages/scorpio" },
     { name = "typer", specifier = ">=0.12" },
 ]
 provides-extras = ["excel", "postgres", "dlt"]
@@ -2273,13 +2278,8 @@ wheels = [
 ]
 
 [[package]]
-name = "scorpio"
-version = "0.2.0"
-source = { editable = "packages/scorpio" }
-
-[[package]]
 name = "scutum"
-version = "0.2.0"
+version = "0.2.1"
 source = { editable = "packages/scutum" }
 dependencies = [
     { name = "arsenal-core" },
@@ -2427,7 +2427,7 @@ wheels = [
 
 [[package]]
 name = "spatha"
-version = "0.2.0"
+version = "0.2.1"
 source = { editable = "packages/spatha" }
 dependencies = [
     { name = "pydantic" },
