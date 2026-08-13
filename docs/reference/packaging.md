@@ -1,6 +1,6 @@
-# 패키징 릴리스 체크리스트 (v0.2.1)
+# 패키징 릴리스 체크리스트 (v0.2.2)
 
-이 문서는 v0.2.1 패치 릴리스의 패키징 검증과 PyPI 게시 전 확인사항을 기록한다. 실제
+이 문서는 v0.2.2 패치 릴리스의 패키징 검증과 PyPI 게시 전 확인사항을 기록한다. 실제
 태그 릴리스 절차는 [docs/release.md](../release.md)를 기준으로 한다.
 
 ## uv build
@@ -33,6 +33,10 @@ uv build --all-packages
 **v0.2.0 결과 (2026-08-11)**: 8개 wheel을 새 가상환경에 동시 설치했다. `arsenal`,
 `pugio`, `gladius`의 `--help`가 모두 exit code 0으로 동작했고, `import gladius`는
 `0.2.0`을 반환했다. 즉 배포명 `de-gladius`와 기존 import/CLI 경로가 함께 검증됐다.
+
+**v0.2.2 후보 결과 (2026-08-13)**: PyPI 게시 전 생성한 8개 wheel만으로 새 가상환경을
+구성해 `arsenal`, `pugio`, `gladius`의 `--help`와 `scutum` import를 확인했다.
+`pugio`의 런타임 `scutum` 의존성이 workspace 밖에서도 해석되는 것을 검증했다.
 
 **검증 중 발견하고 고친 버그**: `pugio/sinks/__init__.py`가 최상단에서
 `PostgresSink`를 import하고 있었는데, `postgres` extra(`psycopg`)는 optional
@@ -101,5 +105,5 @@ curl -s -o /dev/null -w "%{http_code}" https://pypi.org/pypi/<name>/json
 ## 로컬에서 끝낼 수 없는 것 (사용자 인프라/판단 필요)
 
 1. **Windows CI 그린 확인** — push 후 실제 GitHub Actions 실행 결과를 봐야 함.
-2. **PyPI 게시(publish)** — `v0.2.1` 태그 push 후 release workflow가 수행한다.
+2. **PyPI 게시(publish)** — `v0.2.2` 태그 push 후 release workflow가 수행한다.
    사전에 GitHub `pypi` environment와 PyPI Trusted Publisher 설정이 필요하다.
