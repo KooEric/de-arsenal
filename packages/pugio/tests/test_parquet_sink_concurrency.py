@@ -5,12 +5,15 @@ writer가 **같은 파일에 섞어 쓴 뒤** 각자 os.replace 한다. rename�
 옮겨지는 파일이 이미 깨져 있으므로, 원자성 보장이 이 경우를 덮지 못한다.
 """
 
+import os
 import threading
 from pathlib import Path
 
 import pyarrow as pa
 import pyarrow.parquet as pq
+import pytest
 
+from arsenal_core.errors import RetryableError
 from arsenal_core.state import UnitSpec
 from pugio.sinks.parquet import ParquetSink
 
@@ -53,3 +56,42 @@ def test_concurrent_writes_of_same_unit_leave_a_readable_file(tmp_path: Path) ->
     assert table.num_rows == 500  # pyright: ignore[reportUnknownMemberType]
     # 임시 파일이 결과 디렉터리에 남지 않는다
     assert list(tmp_path.glob("*.tmp")) == []
+
+
+def test_replace_retries_transient_permission_error(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Windows의 일시적 공유 위반은 재시도로 흡수한다 (POSIX에선 재현되지 않는 경로)."""
+    calls = {"n": 0}
+    real_replace = os.replace
+
+    def flaky(src: object, dst: object) -> None:
+        calls["n"] += 1
+        if calls["n"] < 3:
+            raise PermissionError(13, "Access is denied")
+        real_replace(src, dst)  # pyright: ignore[reportUnknownArgumentType, reportArgumentType]
+
+    monkeypatch.setattr(os, "replace", flaky)
+    monkeypatch.setattr("pugio.sinks.parquet._REPLACE_BACKOFF_S", 0.0)
+
+    unit = _unit()
+    ParquetSink(tmp_path).write(unit, pa.RecordBatch.from_pylist([{"i": 1}]))
+
+    assert calls["n"] == 3
+    assert (tmp_path / f"{unit.unit_id}.parquet").exists()
+
+
+def test_replace_gives_up_as_retryable_error(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """재시도가 소진되면 경합은 설정 오류가 아니라 일시적 실패로 분류된다."""
+
+    def always_denied(src: object, dst: object) -> None:
+        raise PermissionError(13, "Access is denied")
+
+    monkeypatch.setattr(os, "replace", always_denied)
+    monkeypatch.setattr("pugio.sinks.parquet._REPLACE_BACKOFF_S", 0.0)
+
+    with pytest.raises(RetryableError):
+        ParquetSink(tmp_path).write(_unit(), pa.RecordBatch.from_pylist([{"i": 1}]))
+    assert list(tmp_path.glob("*.tmp")) == []  # 고아 임시 파일 없음
