@@ -8,6 +8,51 @@ This project has not yet reached a public API stability commitment (see
 backward-compatible by policy (`arsenal-core` pinned `>=0.2,<0.3` across
 `pugio`/`de-gladius`/`de-arsenal`).
 
+## [Unreleased]
+
+Correctness and hardening pass. Every item below was found by adversarially
+exercising the shipped code (not by review) and is pinned by a regression test
+that fails the way the original defect failed.
+
+### Fixed
+
+- **Statement injection through `filter`/`derive`/`map` expressions.** These
+  expressions are interpolated into the `COPY (<compiled SQL>) TO ...` template
+  that `gladius run` executes, with no validation, so a `;` let a spec close the
+  wrapper and run a second statement — reproduced end to end, writing an
+  attacker-chosen file while the run reported success. The `sql` step already
+  rejected `;`; the same rule now applies to every expression slot, and each
+  interpolation site is parenthesised so a stray `)` is a parse error instead of
+  a scope escape. Expression *contents* are still unvalidated by design (the dbt
+  trust model) — the residual boundary is now written down in
+  [docs/08-limits.md](docs/08-limits.md).
+- **`offset`/`page` unit keys ignored the page size.** `unit_key` was
+  `offset={n}`, so changing `pagination.size` produced the same `unit_id` for a
+  different row range: the rerun skipped it as already done and state silently
+  diverged from the data. `docs/02-architecture.md` had specified
+  `offset=200:limit=100` from the start — the implementation had drifted.
+  **Breaking for `offset`/`page` pipelines:** unit ids change, so an existing
+  state DB re-collects everything and a parquet sink keeps the old-id files
+  alongside the new ones. Clear `state_dir` and the output directory before
+  rerunning.
+- **Concurrent parquet writes could publish a corrupt file.** The temp path was
+  the deterministic `{unit_id}.parquet.tmp`, so two writers of the same unit
+  interleaved into one file before each called `os.replace` — the rename is
+  atomic but the bytes it published were not. Temp names now carry pid and a
+  random suffix, and a failed write no longer leaves an orphan `.tmp`.
+- **`unique` reported nulls as duplicates.** `pc.count_distinct` defaults to
+  `mode="only_valid"`, so subtracting it from `len(col)` counted every null as a
+  duplicate: a column of `[1, 2, None, None]` reported two violations. Under the
+  default `quarantine` policy that silently sent clean batches to the DLQ. Nulls
+  are now excluded from both sides, matching the null discipline `min`/`max`
+  already documented.
+- **Release workflow published sdist-only for a single package.** The selection
+  glob `{name}-{version}.*` matches `.tar.gz` but not
+  `-py3-none-any.whl`, and the existence guard passed on the sdist, so the
+  manual bootstrap path shipped without a wheel and said nothing. Both artifact
+  shapes are now selected and independently asserted. The tag-push path uploads
+  all of `dist/` and was unaffected.
+
 ## [0.2.0] - Unreleased
 
 P1 platform release. The workspace packages now share the `0.2.0` version.
