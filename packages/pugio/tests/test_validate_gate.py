@@ -46,3 +46,21 @@ def test_max_on_non_numeric_field_is_fatal() -> None:
     batch = pa.RecordBatch.from_pylist([{"v": "a"}, {"v": "b"}])
     with pytest.raises(FatalError, match="min/max requires a numeric field"):
         check(batch, [ValidateRule(field="v", max=10)])
+
+
+def test_unique_ignores_nulls_like_min_max() -> None:
+    """null은 unique 위반이 아니다 — min/max와 같은 null 규율을 따른다.
+
+    pc.count_distinct의 기본 mode="only_valid"는 null을 세지 않는데 len(col)에서
+    그대로 빼면, null 2개가 있는 컬럼이 중복 2건으로 보고된다(오탐). null을 막고
+    싶으면 not_null 규칙을 따로 붙이는 게 이 코드베이스의 규약이다.
+    """
+    batch = pa.RecordBatch.from_pylist([{"v": 1}, {"v": 2}, {"v": None}, {"v": None}])
+    report = check(batch, [ValidateRule(field="v", unique=True)])
+    assert report.violations == []
+
+
+def test_unique_still_detects_real_duplicates_with_nulls_present() -> None:
+    batch = pa.RecordBatch.from_pylist([{"v": 1}, {"v": 1}, {"v": None}])
+    report = check(batch, [ValidateRule(field="v", unique=True)])
+    assert [(v.rule, v.field, v.count) for v in report.violations] == [("unique", "v", 1)]

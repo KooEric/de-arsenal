@@ -42,8 +42,13 @@ def check(batch: pa.RecordBatch, rules: list[ValidateRule]) -> GateReport:
             if n:
                 out.append(Violation("not_null", r.field, n))
         if r.unique:
+            # count_distinct는 기본 mode="only_valid" — null을 세지 않는다. 따라서
+            # len(col)에서 그대로 빼면 null 하나하나가 중복으로 잡힌다(오탐). 아래
+            # min/max와 같은 규율로 null은 위반으로도 통과로도 세지 않는다 —
+            # null을 거부하려면 not_null 규칙을 따로 붙인다.
             distinct_count = pc.count_distinct(col).as_py()  # pyright: ignore[reportUnknownMemberType, reportAttributeAccessIssue, reportUnknownVariableType]
-            dupes = len(col) - int(distinct_count)  # pyright: ignore[reportUnknownArgumentType]
+            non_null = len(col) - col.null_count
+            dupes = non_null - int(distinct_count)  # pyright: ignore[reportUnknownArgumentType]
             if dupes:
                 out.append(Violation("unique", r.field, dupes))
         # min/max는 null을 무시한다: pc.less/pc.greater는 null 입력에 null을 내고,
