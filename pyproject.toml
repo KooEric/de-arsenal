@@ -8,8 +8,8 @@ dependencies = [
     "pugio[postgres]",
     "de-gladius",
     "de-arsenal",
-    "onager",
-    "scutum",
+    "de-onager",
+    "de-scutum",
     "spatha",
     "de-scorpio",
 ]
@@ -22,8 +22,8 @@ arsenal-core = { workspace = true }
 pugio = { workspace = true }
 de-gladius = { workspace = true }
 de-arsenal = { workspace = true }
-onager = { workspace = true }
-scutum = { workspace = true }
+de-onager = { workspace = true }
+de-scutum = { workspace = true }
 spatha = { workspace = true }
 de-scorpio = { workspace = true }
 

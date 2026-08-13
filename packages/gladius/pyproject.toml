@@ -1,6 +1,6 @@
 [project]
 name = "de-gladius"
-version = "0.2.1"
+version = "0.2.2"
 description = "Gladius — 변환·쿼리. map/steps 선언을 SQL로 컴파일해 DuckDB에서 실행"
 readme = "README.md"
 requires-python = ">=3.11"

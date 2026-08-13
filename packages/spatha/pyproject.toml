@@ -1,11 +1,11 @@
 [project]
 name = "spatha"
-version = "0.2.1"
+version = "0.2.2"
 description = "Spatha — deterministic dependency DAG planning"
 readme = "README.md"
 requires-python = ">=3.11"
 license = "Apache-2.0"
-dependencies = ["pydantic>=2.7", "scutum>=0.2,<0.3"]
+dependencies = ["de-scutum>=0.2,<0.3", "pydantic>=2.7"]
 classifiers = [
     "Programming Language :: Python :: 3",
     "Programming Language :: Python :: 3.11",
