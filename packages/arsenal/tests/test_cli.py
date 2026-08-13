@@ -1,6 +1,7 @@
 """Arsenal 우산 CLI 테스트 (M4 Task 4.0) — init/run/query, 위임만 하고 로직은 없다."""
 
 import json
+import re
 from pathlib import Path
 
 import pyarrow as pa
@@ -39,6 +40,20 @@ def test_load_project_bad_yaml_raises_fatal_error(tmp_path: Path) -> None:
     (tmp_path / "arsenal.yaml").write_text("name: [unterminated")
     with pytest.raises(FatalError):
         load_project(tmp_path / "arsenal.yaml")
+
+
+def test_load_project_bad_yaml_error_is_one_line_with_position(tmp_path: Path) -> None:
+    """매니페스트도 스펙 로더와 같은 한 줄 요약 형식이어야 한다 — pyyaml의 여러 줄
+    트레이스백(캐럿 포함)을 그대로 노출하지 않는다."""
+    (tmp_path / "arsenal.yaml").write_text("name: x\npipelines: [1,2\n", encoding="utf-8")
+    with pytest.raises(FatalError) as exc_info:
+        load_project(tmp_path / "arsenal.yaml")
+    message = str(exc_info.value)
+    assert "while parsing a flow sequence" in message  # context
+    # 위치는 파서가 포기한 지점(닫히지 않은 [ 이므로 스트림 끝)
+    assert re.search(r"\(line \d+, column \d+\)", message)
+    assert "^" not in message  # pyyaml 캐럿 = 원시 여러 줄 출력의 흔적
+    assert message.count("\n") == 0
 
 
 def test_load_project_non_utf8_manifest_raises_fatal_error(tmp_path: Path) -> None:

@@ -10,6 +10,7 @@ import yaml
 from pydantic import BaseModel, ConfigDict, ValidationError
 
 from arsenal_core.errors import FatalError
+from arsenal_core.yaml_io import yaml_error_summary
 
 
 class ArsenalProject(BaseModel):
@@ -39,7 +40,7 @@ def load_project(manifest_path: Path) -> ArsenalProject:
     try:
         raw = yaml.safe_load(text)
     except yaml.YAMLError as e:
-        raise FatalError(f"invalid manifest {manifest_path}: {e}") from e
+        raise FatalError(f"invalid YAML in {manifest_path}: {yaml_error_summary(e)}") from e
 
     try:
         parsed = ArsenalProject.model_validate(raw)

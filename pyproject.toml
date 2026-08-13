@@ -32,6 +32,9 @@ target-version = "py311"
 [tool.ruff.lint]
 # PLW1514: 텍스트 파일 I/O에 encoding 명시 강제 — 생략하면 플랫폼 기본 인코딩을
 # 타서 Windows(cp1252)에서 UTF-8 스펙/문서가 UnicodeDecodeError로 깨진다.
+# PLW1514는 preview 규칙이라 per-rule opt-in이 없다 — preview=true가 선택된 다른
+# 그룹의 preview 동작까지 켜므로, ruff 버전은 uv.lock으로 고정된 상태를 전제한다.
+# ruff를 올릴 때는 이 lint 설정이 무관한 신규 지적을 낼 수 있음을 감안할 것.
 select = ["E", "F", "I", "UP", "B", "SIM", "PLW1514"]
 preview = true
 
