@@ -10,6 +10,7 @@ import yaml
 from pydantic import BaseModel, ConfigDict, ValidationError
 
 from arsenal_core.errors import FatalError
+from arsenal_core.yaml_io import yaml_error_summary
 
 
 class DbtProjectRef(BaseModel):
@@ -36,13 +37,15 @@ def load_project(manifest_path: Path) -> ArsenalProject:
         text = manifest_path.read_text(encoding="utf-8")
     except FileNotFoundError as e:
         raise FatalError(f"manifest not found: {manifest_path}") from e
+    except UnicodeDecodeError as e:
+        raise FatalError(f"manifest {manifest_path} is not valid UTF-8: {e}") from e
     except OSError as e:
         raise FatalError(f"cannot read manifest {manifest_path}: {e}") from e
 
     try:
         raw = yaml.safe_load(text)
     except yaml.YAMLError as e:
-        raise FatalError(f"invalid manifest {manifest_path}: {e}") from e
+        raise FatalError(f"invalid YAML in {manifest_path}: {yaml_error_summary(e)}") from e
 
     try:
         parsed = ArsenalProject.model_validate(raw)

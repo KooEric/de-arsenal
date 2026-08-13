@@ -46,6 +46,17 @@ that fails the way the original defect failed.
   default `quarantine` policy that silently sent clean batches to the DLQ. Nulls
   are now excluded from both sides, matching the null discipline `min`/`max`
   already documented.
+- **YAML syntax errors escaped as raw tracebacks.** `load_pipeline` and
+  `load_transform` called `yaml.safe_load` outside their `try`, so a syntax
+  mistake — an unquoted `timestamp[s]` inside a flow mapping, say — surfaced as
+  a multi-line pyyaml dump with a caret instead of a `FatalError`, even though
+  the same functions already translated `OSError` and pydantic
+  `ValidationError`. All three loaders (pipeline, transform, and the
+  `arsenal.yaml` manifest) now emit one line: `invalid YAML in {path}:
+  {context}: {problem} (line N, column M)`. The manifest loader was catching
+  `yaml.YAMLError` already but formatting it with `str(e)`, which is the same
+  multi-line dump. A decode failure on a non-UTF-8 spec is translated too. The
+  shared formatter lives in the new `arsenal_core.yaml_io`.
 - **Release workflow published sdist-only for a single package.** The selection
   glob `{name}-{version}.*` matches `.tar.gz` but not
   `-py3-none-any.whl`, and the existence guard passed on the sdist, so the

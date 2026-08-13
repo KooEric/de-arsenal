@@ -1,3 +1,4 @@
+import re
 from pathlib import Path
 
 import pytest
@@ -93,3 +94,28 @@ def test_sink_spec_path_still_accepts_path_object(tmp_path: Path) -> None:
     """
     spec = ParquetSinkSpec.model_validate({"type": "parquet", "path": tmp_path / "out"})
     assert spec.path == str(tmp_path / "out")
+
+
+def test_broken_yaml_syntax_is_clean_fatal_error(tmp_path: Path) -> None:
+    """YAML 문법 오류는 원시 트레이스백이 아니라 위치가 담긴 FatalError로 번역된다."""
+    broken = (
+        "name: x\n"
+        "source: { type: rest, url: https://x }\n"
+        "sink: { type: parquet, path: d, cast: { ts: timestamp[s] } }\n"
+    )
+    with pytest.raises(FatalError) as exc_info:
+        load_pipeline(write(tmp_path, broken))
+    message = str(exc_info.value)
+    assert "invalid YAML" in message
+    assert "pipe.yaml" in message
+    assert "while parsing a flow mapping" in message  # context
+    assert re.search(r"\(line \d+, column \d+\)", message)  # 위치 요약
+    assert "^" not in message  # pyyaml 캐럿 = 원시 여러 줄 출력의 흔적
+
+
+def test_non_utf8_spec_file_is_clean_fatal_error(tmp_path: Path) -> None:
+    """YAML은 UTF-8이 규격 — 디코딩 실패도 원시 UnicodeDecodeError가 아니라 FatalError."""
+    p = tmp_path / "pipe.yaml"
+    p.write_bytes(b"name: \xff\xfe not utf-8\n")
+    with pytest.raises(FatalError, match="UTF-8"):
+        load_pipeline(p)
