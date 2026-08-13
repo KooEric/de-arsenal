@@ -53,6 +53,31 @@ def test_missing_env_var_is_fatal(tmp_path: Path, monkeypatch: pytest.MonkeyPatc
         load_pipeline(write(tmp_path, VALID))
 
 
+def test_non_utf8_spec_file_is_clean_fatal_error(tmp_path: Path) -> None:
+    """YAML은 UTF-8이 규격 — 디코딩 실패도 원시 UnicodeDecodeError가 아니라 FatalError."""
+    p = tmp_path / "pipe.yaml"
+    p.write_bytes(b"name: \xff\xfe not utf-8\n")
+    with pytest.raises(FatalError) as exc_info:
+        load_pipeline(p)
+    message = str(exc_info.value)
+    assert "UTF-8" in message
+    assert "pipe.yaml" in message
+
+
+def test_utf8_spec_with_non_ascii_content_loads(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """스펙 파일은 플랫폼 기본 인코딩과 무관하게 UTF-8로 읽어야 한다.
+
+    read_text()에 encoding을 주지 않으면 Windows(cp1252)에서 한글 주석이 든
+    예제 YAML이 UnicodeDecodeError로 터진다.
+    """
+    monkeypatch.setenv("TEST_TOKEN", "tok123")
+    p = tmp_path / "pipe.yaml"
+    p.write_bytes((VALID + "# 한글 주석 — em dash\n").encode())
+    assert load_pipeline(p).name == "github-issues"
+
+
 def test_state_dir_default_is_path(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     """state_dir 기본값은 런타임에 Path여야 한다 (runner가 `state_dir / ...`로 사용).
 

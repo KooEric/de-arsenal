@@ -184,7 +184,8 @@ def test_stripe_escape_hatch_source_completes_pagination(
                         self._done = True
                     return FetchResult(batch=batch, exhausted=self._done)
             """
-        )
+        ),
+        encoding="utf-8",  # 소스에 한글 docstring — 기본 인코딩이면 Windows에서 깨진다
     )
     monkeypatch.syspath_prepend(str(tmp_path))  # pyright: ignore[reportUnknownMemberType]
 

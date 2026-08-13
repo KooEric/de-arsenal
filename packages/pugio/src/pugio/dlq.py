@@ -38,12 +38,15 @@ def write_dlq(
         "violations": [{"rule": v.rule, "field": v.field, "count": v.count} for v in violations],
         "quarantined_at": datetime.now(UTC).isoformat(),
     }
-    (d / f"{unit.unit_id}.json").write_text(json.dumps(reason, ensure_ascii=False, indent=2))
+    # ensure_ascii=False로 비ASCII를 그대로 쓰므로 인코딩 명시 필수 (기본 인코딩이면 손상)
+    (d / f"{unit.unit_id}.json").write_text(
+        json.dumps(reason, ensure_ascii=False, indent=2), encoding="utf-8"
+    )
     return parquet_path
 
 
 def read_reason(json_path: Path) -> dict[str, object]:
-    return json.loads(json_path.read_text())
+    return json.loads(json_path.read_text(encoding="utf-8"))
 
 
 def remove_dlq(state_dir: Path, pipeline: str, unit_id: str) -> None:

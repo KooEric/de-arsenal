@@ -41,6 +41,19 @@ def test_load_project_bad_yaml_raises_fatal_error(tmp_path: Path) -> None:
         load_project(tmp_path / "arsenal.yaml")
 
 
+def test_load_project_non_utf8_manifest_raises_fatal_error(tmp_path: Path) -> None:
+    """YAML은 UTF-8이 규격 — 디코딩 실패도 원시 UnicodeDecodeError가 아니라 FatalError."""
+    (tmp_path / "arsenal.yaml").write_bytes(b"name: \xff\xfe not utf-8\n")
+    with pytest.raises(FatalError, match="UTF-8"):
+        load_project(tmp_path / "arsenal.yaml")
+
+
+def test_load_project_reads_manifest_as_utf8(tmp_path: Path) -> None:
+    """플랫폼 기본 인코딩(Windows cp1252)과 무관하게 UTF-8로 읽어야 한다."""
+    (tmp_path / "arsenal.yaml").write_bytes((MANIFEST + "# 한글 주석 — em dash\n").encode())
+    assert load_project(tmp_path / "arsenal.yaml").name == "my-project"
+
+
 def test_load_project_missing_required_field_raises_fatal_error(tmp_path: Path) -> None:
     (tmp_path / "arsenal.yaml").write_text("pipelines: []\n")
     with pytest.raises(FatalError, match="name"):

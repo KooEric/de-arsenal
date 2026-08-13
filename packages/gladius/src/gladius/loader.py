@@ -39,9 +39,12 @@ def _yaml_error_summary(e: yaml.YAMLError) -> str:
 
 def load_transform(path: Path) -> TransformSpec:
     try:
-        text = path.read_text()
+        # YAML 규격은 UTF-8 — 플랫폼 기본 인코딩(Windows cp1252)에 맡기면 안 된다
+        text = path.read_text(encoding="utf-8")
     except FileNotFoundError as e:
         raise FatalError(f"spec file not found: {path}") from e
+    except UnicodeDecodeError as e:
+        raise FatalError(f"spec file {path} is not valid UTF-8: {e}") from e
     except OSError as e:
         raise FatalError(f"cannot read spec file {path}: {e}") from e
 
