@@ -28,11 +28,12 @@ uv build --all-packages
 ## GitHub 릴리스
 
 태그를 만들기 전에 Actions 탭에서 `release` workflow가 보이는지 확인한다.
-수동 실행은 검증만 하고 PyPI에 게시하지 않는다.
+`publish_package=none`인 수동 실행은 검증만 한다. PyPI 신규 프로젝트를
+Trusted Publisher로 처음 만들 때만 `publish_package`에 패키지 하나를 선택한다.
 
 ```bash
 gh workflow list
-gh workflow run release.yml -f version=0.2.0
+gh workflow run release.yml -f version=0.2.0 -f publish_package=none
 gh run list --workflow release.yml --limit 1
 ```
 
@@ -51,8 +52,20 @@ git push origin v0.2.0
 3. 빌드 산출물 보관
 4. PyPI Trusted Publishing으로 게시
 
-`publish` job은 tag push에서만 실행된다. 수동 `workflow_dispatch` 실행에는
-게시 job이 실행되지 않는다.
+`publish` job은 tag push에서 실행된다. 단, 신규 PyPI 프로젝트를 순서대로
+만들어야 하는 최초 부트스트랩 기간에는 수동 실행에서 패키지 하나를 지정해
+그 패키지만 게시할 수 있다. 이미 게시된 파일은 `skip-existing`으로 재실행 시
+건너뛴다.
+
+현재 v0.2.0 부트스트랩 순서:
+
+1. PyPI 계정의 **Pending publishers**에 `arsenal-core`를 등록한다.
+2. `gh workflow run release.yml -f version=0.2.0 -f publish_package=arsenal-core`를 실행한다.
+3. `arsenal-core`가 생성되면 PyPI의 동일 publisher를 `de-arsenal`에 등록하고,
+   같은 방식으로 나머지 패키지를 하나씩 게시한다.
+4. 8개 패키지가 모두 PyPI에 존재하면 `publish_package=none`으로 검증한 뒤
+   `v0.2.0` 태그를 push한다. 태그 실행은 이미 존재하는 파일을 건너뛰고
+   누락된 파일만 보완한다.
 
 게시 전 GitHub 저장소의 `pypi` environment와 PyPI Trusted Publisher 설정이
 필요하다. API token을 저장소에 넣지 않는다.
