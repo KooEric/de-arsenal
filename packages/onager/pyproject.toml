@@ -1,11 +1,11 @@
 [project]
-name = "onager"
+name = "de-onager"
 version = "0.2.2"
 description = "Onager — safe local Parquet small-file compaction"
 readme = "README.md"
 requires-python = ">=3.11"
 license = "Apache-2.0"
-dependencies = ["arsenal-core>=0.2,<0.3", "duckdb>=1.0", "scutum>=0.2,<0.3", "typer>=0.12"]
+dependencies = ["arsenal-core>=0.2,<0.3", "de-scutum>=0.2,<0.3", "duckdb>=1.0", "typer>=0.12"]
 classifiers = [
     "Programming Language :: Python :: 3",
     "Programming Language :: Python :: 3.11",

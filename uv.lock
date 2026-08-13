@@ -16,10 +16,10 @@ members = [
     "de-arsenal",
     "de-arsenal-workspace",
     "de-gladius",
+    "de-onager",
     "de-scorpio",
-    "onager",
+    "de-scutum",
     "pugio",
-    "scutum",
     "spatha",
 ]
 
@@ -484,10 +484,10 @@ dependencies = [
     { name = "arsenal-core" },
     { name = "de-arsenal" },
     { name = "de-gladius" },
+    { name = "de-onager" },
     { name = "de-scorpio" },
-    { name = "onager" },
+    { name = "de-scutum" },
     { name = "pugio", extra = ["postgres"] },
-    { name = "scutum" },
     { name = "spatha" },
 ]
 
@@ -507,10 +507,10 @@ requires-dist = [
     { name = "arsenal-core", editable = "packages/arsenal-core" },
     { name = "de-arsenal", editable = "packages/arsenal" },
     { name = "de-gladius", editable = "packages/gladius" },
+    { name = "de-onager", editable = "packages/onager" },
     { name = "de-scorpio", editable = "packages/scorpio" },
-    { name = "onager", editable = "packages/onager" },
+    { name = "de-scutum", editable = "packages/scutum" },
     { name = "pugio", extras = ["postgres"], editable = "packages/pugio" },
-    { name = "scutum", editable = "packages/scutum" },
     { name = "spatha", editable = "packages/spatha" },
 ]
 
@@ -553,9 +553,45 @@ requires-dist = [
 provides-extras = ["python"]
 
 [[package]]
+name = "de-onager"
+version = "0.2.2"
+source = { editable = "packages/onager" }
+dependencies = [
+    { name = "arsenal-core" },
+    { name = "de-scutum" },
+    { name = "duckdb" },
+    { name = "typer" },
+]
+
+[package.metadata]
+requires-dist = [
+    { name = "arsenal-core", editable = "packages/arsenal-core" },
+    { name = "de-scutum", editable = "packages/scutum" },
+    { name = "duckdb", specifier = ">=1.0" },
+    { name = "typer", specifier = ">=0.12" },
+]
+
+[[package]]
 name = "de-scorpio"
 version = "0.2.2"
 source = { editable = "packages/scorpio" }
+
+[[package]]
+name = "de-scutum"
+version = "0.2.2"
+source = { editable = "packages/scutum" }
+dependencies = [
+    { name = "arsenal-core" },
+    { name = "pyarrow" },
+    { name = "pydantic" },
+]
+
+[package.metadata]
+requires-dist = [
+    { name = "arsenal-core", editable = "packages/arsenal-core" },
+    { name = "pyarrow", specifier = ">=17" },
+    { name = "pydantic", specifier = ">=2.7" },
+]
 
 [[package]]
 name = "deepdiff"
@@ -1303,25 +1339,6 @@ wheels = [
 ]
 
 [[package]]
-name = "onager"
-version = "0.2.2"
-source = { editable = "packages/onager" }
-dependencies = [
-    { name = "arsenal-core" },
-    { name = "duckdb" },
-    { name = "scutum" },
-    { name = "typer" },
-]
-
-[package.metadata]
-requires-dist = [
-    { name = "arsenal-core", editable = "packages/arsenal-core" },
-    { name = "duckdb", specifier = ">=1.0" },
-    { name = "scutum", editable = "packages/scutum" },
-    { name = "typer", specifier = ">=0.12" },
-]
-
-[[package]]
 name = "orderly-set"
 version = "5.5.0"
 source = { registry = "https://pypi.org/simple" }
@@ -1594,10 +1611,10 @@ source = { editable = "packages/pugio" }
 dependencies = [
     { name = "arsenal-core" },
     { name = "de-scorpio" },
+    { name = "de-scutum" },
     { name = "duckdb" },
     { name = "httpx" },
     { name = "pyarrow" },
-    { name = "scutum" },
     { name = "typer" },
 ]
 
@@ -1616,13 +1633,13 @@ postgres = [
 requires-dist = [
     { name = "arsenal-core", editable = "packages/arsenal-core" },
     { name = "de-scorpio", editable = "packages/scorpio" },
+    { name = "de-scutum", editable = "packages/scutum" },
     { name = "dlt", marker = "extra == 'dlt'", specifier = ">=1.29,<2" },
     { name = "duckdb", specifier = ">=1.0" },
     { name = "fastexcel", marker = "extra == 'excel'", specifier = ">=0.11" },
     { name = "httpx", specifier = ">=0.27" },
     { name = "psycopg", extras = ["binary"], marker = "extra == 'postgres'", specifier = ">=3.1" },
     { name = "pyarrow", specifier = ">=17" },
-    { name = "scutum", editable = "packages/scutum" },
     { name = "typer", specifier = ">=0.12" },
 ]
 provides-extras = ["excel", "postgres", "dlt"]
@@ -2280,23 +2297,6 @@ wheels = [
 ]
 
 [[package]]
-name = "scutum"
-version = "0.2.2"
-source = { editable = "packages/scutum" }
-dependencies = [
-    { name = "arsenal-core" },
-    { name = "pyarrow" },
-    { name = "pydantic" },
-]
-
-[package.metadata]
-requires-dist = [
-    { name = "arsenal-core", editable = "packages/arsenal-core" },
-    { name = "pyarrow", specifier = ">=17" },
-    { name = "pydantic", specifier = ">=2.7" },
-]
-
-[[package]]
 name = "semver"
 version = "3.0.4"
 source = { registry = "https://pypi.org/simple" }
@@ -2432,14 +2432,14 @@ name = "spatha"
 version = "0.2.2"
 source = { editable = "packages/spatha" }
 dependencies = [
+    { name = "de-scutum" },
     { name = "pydantic" },
-    { name = "scutum" },
 ]
 
 [package.metadata]
 requires-dist = [
+    { name = "de-scutum", editable = "packages/scutum" },
     { name = "pydantic", specifier = ">=2.7" },
-    { name = "scutum", editable = "packages/scutum" },
 ]
 
 [[package]]

@@ -1,5 +1,5 @@
 [project]
-name = "scutum"
+name = "de-scutum"
 version = "0.2.2"
 description = "Scutum — Arrow data contracts and validation reports"
 readme = "README.md"

@@ -3,7 +3,7 @@
 from importlib.metadata import PackageNotFoundError, version
 
 try:
-    __version__ = version("scutum")
+    __version__ = version("de-scutum")
 except PackageNotFoundError:
     __version__ = "0.2.2"
 

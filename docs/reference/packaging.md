@@ -9,8 +9,8 @@
 uv build --all-packages
 ```
 
-8개 패키지(`arsenal-core`, `pugio`, `de-gladius`, `de-arsenal`, `de-scorpio`, `scutum`,
-`spatha`, `onager`) 전부 sdist+wheel
+8개 패키지(`arsenal-core`, `pugio`, `de-gladius`, `de-arsenal`, `de-scorpio`, `de-scutum`,
+`spatha`, `de-onager`) 전부 sdist+wheel
 생성 성공. wheel 메타데이터에 `License-Expression: Apache-2.0`, Python 3.11/3.12
 분류자, `License :: OSI Approved :: Apache Software License` 분류자,
 `Project-URL: Homepage`/`Repository`(→ `https://github.com/KooEric/de-arsenal`)가
@@ -36,7 +36,7 @@ uv build --all-packages
 
 **v0.2.2 후보 결과 (2026-08-13)**: PyPI 게시 전 생성한 8개 wheel만으로 새 가상환경을
 구성해 `arsenal`, `pugio`, `gladius`의 `--help`와 `scutum` import를 확인했다.
-`pugio`의 런타임 `scutum` 의존성이 workspace 밖에서도 해석되는 것을 검증했다.
+`pugio`의 런타임 `de-scutum` 의존성이 workspace 밖에서도 해석되는 것을 검증했다.
 
 **검증 중 발견하고 고친 버그**: `pugio/sinks/__init__.py`가 최상단에서
 `PostgresSink`를 import하고 있었는데, `postgres` extra(`psycopg`)는 optional
@@ -87,11 +87,17 @@ curl -s -o /dev/null -w "%{http_code}" https://pypi.org/pypi/<name>/json
 | `de-gladius` | 404 (2026-08-11) | 사용 가능 확인. Python import와 CLI는 기존 `gladius` 유지 |
 | `scorpio` | 200 | 기존 타 프로젝트가 사용 중이므로 사용하지 않음 |
 | `de-scorpio` | 404 | 이 저장소의 배포명으로 선택. Python import는 `scorpio` 유지 |
+| `scutum` | 200 | 기존 타 프로젝트가 사용 중이므로 사용하지 않음 |
+| `de-scutum` | 404 | 이 저장소의 배포명으로 선택. Python import는 `scutum` 유지 |
+| `onager` | 200 | 기존 타 프로젝트가 사용 중이므로 사용하지 않음 |
+| `de-onager` | 404 | 이 저장소의 배포명으로 선택. Python import와 CLI는 `onager` 유지 |
 
 `gladius` 배포명은 다른 프로젝트가 사용 중이므로 `de-gladius`로 확정했다.
 `packages/gladius/src/gladius`와 `gladius` CLI는 변경하지 않는다.
 `scorpio` 배포명도 다른 프로젝트가 사용 중이므로 `de-scorpio`로 확정했다.
 `packages/scorpio/src/scorpio`와 `scorpio` import는 변경하지 않는다.
+`scutum`과 `onager` 배포명도 다른 프로젝트가 사용 중이므로 각각 `de-scutum`,
+`de-onager`로 확정했다. 소스 패키지와 import/CLI 이름은 유지한다.
 
 ## LICENSE / README
 

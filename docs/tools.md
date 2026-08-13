@@ -69,6 +69,9 @@ onager compact ./data/events --dry-run
 onager compact ./data/events --target-bytes 134217728
 ```
 
+Onager의 PyPI 배포명은 `de-onager`이며 import와 CLI는 `onager`다. Scutum의
+배포명은 `de-scutum`이며 import는 `scutum`이다.
+
 Onager는 후보 파일만 선택하고, 새 디렉터리를 만든 뒤 성공했을 때만 기존
 데이터셋과 교체한다. 백필도 별도 workspace에서 준비한 뒤 명시적으로 promote한다.
 

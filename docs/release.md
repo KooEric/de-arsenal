@@ -5,7 +5,7 @@
 같은 버전으로 다시 게시한다.
 
 `v0.2.1` 검증에서 `pugio`의 런타임 `scutum` 의존성 누락이 발견되어 이 패치에서
-배포 메타데이터에 `scutum`을 추가한다.
+배포 메타데이터에 `de-scutum`을 추가한다.
 
 ## 확정 정책
 
@@ -14,6 +14,8 @@
 - 변환 패키지의 PyPI 배포명은 `de-gladius`다.
 - 운영 관측 패키지의 PyPI 배포명은 `de-scorpio`다.
 - `de-scorpio`도 import 경로와 기존 모듈명 `scorpio`를 유지한다.
+- 계약·잠금 패키지의 PyPI 배포명은 `de-scutum`이다.
+- 백필 패키지의 PyPI 배포명은 `de-onager`이다.
 - Python import 경로, 소스 디렉터리, CLI 명령은 하위 호환을 위해 `gladius`를 유지한다.
 - `Falcata`는 향후 브랜딩 후보이며 v0.2.2 범위에는 포함하지 않는다.
 
