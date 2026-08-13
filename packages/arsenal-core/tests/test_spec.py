@@ -53,6 +53,18 @@ def test_missing_env_var_is_fatal(tmp_path: Path, monkeypatch: pytest.MonkeyPatc
         load_pipeline(write(tmp_path, VALID))
 
 
+def test_state_dir_default_is_path(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    """state_dir 기본값은 런타임에 Path여야 한다 (runner가 `state_dir / ...`로 사용).
+
+    스키마 default를 플랫폼 독립적으로 직렬화하려고 선언은 str로 두므로,
+    validate_default 코어션이 빠지면 str이 새어 나와 runner에서 TypeError가 난다.
+    """
+    monkeypatch.setenv("TEST_TOKEN", "tok123")
+    spec = load_pipeline(write(tmp_path, VALID))
+    assert isinstance(spec.state_dir, Path)
+    assert spec.state_dir == Path(".arsenal")
+
+
 def test_broken_yaml_syntax_is_clean_fatal_error(tmp_path: Path) -> None:
     """YAML 문법 오류(예: 플로우 매핑 안의 따옴표 없는 timestamp[s])는 원시 트레이스백이
     아니라 파일 경로와 문제 위치가 담긴 FatalError로 번역되어야 한다."""

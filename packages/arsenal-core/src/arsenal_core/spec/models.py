@@ -204,7 +204,10 @@ class PipelineSpec(_Frozen):
     model_config = ConfigDict(frozen=True, extra="forbid", populate_by_name=True)
 
     name: str
-    state_dir: Path = Path(".arsenal")
+    # default는 str로 선언 — Path 기본값은 Windows에서 JSON 스키마 직렬화에 실패해
+    # (WindowsPath → PydanticJsonSchemaWarning) 생성 문서가 플랫폼마다 달라진다.
+    # validate_default=True가 str을 Path로 코어션하므로 런타임 타입은 그대로 Path다.
+    state_dir: Path = Field(default=".arsenal", validate_default=True)
     source: SourceSpec
     sink: SinkSpec
     validation: ValidateSpec | None = Field(default=None, alias="validate")
