@@ -11,7 +11,7 @@ dependencies = [
     "onager",
     "scutum",
     "spatha",
-    "scorpio",
+    "de-scorpio",
 ]
 
 [tool.uv.workspace]
@@ -25,7 +25,7 @@ de-arsenal = { workspace = true }
 onager = { workspace = true }
 scutum = { workspace = true }
 spatha = { workspace = true }
-scorpio = { workspace = true }
+de-scorpio = { workspace = true }
 
 [dependency-groups]
 dev = [

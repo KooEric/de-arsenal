@@ -9,7 +9,7 @@ from importlib.metadata import PackageNotFoundError, version
 try:
     __version__ = version("arsenal-core")
 except PackageNotFoundError:
-    __version__ = "0.2.0"
+    __version__ = "0.2.1"
 from arsenal_core.schema import SchemaChange, SchemaDiff, compare_schema_snapshots
 
 __all__ = ["SchemaChange", "SchemaDiff", "compare_schema_snapshots"]

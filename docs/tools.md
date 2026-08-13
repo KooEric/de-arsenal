@@ -99,6 +99,12 @@ assert report.ok
 상태 DB나 외부 저장소에서 읽은 마지막 성공 시각으로 즉시 fresh/stale/unknown을
 판정한다.
 
+PyPI 배포명은 `de-scorpio`이며 import 경로는 `scorpio`다.
+
+```bash
+pip install de-scorpio
+```
+
 ```python
 from scorpio import assess_freshness
 

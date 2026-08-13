@@ -5,7 +5,7 @@ from importlib.metadata import PackageNotFoundError, version
 try:
     __version__ = version("onager")
 except PackageNotFoundError:
-    __version__ = "0.2.0"
+    __version__ = "0.2.1"
 
 from onager.backfill import (
     BackfillWorkspace,

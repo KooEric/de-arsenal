@@ -1,6 +1,6 @@
-# 패키징 릴리스 체크리스트 (v0.2.0)
+# 패키징 릴리스 체크리스트 (v0.2.1)
 
-이 문서는 v0.2.0 패키징 검증과 PyPI 게시 전 확인사항을 기록한다. 실제
+이 문서는 v0.2.1 패치 릴리스의 패키징 검증과 PyPI 게시 전 확인사항을 기록한다. 실제
 태그 릴리스 절차는 [docs/release.md](../release.md)를 기준으로 한다.
 
 ## uv build
@@ -9,7 +9,7 @@
 uv build --all-packages
 ```
 
-8개 패키지(`arsenal-core`, `pugio`, `de-gladius`, `de-arsenal`, `scorpio`, `scutum`,
+8개 패키지(`arsenal-core`, `pugio`, `de-gladius`, `de-arsenal`, `de-scorpio`, `scutum`,
 `spatha`, `onager`) 전부 sdist+wheel
 생성 성공. wheel 메타데이터에 `License-Expression: Apache-2.0`, Python 3.11/3.12
 분류자, `License :: OSI Approved :: Apache Software License` 분류자,
@@ -81,9 +81,13 @@ curl -s -o /dev/null -w "%{http_code}" https://pypi.org/pypi/<name>/json
 | `de-arsenal` | 404 | 사용 가능 |
 | `pugio` | 404 | 사용 가능 |
 | `de-gladius` | 404 (2026-08-11) | 사용 가능 확인. Python import와 CLI는 기존 `gladius` 유지 |
+| `scorpio` | 200 | 기존 타 프로젝트가 사용 중이므로 사용하지 않음 |
+| `de-scorpio` | 404 | 이 저장소의 배포명으로 선택. Python import는 `scorpio` 유지 |
 
 `gladius` 배포명은 다른 프로젝트가 사용 중이므로 `de-gladius`로 확정했다.
 `packages/gladius/src/gladius`와 `gladius` CLI는 변경하지 않는다.
+`scorpio` 배포명도 다른 프로젝트가 사용 중이므로 `de-scorpio`로 확정했다.
+`packages/scorpio/src/scorpio`와 `scorpio` import는 변경하지 않는다.
 
 ## LICENSE / README
 
@@ -97,5 +101,5 @@ curl -s -o /dev/null -w "%{http_code}" https://pypi.org/pypi/<name>/json
 ## 로컬에서 끝낼 수 없는 것 (사용자 인프라/판단 필요)
 
 1. **Windows CI 그린 확인** — push 후 실제 GitHub Actions 실행 결과를 봐야 함.
-2. **PyPI 게시(publish)** — `v0.2.0` 태그 push 후 release workflow가 수행한다.
+2. **PyPI 게시(publish)** — `v0.2.1` 태그 push 후 release workflow가 수행한다.
    사전에 GitHub `pypi` environment와 PyPI Trusted Publisher 설정이 필요하다.

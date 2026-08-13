@@ -9,7 +9,7 @@ on:
       version:
         description: "Package version to verify or publish"
         required: true
-        default: "0.2.0"
+        default: "0.2.1"
         type: string
       publish_package:
         description: "Manual PyPI bootstrap package (none = verify only)"
@@ -23,7 +23,7 @@ on:
           - de-gladius
           - onager
           - pugio
-          - scorpio
+          - de-scorpio
           - scutum
           - spatha
 
@@ -85,7 +85,8 @@ jobs:
             arsenal-core) package_prefix="arsenal_core" ;;
             de-arsenal) package_prefix="de_arsenal" ;;
             de-gladius) package_prefix="de_gladius" ;;
-            onager|pugio|scorpio|scutum|spatha) package_prefix="$PUBLISH_PACKAGE" ;;
+            de-scorpio) package_prefix="de_scorpio" ;;
+            onager|pugio|scutum|spatha) package_prefix="$PUBLISH_PACKAGE" ;;
             *) echo "Unsupported package: $PUBLISH_PACKAGE" >&2; exit 1 ;;
           esac
           mkdir selected-dist
