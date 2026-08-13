@@ -27,6 +27,16 @@ def _substitute_env(text: str) -> str:
     return _ENV_PATTERN.sub(repl, text)
 
 
+def _yaml_error_summary(e: yaml.YAMLError) -> str:
+    """YAMLError를 한 줄 요약으로: 문제 설명 + (line, column). 마크가 없으면 str(e)."""
+    if isinstance(e, yaml.MarkedYAMLError) and e.problem is not None:
+        mark = e.problem_mark
+        where = f" (line {mark.line + 1}, column {mark.column + 1})" if mark else ""
+        context = f"{e.context}: " if e.context else ""
+        return f"{context}{e.problem}{where}"
+    return str(e)
+
+
 def load_transform(path: Path) -> TransformSpec:
     try:
         text = path.read_text()
@@ -35,7 +45,10 @@ def load_transform(path: Path) -> TransformSpec:
     except OSError as e:
         raise FatalError(f"cannot read spec file {path}: {e}") from e
 
-    raw = yaml.safe_load(_substitute_env(text))
+    try:
+        raw = yaml.safe_load(_substitute_env(text))
+    except yaml.YAMLError as e:
+        raise FatalError(f"invalid YAML in {path}: {_yaml_error_summary(e)}") from e
     try:
         return TransformSpec.model_validate(raw)
     except ValidationError as e:

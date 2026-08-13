@@ -53,6 +53,23 @@ def test_missing_env_var_is_fatal(tmp_path: Path, monkeypatch: pytest.MonkeyPatc
         load_pipeline(write(tmp_path, VALID))
 
 
+def test_broken_yaml_syntax_is_clean_fatal_error(tmp_path: Path) -> None:
+    """YAML 문법 오류(예: 플로우 매핑 안의 따옴표 없는 timestamp[s])는 원시 트레이스백이
+    아니라 파일 경로와 문제 위치가 담긴 FatalError로 번역되어야 한다."""
+    broken = (
+        "name: x\n"
+        "source: { type: rest, url: https://x }\n"
+        "sink: { type: parquet, path: d, cast: { ts: timestamp[s] } }\n"
+    )
+    with pytest.raises(FatalError) as exc_info:
+        load_pipeline(write(tmp_path, broken))
+    message = str(exc_info.value)
+    assert "invalid YAML" in message
+    assert "pipe.yaml" in message
+    assert "while parsing a flow mapping" in message  # context
+    assert "line 3" in message  # 문제 위치 요약 (sink 줄)
+
+
 def test_unknown_source_type_names_source_and_lists_expected_tags(tmp_path: Path) -> None:
     """discriminator 값이 태그 목록에 없으면 source에 앵커된 친절한 에러(_clean_loc 경로)."""
     with pytest.raises(FatalError) as exc_info:
