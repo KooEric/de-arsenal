@@ -53,6 +53,60 @@ def test_missing_env_var_is_fatal(tmp_path: Path, monkeypatch: pytest.MonkeyPatc
         load_pipeline(write(tmp_path, VALID))
 
 
+def test_non_utf8_spec_file_is_clean_fatal_error(tmp_path: Path) -> None:
+    """YAML은 UTF-8이 규격 — 디코딩 실패도 원시 UnicodeDecodeError가 아니라 FatalError."""
+    p = tmp_path / "pipe.yaml"
+    p.write_bytes(b"name: \xff\xfe not utf-8\n")
+    with pytest.raises(FatalError) as exc_info:
+        load_pipeline(p)
+    message = str(exc_info.value)
+    assert "UTF-8" in message
+    assert "pipe.yaml" in message
+
+
+def test_utf8_spec_with_non_ascii_content_loads(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """스펙 파일은 플랫폼 기본 인코딩과 무관하게 UTF-8로 읽어야 한다.
+
+    read_text()에 encoding을 주지 않으면 Windows(cp1252)에서 한글 주석이 든
+    예제 YAML이 UnicodeDecodeError로 터진다.
+    """
+    monkeypatch.setenv("TEST_TOKEN", "tok123")
+    p = tmp_path / "pipe.yaml"
+    p.write_bytes((VALID + "# 한글 주석 — em dash\n").encode())
+    assert load_pipeline(p).name == "github-issues"
+
+
+def test_state_dir_default_is_path(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    """state_dir 기본값은 런타임에 Path여야 한다 (runner가 `state_dir / ...`로 사용).
+
+    스키마 default를 플랫폼 독립적으로 직렬화하려고 선언은 str로 두므로,
+    validate_default 코어션이 빠지면 str이 새어 나와 runner에서 TypeError가 난다.
+    """
+    monkeypatch.setenv("TEST_TOKEN", "tok123")
+    spec = load_pipeline(write(tmp_path, VALID))
+    assert isinstance(spec.state_dir, Path)
+    assert spec.state_dir == Path(".arsenal")
+
+
+def test_broken_yaml_syntax_is_clean_fatal_error(tmp_path: Path) -> None:
+    """YAML 문법 오류(예: 플로우 매핑 안의 따옴표 없는 timestamp[s])는 원시 트레이스백이
+    아니라 파일 경로와 문제 위치가 담긴 FatalError로 번역되어야 한다."""
+    broken = (
+        "name: x\n"
+        "source: { type: rest, url: https://x }\n"
+        "sink: { type: parquet, path: d, cast: { ts: timestamp[s] } }\n"
+    )
+    with pytest.raises(FatalError) as exc_info:
+        load_pipeline(write(tmp_path, broken))
+    message = str(exc_info.value)
+    assert "invalid YAML" in message
+    assert "pipe.yaml" in message
+    assert "while parsing a flow mapping" in message  # context
+    assert "line 3" in message  # 문제 위치 요약 (sink 줄)
+
+
 def test_unknown_source_type_names_source_and_lists_expected_tags(tmp_path: Path) -> None:
     """discriminator 값이 태그 목록에 없으면 source에 앵커된 친절한 에러(_clean_loc 경로)."""
     with pytest.raises(FatalError) as exc_info:

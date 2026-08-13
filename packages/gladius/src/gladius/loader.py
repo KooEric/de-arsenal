@@ -12,6 +12,7 @@ import yaml
 from pydantic import ValidationError
 
 from arsenal_core.errors import FatalError
+from arsenal_core.yaml_io import yaml_error_summary
 from gladius.spec import TransformSpec
 
 _ENV_PATTERN = re.compile(r"\$\{(\w+)\}")
@@ -29,13 +30,19 @@ def _substitute_env(text: str) -> str:
 
 def load_transform(path: Path) -> TransformSpec:
     try:
-        text = path.read_text()
+        # YAML 규격은 UTF-8 — 플랫폼 기본 인코딩(Windows cp1252)에 맡기면 안 된다
+        text = path.read_text(encoding="utf-8")
     except FileNotFoundError as e:
         raise FatalError(f"spec file not found: {path}") from e
+    except UnicodeDecodeError as e:
+        raise FatalError(f"spec file {path} is not valid UTF-8: {e}") from e
     except OSError as e:
         raise FatalError(f"cannot read spec file {path}: {e}") from e
 
-    raw = yaml.safe_load(_substitute_env(text))
+    try:
+        raw = yaml.safe_load(_substitute_env(text))
+    except yaml.YAMLError as e:
+        raise FatalError(f"invalid YAML in {path}: {yaml_error_summary(e)}") from e
     try:
         return TransformSpec.model_validate(raw)
     except ValidationError as e:

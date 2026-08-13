@@ -27,13 +27,17 @@ def test_write_mode_generates_expected_markdown_and_json(tmp_path: Path) -> None
     result = _run(tmp_path)
     assert result.returncode == 0, result.stderr
 
-    pipeline_md = (tmp_path / "docs" / "reference" / "pipeline-schema.md").read_text()
+    pipeline_md = (tmp_path / "docs" / "reference" / "pipeline-schema.md").read_text(
+        encoding="utf-8"
+    )
     assert "source" in pipeline_md
     assert "sink" in pipeline_md
     assert "pagination" in pipeline_md
     assert "AUTO-GENERATED" in pipeline_md
 
-    transform_md = (tmp_path / "docs" / "reference" / "transform-schema.md").read_text()
+    transform_md = (tmp_path / "docs" / "reference" / "transform-schema.md").read_text(
+        encoding="utf-8"
+    )
     assert "steps" in transform_md
     assert "input" in transform_md
     assert "output" in transform_md
@@ -54,7 +58,9 @@ def test_check_mode_passes_on_freshly_generated_files(tmp_path: Path) -> None:
 def test_check_mode_fails_when_markdown_is_hand_edited(tmp_path: Path) -> None:
     _run(tmp_path)
     drifted = tmp_path / "docs" / "reference" / "pipeline-schema.md"
-    drifted.write_text(drifted.read_text() + "\nhand-edited drift\n")
+    drifted.write_text(
+        drifted.read_text(encoding="utf-8") + "\nhand-edited drift\n", encoding="utf-8"
+    )
 
     result = _run(tmp_path, "--check")
 

@@ -21,7 +21,7 @@ from pugio.runner import run_pipeline
 
 
 def _write_csv(path: Path, rows: list[dict[str, str]]) -> None:
-    with path.open("w", newline="") as f:
+    with path.open("w", newline="", encoding="utf-8") as f:
         writer = csv.DictWriter(f, fieldnames=["id", "name", "amount", "state"])
         writer.writeheader()
         for row in rows:

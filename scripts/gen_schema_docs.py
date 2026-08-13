@@ -209,13 +209,14 @@ def generate_artifacts() -> dict[Path, str]:
 def _write_artifacts(artifacts: dict[Path, str]) -> None:
     for path, content in artifacts.items():
         path.parent.mkdir(parents=True, exist_ok=True)
-        path.write_text(content)
+        path.write_text(content, encoding="utf-8")
 
 
 def _check_artifacts(artifacts: dict[Path, str]) -> list[Path]:
     stale: list[Path] = []
     for path, content in artifacts.items():
-        if not path.exists() or path.read_text() != content:
+        # Windows 기본 인코딩은 cp1252 — 생성 문서의 UTF-8 문자(— 등)에서 깨진다
+        if not path.exists() or path.read_text(encoding="utf-8") != content:
             stale.append(path)
     return stale
 
