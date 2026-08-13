@@ -29,8 +29,9 @@ def test_units_are_lazy_and_deterministic() -> None:
     from itertools import islice
 
     units = list(islice(make_source().units(), 2))
-    assert units[0].unit_key == "offset=0"
-    assert units[1].unit_key == "offset=2"
+    # unit_key는 페이지 크기를 포함한다 — 크기가 바뀌면 다른 작업 단위이기 때문
+    assert units[0].unit_key == "offset=0:limit=2"
+    assert units[1].unit_key == "offset=2:limit=2"
     # 같은 스펙 → 같은 unit_id (멱등의 근거)
     assert units[0].unit_id == next(iter(make_source().units())).unit_id
 

@@ -100,24 +100,30 @@ class RestSource:
             yield from self._offset_units()
 
     def _offset_units(self) -> Iterator[UnitSpec]:
-        """offset=0, size, 2*size, … 무한 열거. unit_key = "offset={n}"."""
+        """offset=0, size, 2*size, … 무한 열거. unit_key = "offset={n}:limit={size}".
+
+        크기가 unit_key에 포함돼야 한다 — 같은 offset이라도 크기가 달라지면 가리키는
+        행 범위가 달라지기 때문이다. 빠뜨리면 크기를 바꾼 뒤 재실행할 때 이미 done인
+        유닛으로 스킵되어 상태와 데이터가 조용히 어긋난다 (docs/02-architecture.md).
+        """
         size = self._spec.pagination.size
         for offset in itertools.count(0, size):
             yield UnitSpec.create(
                 pipeline=self._pipeline,
                 source=self._spec.url,
-                unit_key=f"offset={offset}",
+                unit_key=f"offset={offset}:limit={size}",
                 payload={"offset": offset, "limit": size},
             )
 
     def _page_units(self) -> Iterator[UnitSpec]:
-        """start_page부터 1씩 증가. unit_key = "page={n}"."""
+        """start_page부터 1씩 증가. unit_key = "page={n}:per_page={size}" (위와 같은 이유)."""
+        size = self._spec.pagination.size
         for n in itertools.count(self._spec.pagination.start_page):
             yield UnitSpec.create(
                 pipeline=self._pipeline,
                 source=self._spec.url,
-                unit_key=f"page={n}",
-                payload={"page": n},
+                unit_key=f"page={n}:per_page={size}",
+                payload={"page": n, "per_page": size},
             )
 
     def _cursor_units(self) -> Iterator[UnitSpec]:
