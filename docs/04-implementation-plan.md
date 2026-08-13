@@ -1,5 +1,8 @@
 # 04. 구현 계획 (Implementation Plan)
 
+> **현행 상태:** M0~M4 구현은 merge된 main에서 완료됐다. 현재 실행 원장은
+> [docs/release.md](release.md)와 [docs/dogfooding.md](dogfooding.md)다.
+
 > 마일스톤 범위·기간은 [01-scope.md](01-scope.md) 참조. 이 문서는 "어떤 순서로, 어떻게" 만드는지의 작업 분해(WBS)다.
 >
 > **M0~M4 전체의 코드 수준 상세 계획이 [plans/](plans/)에 있다** — 전체 틀을 먼저 확정하고 조금씩 수정하며 접근하는 방식.
@@ -90,7 +93,7 @@
 | 4.3 | 사용 문서 | 도구별 README, YAML 레퍼런스(스펙 모델에서 JSON Schema 자동 생성), `uv tool install` 설치 경로 |
 | 4.4 | 한계선 문서 | 처리 범위 정직하게: 단일 노드 한계, 미지원 케이스 (Ballista 문제 2) |
 | 4.5 | 패키징·CI | `uv build` 검증, 패키지 메타데이터, 라이선스, **Windows CI 추가** |
-| 4.6 | v0.1.0 | CHANGELOG, git tag, (선택) PyPI 배포 |
+| 4.6 | v0.2.0 | CHANGELOG, git tag, Trusted Publishing 기반 PyPI 배포 |
 
 ## 리스크와 대응
 
@@ -105,7 +108,7 @@
 ## 마일스톤 진행 체크리스트
 
 - [x] M0 부트스트랩 (스켈레톤 커밋 c05de04 — 워크스페이스·CI·품질 게이트 동작)
-- [ ] M1 신뢰성 코어 + 수집 수직 슬라이스 → [상세 계획](plans/2026-07-08-m1-core-foundation.md)
-- [ ] M2 Pugio P0 완성 → [상세 계획 (초안)](plans/2026-07-08-m2-pugio-complete.md)
-- [ ] M3 Gladius P0 → [상세 계획 (초안)](plans/2026-07-08-m3-gladius.md)
-- [ ] M4 통합·릴리스 → [상세 계획 (초안)](plans/2026-07-08-m4-integration-release.md)
+- [x] M1 신뢰성 코어 + 수집 수직 슬라이스 → [상세 계획](plans/2026-07-08-m1-core-foundation.md)
+- [x] M2 Pugio P0 완성 → [상세 계획](plans/2026-07-08-m2-pugio-complete.md)
+- [x] M3 Gladius P0 → [상세 계획](plans/2026-07-08-m3-gladius.md)
+- [x] M4 통합·릴리스 준비 → [상세 계획](plans/2026-07-08-m4-integration-release.md)

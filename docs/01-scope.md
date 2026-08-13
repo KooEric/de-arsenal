@@ -1,5 +1,10 @@
 # 01. 구축 범위 (Scope)
 
+> **현행 상태:** M0~M4와 P1 기반 패키지 구현은 v0.2.0 릴리스 후보로 완료됐다.
+> 현재 남은 작업은 [release.md](release.md)의 PyPI 게시와
+> [dogfooding.md](dogfooding.md)의 실제 업무 검증이다. 아래 마일스톤 표는
+> 원래 범위 정의이며, 완료 상태는 이 문서 하단 체크리스트와 릴리스 문서를 함께 본다.
+
 ## 범위 결정 원칙
 
 - **P0 = MVP 핵심**: "끊김·중복에 견디는 신뢰성"이라는 약속이 성립하는 최소 집합. 이것부터 만든다.
@@ -14,7 +19,7 @@
 | **M1** | 신뢰성 코어 + 수집 수직 슬라이스 | StateStore, 결정적 ID, 에러 분류, REST→Parquet 재개 수집 | `pugio run`으로 끊겨도 재개되는 수집 데모 | 2주 |
 | **M2** | Pugio P0 완성 | 페이지네이션 4종, 인증 갱신, rate limit, 인코딩, **파일·DB 소스, Python 탈출구**, DB sink 멱등, 검증 게이트, DLQ, 실전 API 5종 검증 | 실전 투입 가능한 Pugio v0.1 | 3.5주 |
 | **M3** | Gladius P0 | map/steps→SQL 트랜스파일러, DuckDB 실행, **즉석 쿼리(`gladius query`)** | `gladius run`으로 선언형 변환 + 미니 DWH | 2주 |
-| **M4** | 통합·릴리스 | **`arsenal` 우산 CLI + 원클릭 레시피 3종**, 연계 예제, 문서, 벤치마크, v0.1 태그 | "10분의 마법"이 성립하는 v0.1 | 1.5주 |
+| **M4** | 통합·릴리스 | **`arsenal` 우산 CLI + 원클릭 레시피 3종**, 연계 예제, 문서, 벤치마크, v0.2.0 릴리스 준비 | "10분의 마법"이 성립하는 v0.2.0 | 1.5주 |
 
 총 P0 기간: **약 8~9주** (1인 풀타임 기준. AI 에이전트 병행 시 단축 가능)
 
@@ -93,7 +98,7 @@
 - **설치 경로를 분석가 기준으로**: `uv tool install de-arsenal` / pipx를 공식 1줄 설치로 문서화. **CI에 Windows 추가**
 - README·각 도구 사용 문서·처리 범위 정직한 문서화(Ballista 문제 2의 P0 몫) — [08-limits.md](08-limits.md)
 - 벤치마크 스크립트와 수치 기록
-- PyPI 패키징 검증(`uv build`), v0.1.0 태그
+- PyPI 패키징 검증(`uv build`), v0.2.0 태그와 Trusted Publishing 게시
 
 **완료 기준(DoD):** 신규 사용자가 `uv tool install` + `arsenal init <recipe>` + `arsenal run` 세 명령으로 10분 안에 시나리오 A~D를 재현 가능.
 

@@ -39,6 +39,9 @@ arsenal run
 arsenal collect status collect.yaml --cost --max-age-seconds 86400
 ```
 
+`collect`는 Arsenal 안에 노출된 Pugio 서브앱이다. Pugio를 직접 설치한 환경에서는
+같은 명령을 `pugio status collect.yaml --cost --max-age-seconds 86400`로 실행한다.
+
 다음을 운영 기록에 남긴다.
 
 | 항목 | 기록할 내용 |

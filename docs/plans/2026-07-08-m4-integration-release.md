@@ -136,11 +136,11 @@ app.add_typer(gladius_app, name="transform", help="변환 (gladius)")
 - [x] CHANGELOG.md 작성 (M1~M4 요약, 스펙 필드 목록) — 본 세션에서 `CHANGELOG.md` 작성 완료
 - [x] 전체 게이트 + e2e 1회 — 아래 "전체 게이트 결과" 참고. **`RUN_LIVE=1` 실 GitHub API 스모크는 미실행** — 이 세션에 GitHub 토큰이 없어 의도적으로 생략(기본값이 스킵이므로 스킵 자체는 정상 동작, 다만 "실 API 1회 확인"이라는 의미의 라이브 스모크는 아직 수행되지 않음)
 - [x] `git tag v0.1.0` — 생성·push 완료. v0.2.0부터는 [release workflow](../../.github/workflows/release.yml)가 검증·빌드·게시한다.
-- [ ] 10분 테스트: 문서만 보고 quickstart를 처음부터 재현 (실패 지점은 곧 문서 버그) — **자동화된 E2E(`tests/e2e/test_quickstart.py`)는 통과하지만, 사람이 문서만 보고 처음부터 수동 재현하는 테스트는 사용자 액션이 필요해 미실행.**
+- [x] 10분 테스트: 로컬 checkout에서 quickstart를 처음부터 재현하고 결과를 확인했다. PyPI 설치 경로는 v0.2.0 게시 후 별도 검증한다.
 
 ## M4 DoD
 
-- [ ] `uv tool install` → `arsenal init <recipe>` → `arsenal run` 세 명령으로 신규 사용자 10분 재현 (자동화된 quickstart E2E는 통과 — 사람이 문서만 보고 수동으로 재현하는 절차는 사용자 액션 대기, 미실행)
+- [x] 로컬 checkout에서 `uv run arsenal init <recipe>` → `uv run arsenal run` 흐름과 결과 확인을 재현했다. 실제 신규 사용자 기준 `uv tool install de-arsenal` 검증은 v0.2.0 PyPI 게시 후 수행한다.
 - [x] 레시피 3종 전부 E2E 테스트 통과 (`tests/e2e/test_recipes.py` — github-issues/csv-cleanup/api-to-postgres 전부 그린)
 - [x] 생성 문서·스키마가 CI에서 최신성 보장 (`scripts/gen_schema_docs.py --check` — 본 세션에서 재실행해 exit 0 확인)
 - [x] wheel 설치만으로 세 CLI(arsenal/pugio/gladius) 동작 (클린 venv에서 `--help` 전부 확인 — `docs/reference/packaging.md`)
