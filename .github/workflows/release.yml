@@ -4,6 +4,13 @@ on:
   push:
     tags:
       - "v*"
+  workflow_dispatch:
+    inputs:
+      version:
+        description: "Package version to verify (manual runs never publish)"
+        required: true
+        default: "0.2.0"
+        type: string
 
 jobs:
   verify-and-build:
@@ -16,7 +23,15 @@ jobs:
       - uses: astral-sh/setup-uv@v3
       - run: uv python install 3.11
       - run: uv sync
-      - run: uv run python scripts/check_release_metadata.py --tag "$GITHUB_REF_NAME"
+      - name: Validate release metadata
+        shell: bash
+        run: |
+          if [[ "$GITHUB_EVENT_NAME" == "workflow_dispatch" ]]; then
+            release_version="${{ inputs.version }}"
+          else
+            release_version="$GITHUB_REF_NAME"
+          fi
+          uv run python scripts/check_release_metadata.py --tag "$release_version"
       - run: uv run ruff check .
       - run: uv run ruff format --check .
       - run: uv run pyright
@@ -32,14 +47,17 @@ jobs:
   publish:
     name: Publish to PyPI
     needs: verify-and-build
+    if: github.event_name == 'push'
     runs-on: ubuntu-latest
     environment: pypi
     permissions:
+      contents: read
       id-token: write
+      attestations: write
     steps:
       - uses: actions/download-artifact@v4
         with:
           name: distributions
           path: dist/
-      - uses: astral-sh/setup-uv@v3
-      - run: uv publish dist/*
+      - name: Publish package distributions to PyPI
+        uses: pypa/gh-action-pypi-publish@release/v1

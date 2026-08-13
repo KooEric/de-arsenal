@@ -27,6 +27,17 @@ uv build --all-packages
 
 ## GitHub 릴리스
 
+태그를 만들기 전에 Actions 탭에서 `release` workflow가 보이는지 확인한다.
+수동 실행은 검증만 하고 PyPI에 게시하지 않는다.
+
+```bash
+gh workflow list
+gh workflow run release.yml -f version=0.2.0
+gh run list --workflow release.yml --limit 1
+```
+
+수동 실행의 `verify-and-build`가 성공한 뒤에만 태그를 만든다.
+
 ```bash
 git tag v0.2.0
 git push origin v0.2.0
@@ -39,6 +50,9 @@ git push origin v0.2.0
 2. `uv build --all-packages` 실행
 3. 빌드 산출물 보관
 4. PyPI Trusted Publishing으로 게시
+
+`publish` job은 tag push에서만 실행된다. 수동 `workflow_dispatch` 실행에는
+게시 job이 실행되지 않는다.
 
 게시 전 GitHub 저장소의 `pypi` environment와 PyPI Trusted Publisher 설정이
 필요하다. API token을 저장소에 넣지 않는다.

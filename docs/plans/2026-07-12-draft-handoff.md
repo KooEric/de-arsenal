@@ -1,5 +1,10 @@
 # Draft 구현 인계 — 남은 작업 계획표
 
+> **Historical handoff:** 이 인계서는 2026-07-12 draft 세션의 기록이다. Batch E/F/G는
+> 이후 구현·리뷰·merge됐으므로 아래의 당시 대기 상태와 재개 절차는 더 이상 실행 원장이
+> 아니다. 현재 실행 원장은 [docs/release.md](../release.md)와
+> [docs/dogfooding.md](../dogfooding.md)다.
+
 > **작성 시각:** 2026-07-12 (세션 중단 시점)
 > **브랜치:** `feat/m1-draft` (아직 main 미병합)
 > **실행 방식:** superpowers:subagent-driven-development (구현자 서브에이전트 → 태스크 리뷰 → 최종 브랜치 리뷰)
@@ -51,12 +56,12 @@ P0 코드가 P1의 자리(탈출구·discriminated union·sink 추상)를 침범
 | B | pugio 코어 | REST 소스·Parquet 싱크·Runner (crash-resume 검증) | ✅ 완료 · 리뷰 통과 |
 | C | CLI+예제 | `pugio run`/`status`·예제 YAML·README | ✅ 완료 · 리뷰 통과 |
 | D | gladius draft | 변환 스펙·트랜스파일러·엔진·`compile`/`run`/`query` | ✅ 완료 · 리뷰 통과 (Critical SQL 이스케이프 수정 포함) |
-| E | pugio 확장 소스 | FileSource·DatabaseSource(sqlite draft)·Python 탈출구 | ⚠️ **구현 완료·트리 그린, 그러나 리뷰 미진행** |
-| F | arsenal 우산 CLI | 단일 진입점·레시피 3종·수집→변환 end-to-end | ⬜ 대기 |
-| G | 최종 리뷰 | 전체 브랜치 코드 리뷰 + Minor 이슈 정리 | ⬜ 대기 |
+| E | pugio 확장 소스 | FileSource·DatabaseSource(sqlite draft)·Python 탈출구 | ✅ 이후 구현·CI 검증 완료 |
+| F | arsenal 우산 CLI | 단일 진입점·레시피 3종·수집→변환 end-to-end | ✅ 이후 구현·E2E 검증 완료 |
+| G | 최종 리뷰 | 전체 브랜치 코드 리뷰 + Minor 이슈 정리 | ✅ PR #4/#5 merge와 CI 완료 |
 
-**현재 트리 상태:** `uv run pytest -q` → 94 passed, 커버리지 94.63% (게이트 80%).
-`ruff check`/`ruff format --check`/`pyright` 모두 통과(중단 직전 기준).
+**당시 트리 상태:** `uv run pytest -q` → 94 passed, 커버리지 94.63% (게이트 80%).
+현재 main의 최신 검증 결과는 PR #5 CI와 [docs/release.md](../release.md)를 기준으로 한다.
 
 **M1(A·B·C)은 이미 DoD 충족** — "끊겨도 중복·누락 없이 재개되는 REST→Parquet
 파이프라인"은 완성·검증된 상태로 확보돼 있다. D는 리뷰까지 통과. E는 코드는
@@ -64,7 +69,7 @@ P0 코드가 P1의 자리(탈출구·discriminated union·sink 추상)를 침범
 
 ---
 
-## ⚠️ Batch E — 재개 시 가장 먼저 처리할 것
+## ⚠️ Batch E — 당시 재개 시 가장 먼저 처리할 것
 
 Batch E 구현자는 작업을 사실상 끝내고 커밋까지 남겼으나 **태스크 리뷰를 받기 전에
 세션이 중단**됐고, `batch-E-report.md`(구현 리포트)도 작성되지 못했다. 따라서 A~D와
@@ -109,7 +114,7 @@ Batch E 구현자는 작업을 사실상 끝내고 커밋까지 남겼으나 **�
 
 ---
 
-## Batch F — arsenal 우산 CLI (대기)
+## Batch F — 당시 arsenal 우산 CLI (대기)
 
 **출처 계획:** `docs/plans/2026-07-08-m4-integration-release.md` Task 4.0 / 4.1 / 4.2
 (브리핑 추출본은 `scratchpad/batch-F-brief.md`에 있으나 세션 스크래치라 다음 세션에는
@@ -131,7 +136,7 @@ draft 범위 밖 — F에서는 4.0~4.2만.
 
 ---
 
-## Batch G — 최종 브랜치 리뷰 (대기)
+## Batch G — 당시 최종 브랜치 리뷰 (대기)
 
 모든 배치 완료 후 `superpowers:requesting-code-review`의 whole-branch 리뷰를 **가장 강한
 모델로** 1회 실행. 리뷰 패키지:

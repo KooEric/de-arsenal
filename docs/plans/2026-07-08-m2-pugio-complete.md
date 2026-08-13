@@ -1,5 +1,9 @@
 # M2: Pugio P0 완성 구현 계획
 
+> **Historical implementation plan:** M2는 merge된 main에서 완료됐다. 이 문서의
+> 체크박스는 당시 TDD 작업 기록이며, 현재 운영 검증은
+> [docs/dogfooding.md](../dogfooding.md)를 기준으로 한다.
+
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 >
 > **갱신 상태 (2026-07-14):** P0 draft 뼈대(브랜치 `feat/m1-draft`, PR #1) 산출물 기준으로 대조·갱신했다. 시그니처는 **실제 M1/draft 구현** 기준이다. draft가 이미 구현한 항목(2.11·2.13·2.0 일부·2.12 sqlite draft)은 아래 "진행 현황"에 반영했고, 각 태스크 본문 앞에 상태 배지를 달았다.

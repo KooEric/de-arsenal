@@ -1,5 +1,10 @@
 # M0+M1: 신뢰성 코어 + 수집 수직 슬라이스 구현 계획
 
+> **Historical implementation plan:** M0/M1은 merge된 main에서 완료됐다. 이 문서의
+> 체크박스는 당시 TDD 작업 기록이며, 현재 릴리스 상태는
+> [docs/04-implementation-plan.md](../04-implementation-plan.md)와
+> [docs/release.md](../release.md)를 기준으로 한다.
+
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
 **Goal:** 끊겨도 중복·누락 없이 재개되는 REST→Parquet 수집 파이프라인(`pugio run`)을 TDD로 완성한다.

@@ -1,5 +1,10 @@
 # M2 실행 세부 계획 — 원자 작업 단위 (stall-proof)
 
+> **Historical execution detail:** M2 구현 당시의 서브에이전트 실행 원장이다. 현재
+> 제품 상태의 기준은 [docs/04-implementation-plan.md](../04-implementation-plan.md),
+> 릴리스 검증은 [docs/release.md](../release.md), 실제 사용 검증은
+> [docs/dogfooding.md](../dogfooding.md)다.
+
 > **목적:** M2의 모든 남은 작업을 **Opus/Sonnet 서브에이전트가 막힘 없이(=fable 에스컬레이션 없이) 실행**할 수 있는 원자 단위로 쪼갠 실행서다.
 > **상위 문서:** [2026-07-08-m2-pugio-complete.md](2026-07-08-m2-pugio-complete.md)(범위·근거). 이 문서는 그 태스크들을 **실행 단위(U-ID)**로 세분화한다.
 > **원장:** `.superpowers/sdd/progress.md`. 각 U 완료 시 갱신.

@@ -5,7 +5,7 @@
 데이터 엔지니어와 분석가가 매일 부딪히는 문제들 — 새벽에 끊긴 수집, 만료된 토큰, 쿼리도 못 하는 CSV 뭉치 — 에 대한 **원클릭 솔루션**. 서버도, 클러스터도, DAG 코드도 없다.
 
 ```bash
-uv tool install de-arsenal        # (PyPI 배포 예정 — 현재는 소스 설치, 아래 "시작하기" 참고)
+uv tool install de-arsenal        # v0.2.0 PyPI 게시 후 사용 (현재는 소스 설치)
 arsenal init csv-cleanup           # 레시피로 시작 (github-issues · csv-cleanup · api-to-postgres)
 arsenal run                        # 수집→검증→변환. 끊겨도 재실행하면 이어서
 arsenal query "SELECT * FROM './data/clean/*.parquet' LIMIT 10"
