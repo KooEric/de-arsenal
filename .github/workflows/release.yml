@@ -7,10 +7,25 @@ on:
   workflow_dispatch:
     inputs:
       version:
-        description: "Package version to verify (manual runs never publish)"
+        description: "Package version to verify or publish"
         required: true
         default: "0.2.0"
         type: string
+      publish_package:
+        description: "Manual PyPI bootstrap package (none = verify only)"
+        required: true
+        default: "none"
+        type: choice
+        options:
+          - none
+          - arsenal-core
+          - de-arsenal
+          - de-gladius
+          - onager
+          - pugio
+          - scorpio
+          - scutum
+          - spatha
 
 jobs:
   verify-and-build:
@@ -47,7 +62,7 @@ jobs:
   publish:
     name: Publish to PyPI
     needs: verify-and-build
-    if: github.event_name == 'push'
+    if: github.event_name == 'push' || (github.event_name == 'workflow_dispatch' && inputs.publish_package != 'none')
     runs-on: ubuntu-latest
     environment: pypi
     permissions:
@@ -59,5 +74,26 @@ jobs:
         with:
           name: distributions
           path: dist/
+      - name: Select one package for manual bootstrap
+        if: github.event_name == 'workflow_dispatch'
+        shell: bash
+        env:
+          PUBLISH_PACKAGE: ${{ inputs.publish_package }}
+          RELEASE_VERSION: ${{ inputs.version }}
+        run: |
+          case "$PUBLISH_PACKAGE" in
+            arsenal-core) package_prefix="arsenal_core" ;;
+            de-arsenal) package_prefix="de_arsenal" ;;
+            de-gladius) package_prefix="de_gladius" ;;
+            onager|pugio|scorpio|scutum|spatha) package_prefix="$PUBLISH_PACKAGE" ;;
+            *) echo "Unsupported package: $PUBLISH_PACKAGE" >&2; exit 1 ;;
+          esac
+          mkdir selected-dist
+          find dist -maxdepth 1 -type f -name "${package_prefix}-${RELEASE_VERSION}.*" -exec cp -- {} selected-dist/ \;
+          test -n "$(find selected-dist -type f -print -quit)"
+          rm -rf dist
+          mv selected-dist dist
       - name: Publish package distributions to PyPI
         uses: pypa/gh-action-pypi-publish@release/v1
+        with:
+          skip-existing: true
