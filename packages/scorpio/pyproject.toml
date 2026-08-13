@@ -1,6 +1,6 @@
 [project]
 name = "de-scorpio"
-version = "0.2.2"
+version = "0.3.0"
 description = "Scorpio — freshness, lineage and operational alerts"
 readme = "README.md"
 requires-python = ">=3.11"

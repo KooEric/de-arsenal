@@ -15,8 +15,27 @@ class _Frozen(BaseModel):
     model_config = ConfigDict(frozen=True, extra="forbid")
 
 
+def _reject_statement_separator(value: str, *, slot: str) -> str:
+    """표현식 안의 ';'를 거부한다 — 내용 검증이 아니라 구조 방어.
+
+    표현식은 `COPY (<컴파일된 SQL>) TO ...` 템플릿 안에 삽입되므로, ';'가 허용되면
+    래퍼를 닫고 임의의 두 번째 문(예: 다른 경로로 COPY)을 실행할 수 있다. 표현식
+    *내용*은 여전히 사용자 소유의 SQL이고 검증 대상이 아니다 (compile/ident.py의
+    신뢰 모델). sql 스텝은 처음부터 이 검사를 하고 있었다 — 나머지 슬롯에도 같은
+    규칙을 적용해 일관성을 맞춘다.
+    """
+    if ";" in value:
+        raise ValueError(f"{slot} expression must not contain ';' (statement separator)")
+    return value
+
+
 class FilterStep(_Frozen):
     filter: str  # SQL WHERE 식 (예: "state = 'open'")
+
+    @field_validator("filter")
+    @classmethod
+    def _no_statement_separator(cls, value: str) -> str:
+        return _reject_statement_separator(value, slot="filter")
 
 
 class RenameStep(_Frozen):
@@ -37,6 +56,13 @@ class DedupStep(_Frozen):
 
 class DeriveStep(_Frozen):
     derive: dict[str, str]  # {new_column: SQL 식}
+
+    @field_validator("derive")
+    @classmethod
+    def _no_statement_separator(cls, value: dict[str, str]) -> dict[str, str]:
+        for expr in value.values():
+            _reject_statement_separator(expr, slot="derive")
+        return value
 
 
 class SqlStep(_Frozen):
@@ -146,4 +172,11 @@ class TransformSpec(_Frozen):
     def _name_is_path_safe(cls, value: str) -> str:
         if "/" in value or "\\" in value or ".." in value:
             raise ValueError("transform name must not contain '/', '\\\\', or '..'")
+        return value
+
+    @field_validator("map")
+    @classmethod
+    def _map_has_no_statement_separator(cls, value: dict[str, str] | None) -> dict[str, str] | None:
+        for expr in (value or {}).values():
+            _reject_statement_separator(expr, slot="map")
         return value

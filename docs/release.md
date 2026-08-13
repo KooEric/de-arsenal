@@ -1,15 +1,22 @@
-# v0.2.2 패치 릴리스 절차
+# v0.3.0 릴리스 절차
 
-`v0.2.0`에서 `pugio`가 기존 PyPI 프로젝트인 `scorpio`를 의존하도록 게시된 것을
-수정하는 패치 릴리스다. 새 배포명 `de-scorpio`를 만들고, `pugio`와 `de-arsenal`은
-같은 버전으로 다시 게시한다.
+실행 중인 코드를 적대적으로 돌려 찾은 결함 6종(표현식 SQL 문 주입, unit_key의
+페이지 크기 누락, Parquet 임시파일 충돌, unique 규칙 null 오탐, 릴리스 wheel 누락,
+YAML 오류 원시 노출)을 수정한 릴리스다. 전체 내역은 [CHANGELOG](../CHANGELOG.md).
 
-`v0.2.1` 검증에서 `pugio`의 런타임 `scutum` 의존성 누락이 발견되어 이 패치에서
-배포 메타데이터에 `de-scutum`을 추가한다.
+**패치가 아니라 minor인 이유**: `unit_key` 수정이 offset/page 파이프라인의 unit_id를
+바꾸는 파괴적 변경이다. 교차 패키지 핀이 `>=0.2,<0.3`이라 0.2.3으로 내면 기존
+사용자가 자동으로 파괴적 변경에 업그레이드된다 — 핀이 막으라고 있는 상황이다.
+0.x에서 minor가 파괴적 축이므로 0.3.0으로 올리고 핀도 `>=0.3,<0.4`로 옮긴다.
+
+**마이그레이션(사용자 고지 필요)**: offset/page 파이프라인은 첫 실행 전에
+`state_dir`와 sink 출력 디렉터리를 비워야 한다. 비우지 않으면 전량 재수집 후
+옛 unit_id 파일이 남아 중복이 된다. cursor/link와 비REST 소스는 영향 없다.
 
 ## 확정 정책
 
-- 배포 패키지 8개는 v0.2.2로 동기화한다.
+- 배포 패키지 8개는 v0.3.0으로 동기화한다.
+- 교차 패키지 의존 범위는 `>=0.3,<0.4`로 이동한다.
 - 루트 workspace 프로젝트는 배포하지 않으므로 `0.0.0`을 유지한다.
 - 변환 패키지의 PyPI 배포명은 `de-gladius`다.
 - 운영 관측 패키지의 PyPI 배포명은 `de-scorpio`다.
@@ -17,7 +24,7 @@
 - 계약·잠금 패키지의 PyPI 배포명은 `de-scutum`이다.
 - 백필 패키지의 PyPI 배포명은 `de-onager`이다.
 - Python import 경로, 소스 디렉터리, CLI 명령은 하위 호환을 위해 `gladius`를 유지한다.
-- `Falcata`는 향후 브랜딩 후보이며 v0.2.2 범위에는 포함하지 않는다.
+- `Falcata`는 향후 브랜딩 후보이며 v0.3.0 범위에는 포함하지 않는다.
 
 ## 태그 전 검증
 
@@ -44,15 +51,15 @@ Trusted Publisher로 처음 만들 때만 `publish_package`에 패키지 하나�
 
 ```bash
 gh workflow list
-gh workflow run release.yml -f version=0.2.2 -f publish_package=none
+gh workflow run release.yml -f version=0.3.0 -f publish_package=none
 gh run list --workflow release.yml --limit 1
 ```
 
 수동 실행의 `verify-and-build`가 성공한 뒤에만 태그를 만든다.
 
 ```bash
-git tag v0.2.2
-git push origin v0.2.2
+git tag v0.3.0
+git push origin v0.3.0
 ```
 
 `v*` 태그가 push되면 [release workflow](../.github/workflows/release.yml)가
@@ -68,14 +75,14 @@ git push origin v0.2.2
 그 패키지만 게시할 수 있다. 이미 게시된 파일은 `skip-existing`으로 재실행 시
 건너뛴다.
 
-현재 v0.2.2 부트스트랩 순서:
+부트스트랩 순서(신규 배포명이 생길 때만 필요):
 
 1. PyPI 계정의 **Pending publishers**에 `arsenal-core`를 등록한다.
-2. `gh workflow run release.yml -f version=0.2.2 -f publish_package=arsenal-core`를 실행한다.
+2. `gh workflow run release.yml -f version=0.3.0 -f publish_package=arsenal-core`를 실행한다.
 3. `arsenal-core`가 생성되면 PyPI의 동일 publisher를 `de-arsenal`에 등록하고,
    같은 방식으로 나머지 패키지를 하나씩 게시한다.
 4. 8개 패키지가 모두 PyPI에 존재하면 `publish_package=none`으로 검증한 뒤
-   `v0.2.2` 태그를 push한다. 태그 실행은 이미 존재하는 파일을 건너뛰고
+   `v0.3.0` 태그를 push한다. 태그 실행은 이미 존재하는 파일을 건너뛰고
    누락된 파일만 보완한다.
 
 게시 전 GitHub 저장소의 `pypi` environment와 PyPI Trusted Publisher 설정이

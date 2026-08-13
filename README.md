@@ -13,7 +13,7 @@ arsenal run                                   # ingest → validate → transfor
 arsenal query "SELECT * FROM './data/clean/*.parquet' LIMIT 10"
 ```
 
-> **Status: v0.2.2, live on PyPI.** All 8 packages are published. Ingestion, transformation, the umbrella CLI, and the P1 extensions (dlt/dbt interop, schema drift policies, cloud sinks, Python UDFs, observability, orchestration, backfill, data contracts) work today. The transform package is distributed as `de-gladius`; its Python import and CLI remain `gladius`.
+> **Status: v0.3.0, live on PyPI.** All 8 packages are published. Ingestion, transformation, the umbrella CLI, and the P1 extensions (dlt/dbt interop, schema drift policies, cloud sinks, Python UDFs, observability, orchestration, backfill, data contracts) work today. The transform package is distributed as `de-gladius`; its Python import and CLI remain `gladius`.
 
 The **completeness** of a Databricks or Snowflake, in the **opposite shape**. While the big platforms do a hundred things at 80%, we do one thing at 100%. Reliability (idempotency, resume, validation) is the default, and the zero-margin cost structure ([docs/07](docs/07-cost-efficiency.md)) falls out of the architecture.
 
@@ -23,9 +23,9 @@ Users only need to know `arsenal`. Underneath are independent tools, one per pro
 
 | Weapon | Domain | Priority | Status |
 |---|---|---|---|
-| **Arsenal** (umbrella CLI) | Single entry point — init/run/query, 3 one-command recipes | P0 (M4) | ✅ v0.2.2 |
-| **Pugio** | Ingestion & loading (ETL engine) | P0 + P1 | ✅ v0.2.2 |
-| **Gladius** | Transformation & querying (core processing) | P0 + P1 | ✅ v0.2.2 |
+| **Arsenal** (umbrella CLI) | Single entry point — init/run/query, 3 one-command recipes | P0 (M4) | ✅ v0.3.0 |
+| **Pugio** | Ingestion & loading (ETL engine) | P0 + P1 | ✅ v0.3.0 |
+| **Gladius** | Transformation & querying (core processing) | P0 + P1 | ✅ v0.3.0 |
 | **Spatha** | Orchestration (dependencies, scheduling) | P0 (idempotent core) / P1 | ✅ signal DAG · priority · window · lock |
 | **Scutum** | Data quality, validation, protection | P0 (idempotent guard) / P1 | ✅ contract · DLQ policy · lock retry/backoff |
 | **Scorpio** | Observability (monitoring, lineage) | P1 | ✅ lineage · freshness alert · cost summary |

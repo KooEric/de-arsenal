@@ -1,11 +1,11 @@
 [project]
 name = "de-scutum"
-version = "0.2.2"
+version = "0.3.0"
 description = "Scutum — Arrow data contracts and validation reports"
 readme = "README.md"
 requires-python = ">=3.11"
 license = "Apache-2.0"
-dependencies = ["arsenal-core>=0.2,<0.3", "pyarrow>=17", "pydantic>=2.7"]
+dependencies = ["arsenal-core>=0.3,<0.4", "pyarrow>=17", "pydantic>=2.7"]
 classifiers = [
     "Programming Language :: Python :: 3",
     "Programming Language :: Python :: 3.11",

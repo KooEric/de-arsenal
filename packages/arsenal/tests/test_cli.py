@@ -1,6 +1,7 @@
 """Arsenal 우산 CLI 테스트 (M4 Task 4.0) — init/run/query, 위임만 하고 로직은 없다."""
 
 import json
+import re
 from pathlib import Path
 
 import pyarrow as pa
@@ -240,3 +241,22 @@ def test_query_format_unsupported_is_clean_error(monkeypatch: pytest.MonkeyPatch
     assert result.exit_code == 1
     assert "error:" in result.output
     assert "bogus" in result.output
+
+
+def test_load_project_bad_yaml_error_is_one_line_with_position(tmp_path: Path) -> None:
+    """매니페스트도 스펙 로더와 같은 한 줄 요약 형식 — pyyaml 여러 줄 덤프 금지."""
+    (tmp_path / "arsenal.yaml").write_text("name: x\npipelines: [1,2\n", encoding="utf-8")
+    with pytest.raises(FatalError) as exc_info:
+        load_project(tmp_path / "arsenal.yaml")
+    message = str(exc_info.value)
+    assert "invalid YAML" in message
+    assert "while parsing a flow sequence" in message
+    assert re.search(r"\(line \d+, column \d+\)", message)
+    assert "^" not in message
+    assert message.count("\n") == 0
+
+
+def test_load_project_non_utf8_manifest_raises_fatal_error(tmp_path: Path) -> None:
+    (tmp_path / "arsenal.yaml").write_bytes(b"name: \xff\xfe not utf-8\n")
+    with pytest.raises(FatalError, match="UTF-8"):
+        load_project(tmp_path / "arsenal.yaml")
