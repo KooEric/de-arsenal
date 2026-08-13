@@ -5,14 +5,28 @@ All notable changes to this project are documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 This project has not yet reached a public API stability commitment (see
 [Known limitations](#known-limitations)); spec-field additions are
-backward-compatible by policy (`arsenal-core` pinned `>=0.2,<0.3` across
-`pugio`/`de-gladius`/`de-arsenal`).
+backward-compatible by policy (`arsenal-core` pinned `>=0.3,<0.4` across
+`pugio`/`de-gladius`/`de-arsenal`). Because `0.x` treats the *minor* as the
+breaking axis, a release that changes behaviour incompatibly takes the next
+minor — which is why the fixes below ship as `0.3.0` rather than `0.2.3`.
 
-## [Unreleased]
+## [0.3.0] - 2026-08-14
 
 Correctness and hardening pass. Every item below was found by adversarially
 exercising the shipped code (not by review) and is pinned by a regression test
 that fails the way the original defect failed.
+
+### ⚠️ Breaking
+
+`offset`/`page` REST pipelines change their unit ids (see the `unit_key` entry
+below). An existing state DB will treat every unit as new and re-collect the
+whole source, and a parquet sink will keep the files written under the old ids
+alongside the new ones — i.e. duplicated rows in the dataset.
+
+**Migration:** before the first run on `0.3.0`, clear the pipeline's
+`state_dir` and its sink output directory, then re-run. `cursor`/`link`
+pipelines and non-REST sources are unaffected. Cross-package pins move to
+`>=0.3,<0.4` so `0.2.x` installs will not pick this up automatically.
 
 ### Fixed
 
@@ -40,6 +54,12 @@ that fails the way the original defect failed.
   interleaved into one file before each called `os.replace` — the rename is
   atomic but the bytes it published were not. Temp names now carry pid and a
   random suffix, and a failed write no longer leaves an orphan `.tmp`.
+  The regression test then surfaced a second, Windows-only half of the same
+  problem: Windows refuses to rename onto a destination another handle holds
+  open, so concurrent writers of one unit hit `PermissionError` where POSIX
+  succeeds. The replace is now retried briefly and, if contention persists,
+  raised as `RetryableError` so the runner absorbs it as the transient failure
+  it is.
 - **`unique` reported nulls as duplicates.** `pc.count_distinct` defaults to
   `mode="only_valid"`, so subtracting it from `len(col)` counted every null as a
   duplicate: a column of `[1, 2, None, None]` reported two violations. Under the
@@ -64,7 +84,29 @@ that fails the way the original defect failed.
   shapes are now selected and independently asserted. The tag-push path uploads
   all of `dist/` and was unaffected.
 
-## [0.2.0] - Unreleased
+## [0.2.2] - 2026-08-13
+
+Packaging fixes found while verifying `0.2.1` from a clean environment.
+
+### Fixed
+
+- `pugio` did not declare its runtime dependency on `de-scutum`. The uv
+  workspace resolved it locally, so tests and CI were green while the published
+  wheel was broken.
+- `onager` and `scutum` were renamed to the `de-onager` / `de-scutum`
+  distributions after the bare names turned out to be taken on PyPI. Import
+  packages and CLIs are unchanged.
+
+## [0.2.1] - 2026-08-13
+
+### Fixed
+
+- `scorpio` was renamed to `de-scorpio`. The bare name belongs to an unrelated
+  PyPI project, so `pugio` 0.2.0 shipped declaring a dependency on a stranger's
+  package. Distribution names are now verified against PyPI before release (see
+  `docs/reference/packaging.md`).
+
+## [0.2.0] - 2026-08-13
 
 P1 platform release. The workspace packages now share the `0.2.0` version.
 The transform package is published as `de-gladius`; its Python import package
