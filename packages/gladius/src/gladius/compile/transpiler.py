@@ -42,7 +42,7 @@ def compile_sql(spec: TransformSpec, input_files: Sequence[Path] | None = None) 
     idx = 0
     if spec.map:
         idx += 1
-        cols = ", ".join(f"{expr} AS {quote_ident(new)}" for new, expr in spec.map.items())
+        cols = ", ".join(f"({expr}) AS {quote_ident(new)}" for new, expr in spec.map.items())
         ctes.append(f"s{idx} AS (SELECT {cols} FROM s{idx - 1})")
     steps = spec.steps
     for i, step in enumerate(steps):
@@ -68,7 +68,8 @@ def _input_source(spec: TransformSpec, input_files: Sequence[Path] | None) -> st
 def _compile_step(step: Step, prev: str, step_index: int) -> str:
     match step:
         case FilterStep(filter=cond):
-            return f"SELECT * FROM {prev} WHERE {cond}"
+            # 괄호 필수 — 여분의 ')'가 COPY 래퍼를 닫고 나가는 대신 파싱 에러가 된다
+            return f"SELECT * FROM {prev} WHERE ({cond})"
         case RenameStep(rename=m):
             ex = ", ".join(quote_ident(o) for o in m)
             al = ", ".join(f"{quote_ident(o)} AS {quote_ident(n)}" for o, n in m.items())
@@ -86,7 +87,7 @@ def _compile_step(step: Step, prev: str, step_index: int) -> str:
                 f"OVER (PARTITION BY {part} ORDER BY {part}) = 1"
             )
         case DeriveStep(derive=m):
-            dv = ", ".join(f"{expr} AS {quote_ident(n)}" for n, expr in m.items())
+            dv = ", ".join(f"({expr}) AS {quote_ident(n)}" for n, expr in m.items())
             return f"SELECT *, {dv} FROM {prev}"
         case SelectStep(select=cols):
             projected = ", ".join(quote_ident(c) for c in cols)

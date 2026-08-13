@@ -42,7 +42,7 @@ def test_full_chain_compiles_to_cte_pipeline() -> None:
     )
     assert sql == (
         "WITH s0 AS (SELECT * FROM read_parquet('./in/**/*.parquet', union_by_name=true)),\n"
-        "s1 AS (SELECT * FROM s0 WHERE state = 'open'),\n"
+        "s1 AS (SELECT * FROM s0 WHERE (state = 'open')),\n"
         's2 AS (SELECT * EXCLUDE ("created_at"), "created_at" AS "opened_at" FROM s1),\n'
         's3 AS (SELECT * REPLACE (CAST("number" AS BIGINT) AS "number") FROM s2),\n'
         "s4 AS (SELECT * FROM s3 QUALIFY row_number() "
@@ -53,7 +53,7 @@ def test_full_chain_compiles_to_cte_pipeline() -> None:
 
 def test_map_becomes_first_projection() -> None:
     sql = compile_sql(make(steps=[], map_={"issue_no": "number"}))
-    assert 's1 AS (SELECT number AS "issue_no" FROM s0)' in sql
+    assert 's1 AS (SELECT (number) AS "issue_no" FROM s0)' in sql
 
 
 def test_sql_step_replaces_input_placeholder_with_previous_cte() -> None:
@@ -150,7 +150,7 @@ def test_non_last_select_narrows_columns_for_later_steps() -> None:
     # 선택된 컬럼 목록).
     sql = compile_sql(make(steps=[{"select": ["id", "state"]}, {"filter": "state = 'open'"}]))
     assert 's1 AS (SELECT "id", "state" FROM s0)' in sql
-    assert "SELECT * FROM s1 WHERE state = 'open'" in sql
+    assert "SELECT * FROM s1 WHERE (state = 'open')" in sql
     assert "SELECT * FROM s0)" not in sql  # select CTE 본문에 SELECT * 가 남아있으면 안 된다
 
 
