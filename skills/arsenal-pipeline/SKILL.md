@@ -78,6 +78,31 @@ Cursor mode gotcha: `cursor_path` is a dot-path into a dict (`meta.next_cursor`)
 index lists or mean "last element". If the API's next cursor is the last record's id, use a
 `python` source (see `examples/real-world/stripe.yaml` in the repo).
 
+### Recurring pulls: `incremental`
+
+For "every day, just the new orders", declare a time window. Each unit is one interval
+`[since, until)`, fully paginated; finishing an interval advances a watermark, so the next
+run starts there and completed intervals are never fetched again.
+
+```yaml
+source:
+  type: rest
+  url: https://api.shop.com/orders
+  pagination: { mode: offset, size: 100 }     # offset or page only
+  incremental:
+    since_param: updated_after    # request param carrying the window start
+    until_param: updated_before   # optional; omit to send only the start
+    start: "2026-01-01T00:00:00Z" # first run only; the watermark wins afterwards
+    window: 1d                    # interval size: s|m|h|d|w
+    lag: 15m                      # leave the most recent data alone this long
+    format: iso8601               # iso8601 | date | epoch_s | epoch_ms
+```
+
+Choose from the API's own filter: whatever param it accepts for "changed after" is
+`since_param`, and its accepted encoding is `format`. Pair it with a keyed sink
+(`duckdb`/`postgres` `merge_key`) so a row the source returns twice upserts instead of
+duplicating. Then schedule `arsenal run` (see `arsenal-deploy`).
+
 ## Run
 
 ```bash
@@ -101,12 +126,17 @@ Output ends with `done: fetched=N written=N skipped=N quarantined=N`. On error i
 
 ## Honest limits (tell the user, do not work around silently)
 
-- **No "new records since last run" for REST yet.** `offset`/`page` pipelines are a no-op
-  after completion; `cursor`/`link` pipelines stop yielding units once exhausted. Today a
-  REST pipeline pulls a dataset once and resumes if interrupted. For recurring pulls:
-  `database` sources are incremental by key; `python` sources can implement a watermark;
-  or use a new `name` per period (re-fetches everything, sinks dedupe). A REST watermark
-  (`updated_after` windows) is on the roadmap (`docs/10-direction.md`, L1).
+- **Incremental REST needs `offset` or `page`.** `cursor`/`link` cannot be rewound to a
+  time window, so `incremental` with those modes is rejected at load time. Without
+  `incremental`, a REST pipeline pulls a dataset once and then re-runs as a no-op.
+- **Data lags by up to `window + lag`.** Only completed windows are collected, so a
+  partial window waits. Want fresher? Shrink `window` and run that often.
+- **No re-collection of a past window.** Deterministic unit ids and re-fetching the same
+  range are incompatible. For data that arrives late at the source, raise `lag`.
+- **Use `on_violation: block` on incremental pipelines.** A quarantined page does not hold
+  the watermark back, so its rows can be dropped silently; `block` stops the run and keeps
+  the watermark until you fix the cause. `pugio dlq retry` is refused for incremental
+  pipelines for the same reason.
 - No streaming, no sub-minute latency. Polling micro-batch by re-running on a schedule is
   the supported shape.
 - Single node: comfortable to hundreds of GB on one machine; not TB-scale.

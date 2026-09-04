@@ -110,8 +110,14 @@ def _build_source(spec: PipelineSpec, store: StateStore) -> tuple[Source, AuthPr
     src = spec.source
     if src.type == "rest":
         initial_cursor = None
+        initial_watermark = None
         if src.pagination.mode in ("cursor", "link"):
             initial_cursor = store.get_cursor(spec.name, src.url)
+        elif src.incremental is not None:
+            # 증분 워터마크는 커서와 같은 행(cursors 테이블)에 산다 — 둘은 스펙
+            # 검증(RestSourceSpec._incremental_requires_ordinal_pagination)에서
+            # 상호 배타로 강제되므로 서로 덮어쓸 일이 없다.
+            initial_watermark = store.get_cursor(spec.name, src.url)
         client = httpx.Client()
         # M2-D: auth가 None이면 build_auth도 None을 돌려준다 — RestSource는 그대로
         # spec.headers만 사용해 기존 호출부(무인증 스펙)를 깨지 않는다.
@@ -121,6 +127,7 @@ def _build_source(spec: PipelineSpec, store: StateStore) -> tuple[Source, AuthPr
             pipeline=spec.name,
             client=client,
             initial_cursor=initial_cursor,
+            initial_watermark=initial_watermark,
             auth=auth,
         )
         return source, auth
@@ -133,6 +140,54 @@ def _build_source(spec: PipelineSpec, store: StateStore) -> tuple[Source, AuthPr
     if src.type == "dlt":
         return load_dlt_source(src, pipeline=spec.name), None
     raise FatalError(f"unknown source type: {src.type}")  # pragma: no cover
+
+
+def _cursor_advance(spec: PipelineSpec, result: FetchResult) -> tuple[str, str] | None:
+    """이 unit 완료와 함께 영속할 `(source_ref, 커서 값)`. None이면 커서를 안 건드린다.
+
+    source_ref까지 같이 돌려주는 이유: 커서를 갖는 소스는 rest뿐이라 `spec.source.url`도
+    이 안에서만 타입이 좁혀진다 — 호출부가 union에서 다시 꺼내지 않게 한다.
+
+    - cursor/link: 항상 전진한다. next_cursor가 None이면 "트래버설 완료"를 뜻하는
+      SOURCE_EXHAUSTED 센티널을 박아 재실행이 clean no-op이 되게 한다 (M2-B).
+    - 증분(시간 창): 창을 완주한 페이지에서만 창의 끝 시각을 워터마크로 남긴다.
+    - 그 외: 커서 개념이 없다.
+    """
+    src = spec.source
+    if src.type != "rest":
+        return None
+    if src.pagination.mode in ("cursor", "link"):
+        cursor = result.next_cursor if result.next_cursor is not None else SOURCE_EXHAUSTED
+        return src.url, cursor
+    if src.incremental is not None and result.next_cursor is not None:
+        return src.url, result.next_cursor
+    return None
+
+
+def _warn_incremental_quarantine(spec: PipelineSpec) -> None:
+    """증분 + quarantine 조합의 조용한 누락 위험을 실행 시작 시 한 번 경고한다.
+
+    격리된 unit은 done이 아니지만, 같은 창의 뒷 페이지가 창을 완주시키면 워터마크는
+    그 창을 지나 전진한다 — 그 창은 다시 열거되지 않으므로 격리된 페이지의 행들이
+    sink에 영영 안 들어온 채로 파이프라인은 건강해 보인다. 증분 파이프라인에서는
+    `block`이 옳다(실행을 세워 워터마크를 붙잡아 두고, 고친 뒤 재실행하면 이어진다).
+    """
+    src = spec.source
+    if src.type != "rest" or src.incremental is None:
+        return
+    policies = [
+        ("validate", spec.validation.on_violation if spec.validation is not None else None),
+        ("contract", spec.contract.on_violation if spec.contract is not None else None),
+    ]
+    for name, policy in policies:
+        if policy == "quarantine":
+            logger.warning(
+                "pipeline %r is incremental and uses %s on_violation=quarantine: a quarantined "
+                "page does not hold the watermark back, so its rows can be skipped silently. "
+                "Prefer on_violation=block for incremental pipelines.",
+                spec.name,
+                name,
+            )
 
 
 def _fetch_with_auth_refresh(
@@ -175,6 +230,7 @@ def run_pipeline(
         sink_ref=sink_ref,
     )
     contract = _build_contract(spec.contract, spec.name)
+    _warn_incremental_quarantine(spec)
     fetched = written = skipped = done_count = quarantined = 0
     schema_recorded = False  # 이번 run에서 스냅샷 기록 여부 (첫 non-empty batch에서 한 번만)
 
@@ -303,14 +359,18 @@ def run_pipeline(
             # M2-B: cursor/link 모드가 next_cursor=None(=트래버설 완료)에 도달하면
             # SOURCE_EXHAUSTED 센티널을 커서로 영속해 재실행이 clean no-op이 되게
             # 한다 (완전 재수집은 P1, state를 지우면 됨).
-            if spec.source.type == "rest" and spec.source.pagination.mode in ("cursor", "link"):
-                cursor_value = (
-                    result.next_cursor if result.next_cursor is not None else SOURCE_EXHAUSTED
-                )
+            #
+            # 증분(시간 창) 모드는 같은 원자적 경로를 쓰되 값의 의미가 다르다:
+            # 창을 완주한 페이지에서만 next_cursor가 채워지고(=그 창의 끝 시각),
+            # 창 중간 페이지에서는 None이라 워터마크가 전진하지 않는다. 그래서
+            # 창 도중에 죽어도 다음 실행이 같은 창을 다시 열거해 남은 페이지만 받는다.
+            advance = _cursor_advance(spec, result)
+            if advance is not None:
+                cursor_source, cursor_value = advance
                 store.mark_done_and_advance_cursor(
                     unit.unit_id,
                     pipeline=spec.name,
-                    source=spec.source.url,
+                    source=cursor_source,
                     cursor=cursor_value,
                     row_count=row_count,
                     byte_count=byte_count,

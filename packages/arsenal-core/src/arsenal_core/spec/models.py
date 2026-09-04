@@ -10,10 +10,14 @@ SourceSpec은 discriminated union(rest/file/database/python/dlt)이다. 기존 �
 auth, validate 블록 추가. P1 필드는 이름을 미리 예약해 하위 호환을 지킨다.
 """
 
+from datetime import timedelta
 from pathlib import Path
 from typing import Annotated, Any, Literal
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
+
+from arsenal_core.errors import FatalError
+from arsenal_core.timewindow import TimestampFormat, parse_duration, parse_timestamp
 
 
 class _Frozen(BaseModel):
@@ -72,6 +76,56 @@ class AuthSpec(_Frozen):
         return self
 
 
+class RestIncrementalSpec(_Frozen):
+    """REST 증분 수집 — "지난 실행 이후 새 데이터만"을 시간 창으로 표현한다.
+
+    unit이 곧 시간 구간 `[since, until)`이고, 구간마다 페이지네이션을 완주한다.
+    한 구간을 완주하면 워터마크가 그 구간의 끝으로 전진해 다음 실행은 거기서
+    시작한다 — 완료된 구간은 다시 열거되지 않는다.
+
+    창은 `start + k*window` 그리드에 정렬되고 **완결된 창만** 수집한다. 따라서
+    데이터는 최대 `window + lag`만큼 늦다 (정직한 신선도 상한). 더 신선해야 하면
+    `window`를 줄이고 그만큼 자주 실행한다.
+
+    `lag`는 소스에서 늦게 도착하는 데이터를 위한 안전 여유다 — 이미 수집한 구간을
+    다시 받는 기능은 없다(결정적 unit ID와 양립하지 않는다). 늦게 도착하는 데이터가
+    있으면 `lag`를 그만큼 늘린다.
+    """
+
+    since_param: str = Field(description="창 시작을 실어 보낼 요청 파라미터명")
+    until_param: str | None = Field(
+        default=None, description="창 끝을 실어 보낼 요청 파라미터명 (없으면 시작만 보낸다)"
+    )
+    start: str = Field(description="첫 실행의 시작 시각 (ISO 8601). 이후에는 워터마크가 이긴다")
+    window: str = Field(default="1d", description="창 크기 (s|m|h|d|w, 예: 1h)")
+    lag: str = Field(default="0s", description="지금으로부터 이만큼은 수집하지 않는다")
+    format: TimestampFormat = Field(default="iso8601", description="요청 파라미터에 실을 시각 표기")
+
+    @field_validator("window", "lag")
+    @classmethod
+    def _valid_duration(cls, v: str) -> str:
+        try:
+            parse_duration(v)
+        except FatalError as e:
+            raise ValueError(str(e)) from e
+        return v
+
+    @field_validator("start")
+    @classmethod
+    def _valid_start(cls, v: str) -> str:
+        try:
+            parse_timestamp(v)
+        except FatalError as e:
+            raise ValueError(str(e)) from e
+        return v
+
+    @model_validator(mode="after")
+    def _window_is_positive(self) -> "RestIncrementalSpec":
+        if parse_duration(self.window) <= timedelta(0):
+            raise ValueError("window must be greater than zero")
+        return self
+
+
 class RestSourceSpec(_Frozen):
     """REST API 소스 — M1 SourceSpec의 필드를 그대로 옮긴 것 (하위 호환)."""
 
@@ -86,6 +140,24 @@ class RestSourceSpec(_Frozen):
     # JSON 바디로 실어야 하는 API가 있다 — GET이 기본값이라 기존 스펙은 영향받지 않는다.
     method: Literal["GET", "POST"] = "GET"
     body: dict[str, Any] | None = None  # method="POST"일 때 요청에 실을 정적 JSON 바디
+    # P1: 시간 창 기반 증분 수집. 없으면 기존 동작(데이터셋을 한 번 통째로 수집).
+    incremental: RestIncrementalSpec | None = None
+
+    @model_validator(mode="after")
+    def _incremental_requires_ordinal_pagination(self) -> "RestSourceSpec":
+        """증분은 offset/page에서만. cursor/link와는 구조적으로 양립하지 않는다.
+
+        (1) 두 방식 모두 상태 저장소의 같은 커서 행 하나를 쓴다 — 창 워터마크와
+        페이지 커서가 서로를 덮어쓴다. (2) 전진만 하는 커서는 시간 구간으로 되감을
+        수 없다. 조용히 어긋나게 두느니 스펙 로드 시점에 거부한다.
+        """
+        if self.incremental is not None and self.pagination.mode not in ("offset", "page"):
+            raise ValueError(
+                "incremental requires pagination mode 'offset' or 'page' "
+                f"(got {self.pagination.mode!r}); a forward-only cursor cannot be "
+                "rewound to a time window"
+            )
+        return self
 
 
 class FileSourceSpec(_Frozen):

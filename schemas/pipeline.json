@@ -461,6 +461,65 @@
       "title": "RateLimitSpec",
       "type": "object"
     },
+    "RestIncrementalSpec": {
+      "additionalProperties": false,
+      "description": "REST \uc99d\ubd84 \uc218\uc9d1 \u2014 \"\uc9c0\ub09c \uc2e4\ud589 \uc774\ud6c4 \uc0c8 \ub370\uc774\ud130\ub9cc\"\uc744 \uc2dc\uac04 \ucc3d\uc73c\ub85c \ud45c\ud604\ud55c\ub2e4.\n\nunit\uc774 \uace7 \uc2dc\uac04 \uad6c\uac04 `[since, until)`\uc774\uace0, \uad6c\uac04\ub9c8\ub2e4 \ud398\uc774\uc9c0\ub124\uc774\uc158\uc744 \uc644\uc8fc\ud55c\ub2e4.\n\ud55c \uad6c\uac04\uc744 \uc644\uc8fc\ud558\uba74 \uc6cc\ud130\ub9c8\ud06c\uac00 \uadf8 \uad6c\uac04\uc758 \ub05d\uc73c\ub85c \uc804\uc9c4\ud574 \ub2e4\uc74c \uc2e4\ud589\uc740 \uac70\uae30\uc11c\n\uc2dc\uc791\ud55c\ub2e4 \u2014 \uc644\ub8cc\ub41c \uad6c\uac04\uc740 \ub2e4\uc2dc \uc5f4\uac70\ub418\uc9c0 \uc54a\ub294\ub2e4.\n\n\ucc3d\uc740 `start + k*window` \uadf8\ub9ac\ub4dc\uc5d0 \uc815\ub82c\ub418\uace0 **\uc644\uacb0\ub41c \ucc3d\ub9cc** \uc218\uc9d1\ud55c\ub2e4. \ub530\ub77c\uc11c\n\ub370\uc774\ud130\ub294 \ucd5c\ub300 `window + lag`\ub9cc\ud07c \ub2a6\ub2e4 (\uc815\uc9c1\ud55c \uc2e0\uc120\ub3c4 \uc0c1\ud55c). \ub354 \uc2e0\uc120\ud574\uc57c \ud558\uba74\n`window`\ub97c \uc904\uc774\uace0 \uadf8\ub9cc\ud07c \uc790\uc8fc \uc2e4\ud589\ud55c\ub2e4.\n\n`lag`\ub294 \uc18c\uc2a4\uc5d0\uc11c \ub2a6\uac8c \ub3c4\ucc29\ud558\ub294 \ub370\uc774\ud130\ub97c \uc704\ud55c \uc548\uc804 \uc5ec\uc720\ub2e4 \u2014 \uc774\ubbf8 \uc218\uc9d1\ud55c \uad6c\uac04\uc744\n\ub2e4\uc2dc \ubc1b\ub294 \uae30\ub2a5\uc740 \uc5c6\ub2e4(\uacb0\uc815\uc801 unit ID\uc640 \uc591\ub9bd\ud558\uc9c0 \uc54a\ub294\ub2e4). \ub2a6\uac8c \ub3c4\ucc29\ud558\ub294 \ub370\uc774\ud130\uac00\n\uc788\uc73c\uba74 `lag`\ub97c \uadf8\ub9cc\ud07c \ub298\ub9b0\ub2e4.",
+      "properties": {
+        "since_param": {
+          "description": "\ucc3d \uc2dc\uc791\uc744 \uc2e4\uc5b4 \ubcf4\ub0bc \uc694\uccad \ud30c\ub77c\ubbf8\ud130\uba85",
+          "title": "Since Param",
+          "type": "string"
+        },
+        "until_param": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "\ucc3d \ub05d\uc744 \uc2e4\uc5b4 \ubcf4\ub0bc \uc694\uccad \ud30c\ub77c\ubbf8\ud130\uba85 (\uc5c6\uc73c\uba74 \uc2dc\uc791\ub9cc \ubcf4\ub0b8\ub2e4)",
+          "title": "Until Param"
+        },
+        "start": {
+          "description": "\uccab \uc2e4\ud589\uc758 \uc2dc\uc791 \uc2dc\uac01 (ISO 8601). \uc774\ud6c4\uc5d0\ub294 \uc6cc\ud130\ub9c8\ud06c\uac00 \uc774\uae34\ub2e4",
+          "title": "Start",
+          "type": "string"
+        },
+        "window": {
+          "default": "1d",
+          "description": "\ucc3d \ud06c\uae30 (s|m|h|d|w, \uc608: 1h)",
+          "title": "Window",
+          "type": "string"
+        },
+        "lag": {
+          "default": "0s",
+          "description": "\uc9c0\uae08\uc73c\ub85c\ubd80\ud130 \uc774\ub9cc\ud07c\uc740 \uc218\uc9d1\ud558\uc9c0 \uc54a\ub294\ub2e4",
+          "title": "Lag",
+          "type": "string"
+        },
+        "format": {
+          "default": "iso8601",
+          "description": "\uc694\uccad \ud30c\ub77c\ubbf8\ud130\uc5d0 \uc2e4\uc744 \uc2dc\uac01 \ud45c\uae30",
+          "enum": [
+            "iso8601",
+            "date",
+            "epoch_s",
+            "epoch_ms"
+          ],
+          "title": "Format",
+          "type": "string"
+        }
+      },
+      "required": [
+        "since_param",
+        "start"
+      ],
+      "title": "RestIncrementalSpec",
+      "type": "object"
+    },
     "RestSourceSpec": {
       "additionalProperties": false,
       "description": "REST API \uc18c\uc2a4 \u2014 M1 SourceSpec\uc758 \ud544\ub4dc\ub97c \uadf8\ub300\ub85c \uc62e\uae34 \uac83 (\ud558\uc704 \ud638\ud658).",
@@ -533,6 +592,17 @@
           ],
           "default": null,
           "title": "Body"
+        },
+        "incremental": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/RestIncrementalSpec"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
         }
       },
       "required": [

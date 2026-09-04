@@ -7,7 +7,8 @@ M2 확장: page/cursor 모드, encoding, rate limiter, AuthProvider 연동 (docs
 import itertools
 import json
 import re
-from collections.abc import Iterator
+from collections.abc import Callable, Iterator
+from datetime import UTC, datetime
 from typing import Any, cast
 
 import httpx
@@ -17,6 +18,13 @@ from arsenal_core.errors import FatalError, classify_http_status
 from arsenal_core.ratelimit import Clock, TokenBucket
 from arsenal_core.spec.models import RestSourceSpec
 from arsenal_core.state import SOURCE_EXHAUSTED, UnitSpec
+from arsenal_core.timewindow import (
+    canonical_timestamp,
+    format_timestamp,
+    iter_windows,
+    parse_duration,
+    parse_timestamp,
+)
 from pugio.auth import AuthProvider
 from pugio.sources.base import FetchResult
 
@@ -65,7 +73,9 @@ class RestSource:
         pipeline: str,
         client: httpx.Client,
         initial_cursor: str | None = None,
+        initial_watermark: str | None = None,
         clock: Clock | None = None,
+        now: Callable[[], datetime] | None = None,
         auth: AuthProvider | None = None,
     ) -> None:
         self._spec = spec
@@ -74,6 +84,13 @@ class RestSource:
         # cursor/link 공용 상태 — fetch()가 매 호출 후 갱신한다 (units()는 lazy하게 읽는다).
         self._pending_cursor = initial_cursor
         self._cursor_exhausted = False
+        # 증분(시간 창) 상태. 워터마크는 "마지막으로 완주한 창의 끝"이고, 없으면
+        # spec.incremental.start가 첫 실행의 시작점이다.
+        self._watermark = initial_watermark
+        # 현재 창의 페이지네이션이 끝났는지 — _cursor_exhausted와 같은 역할이되
+        # 창 하나에만 적용된다. fetch()가 세우고 _incremental_units()가 읽는다.
+        self._window_exhausted = False
+        self._now = now or (lambda: datetime.now(UTC))
         # M2-C: rate_limit이 없으면 완전히 비활성 — 기존 호출부(clock/rate_limit
         # 미지정)를 깨지 않기 위해 기본값을 안전하게 None으로 둔다.
         self._bucket = (
@@ -90,7 +107,14 @@ class RestSource:
         return {**self._spec.headers, **self._auth.headers()}
 
     def units(self) -> Iterator[UnitSpec]:
-        """모드별로 unit을 lazy하게 열거한다 (offset/page/cursor/link)."""
+        """모드별로 unit을 lazy하게 열거한다 (offset/page/cursor/link).
+
+        `incremental`이 선언돼 있으면 그 위에 시간 창 층이 한 겹 더 얹힌다 —
+        창 하나마다 페이지네이션을 완주하고 다음 창으로 넘어간다.
+        """
+        if self._spec.incremental is not None:
+            yield from self._incremental_units()
+            return
         mode = self._spec.pagination.mode
         if mode == "page":
             yield from self._page_units()
@@ -150,11 +174,88 @@ class RestSource:
             if self._cursor_exhausted:
                 return
 
+    def _incremental_units(self) -> Iterator[UnitSpec]:
+        """워터마크부터 `지금 - lag`까지의 완결된 창을 순서대로, 창마다 페이지 완주.
+
+        완료된 창은 워터마크가 이미 지나갔으므로 다시 열거되지 않는다 — 재실행
+        비용이 "진행 중이던 창 하나"로 유지된다 (재개 비용 ≤ 청크 1개, 설계 원칙 2).
+        열거할 창이 없으면(=아직 한 창도 완결되지 않았으면) unit을 하나도 내지 않아
+        재실행이 깨끗한 no-op이 된다.
+        """
+        inc = self._spec.incremental
+        if inc is None:  # pragma: no cover - units()가 이미 분기했다
+            raise FatalError("incremental units requested without an incremental spec")
+        start = parse_timestamp(self._watermark) if self._watermark else parse_timestamp(inc.start)
+        end = self._now() - parse_duration(inc.lag)
+        windows = list(iter_windows(start, end, parse_duration(inc.window)))
+        for index, (since, until) in enumerate(windows):
+            self._window_exhausted = False
+            last_window = index == len(windows) - 1
+            for unit in self._window_page_units(since, until, last_window=last_window):
+                yield unit
+                # fetch()가 이 창의 마지막 페이지였다고 알려주면 다음 창으로 넘어간다.
+                # 이미 done이라 러너가 skip한 unit은 fetch()를 부르지 않으므로 플래그가
+                # 그대로 False다 — 그래서 중단됐던 창은 남은 페이지부터 이어서 받는다.
+                if self._window_exhausted:
+                    break
+
+    def _window_page_units(
+        self, since: datetime, until: datetime, *, last_window: bool
+    ) -> Iterator[UnitSpec]:
+        """창 하나 안에서의 페이지 열거. unit_key에 창 경계를 접두어로 넣는다.
+
+        경계를 unit_key에 넣어야 창마다 다른 unit이 된다 — 빼면 창이 달라져도 같은
+        `offset=0` unit이라 두 번째 창부터 통째로 skip된다.
+
+        전송 표기(`format`)가 아니라 표준형(UTC ISO)으로 키를 만든다: `format`을
+        바꿔도 가리키는 시간 구간은 같으므로 unit ID가 흔들리면 안 된다.
+        """
+        inc = self._spec.incremental
+        if inc is None:  # pragma: no cover
+            raise FatalError("incremental units requested without an incremental spec")
+        p = self._spec.pagination
+        size = p.size
+        prefix = f"since={canonical_timestamp(since)}:until={canonical_timestamp(until)}"
+        window: dict[str, Any] = {
+            "since": format_timestamp(since, inc.format),
+            "until": format_timestamp(until, inc.format),
+            # 이 창을 완주했을 때 워터마크가 될 값 — 다음 실행의 시작점.
+            "watermark": canonical_timestamp(until),
+            "last_window": last_window,
+        }
+        if p.mode == "page":
+            for n in itertools.count(p.start_page):
+                yield UnitSpec.create(
+                    pipeline=self._pipeline,
+                    source=self._spec.url,
+                    unit_key=f"{prefix}:page={n}:per_page={size}",
+                    payload={"page": n, "per_page": size, **window},
+                )
+        else:
+            for offset in itertools.count(0, size):
+                yield UnitSpec.create(
+                    pipeline=self._pipeline,
+                    source=self._spec.url,
+                    unit_key=f"{prefix}:offset={offset}:limit={size}",
+                    payload={"offset": offset, "limit": size, **window},
+                )
+
+    def _incremental_params(self, unit: UnitSpec) -> dict[str, str | int]:
+        """창 경계를 요청 파라미터로. `until_param`이 없으면 시작 경계만 보낸다."""
+        inc = self._spec.incremental
+        if inc is None:  # pragma: no cover
+            raise FatalError("incremental params requested without an incremental spec")
+        params: dict[str, str | int] = {inc.since_param: cast(str, unit.payload["since"])}
+        if inc.until_param is not None:
+            params[inc.until_param] = cast(str, unit.payload["until"])
+        return params
+
     def _request_params(self, unit: UnitSpec) -> dict[str, str | int]:
         """모드별 쿼리 파라미터. link 모드는 fetch()에서 별도 처리 (URL 자체가 다음 페이지)."""
         p = self._spec.pagination
+        window = self._incremental_params(unit) if self._spec.incremental is not None else {}
         if p.mode == "page":
-            return {p.param: unit.payload["page"], p.size_param: p.size}
+            return {p.param: unit.payload["page"], p.size_param: p.size, **window}
         if p.mode == "cursor":
             cur = unit.payload["cursor"]
             if cur is None:
@@ -164,7 +265,7 @@ class RestSource:
                 # 스트립되고 bandit B101이 지적하므로 명시적으로 체크한다.
                 raise FatalError("cursor mode requires cursor_param")
             return {p.cursor_param: cur, p.size_param: p.size}
-        return {p.param: unit.payload["offset"], p.size_param: p.size}
+        return {p.param: unit.payload["offset"], p.size_param: p.size, **window}
 
     def fetch(self, unit: UnitSpec) -> FetchResult:
         """GET → classify_http_status로 예외 매핑 → RecordBatch.
@@ -212,8 +313,20 @@ class RestSource:
             self._pending_cursor = next_cursor
             self._cursor_exhausted = next_cursor is None
             return FetchResult(batch=batch, exhausted=next_cursor is None, next_cursor=next_cursor)
-        exhausted = len(rows) < p.size
-        return FetchResult(batch=batch, exhausted=exhausted)
+        short_page = len(rows) < p.size
+        if self._spec.incremental is not None:
+            # 짧은 페이지 = 이 **창**의 끝. 마지막 창일 때만 run 전체의 끝이다 —
+            # 중간 창에서 exhausted=True를 돌려주면 러너가 거기서 break해 나머지
+            # 창을 영영 수집하지 못한다.
+            self._window_exhausted = short_page
+            watermark = cast(str, unit.payload["watermark"]) if short_page else None
+            last_window = cast(bool, unit.payload["last_window"])
+            return FetchResult(
+                batch=batch,
+                exhausted=short_page and last_window,
+                next_cursor=watermark,
+            )
+        return FetchResult(batch=batch, exhausted=short_page)
 
     def _fetch_link(self, unit: UnitSpec) -> FetchResult:
         """B7: Link 헤더(rel="next")의 절대 URL을 그대로 GET한다."""

@@ -143,6 +143,31 @@ Postgres 싱크 (M2) — merge_key 기준 upsert.
 |---|---|---|---|---|
 | `rps` | number | Yes |  |  |
 
+## RestIncrementalSpec
+
+REST 증분 수집 — "지난 실행 이후 새 데이터만"을 시간 창으로 표현한다.
+
+unit이 곧 시간 구간 `[since, until)`이고, 구간마다 페이지네이션을 완주한다.
+한 구간을 완주하면 워터마크가 그 구간의 끝으로 전진해 다음 실행은 거기서
+시작한다 — 완료된 구간은 다시 열거되지 않는다.
+
+창은 `start + k*window` 그리드에 정렬되고 **완결된 창만** 수집한다. 따라서
+데이터는 최대 `window + lag`만큼 늦다 (정직한 신선도 상한). 더 신선해야 하면
+`window`를 줄이고 그만큼 자주 실행한다.
+
+`lag`는 소스에서 늦게 도착하는 데이터를 위한 안전 여유다 — 이미 수집한 구간을
+다시 받는 기능은 없다(결정적 unit ID와 양립하지 않는다). 늦게 도착하는 데이터가
+있으면 `lag`를 그만큼 늘린다.
+
+| Field | Type | Required | Default | Description |
+|---|---|---|---|---|
+| `since_param` | string | Yes |  | 창 시작을 실어 보낼 요청 파라미터명 |
+| `until_param` | string \| null | No | `null` | 창 끝을 실어 보낼 요청 파라미터명 (없으면 시작만 보낸다) |
+| `start` | string | Yes |  | 첫 실행의 시작 시각 (ISO 8601). 이후에는 워터마크가 이긴다 |
+| `window` | string | No | `"1d"` | 창 크기 (s\|m\|h\|d\|w, 예: 1h) |
+| `lag` | string | No | `"0s"` | 지금으로부터 이만큼은 수집하지 않는다 |
+| `format` | "iso8601" \| "date" \| "epoch_s" \| "epoch_ms" | No | `"iso8601"` | 요청 파라미터에 실을 시각 표기 |
+
 ## RestSourceSpec
 
 REST API 소스 — M1 SourceSpec의 필드를 그대로 옮긴 것 (하위 호환).
@@ -158,6 +183,7 @@ REST API 소스 — M1 SourceSpec의 필드를 그대로 옮긴 것 (하위 호�
 | `auth` | AuthSpec \| null | No | `null` |  |
 | `method` | "GET" \| "POST" | No | `"GET"` |  |
 | `body` | object \| null | No | `null` |  |
+| `incremental` | RestIncrementalSpec \| null | No | `null` |  |
 
 ## SplitSpec
 

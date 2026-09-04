@@ -143,6 +143,18 @@ def dlq_retry(spec_path: Path, unit: str = typer.Option(..., "--unit")) -> None:
             err=True,
         )
         raise typer.Exit(1)
+    if spec.source.type == "rest" and spec.source.incremental is not None:
+        # 같은 고아 문제의 증분판: 격리는 워터마크 전진을 막지 못하므로, 그 창은
+        # 다시 열거되지 않는다 — requeue해도 어떤 실행도 이 unit을 재등록하지 않는다.
+        # evidence(DLQ 파일)를 지우지 않고 거부한다. 복구는 그 구간을 명시적
+        # `start`로 다시 수집하는 별도 파이프라인이다.
+        typer.echo(
+            "error: dlq retry is not supported for incremental pipelines "
+            "(the watermark has moved past that window, so it is never enumerated again); "
+            "re-collect that range with a separate pipeline name and an explicit start",
+            err=True,
+        )
+        raise typer.Exit(1)
     store = StateStore(Path(spec.state_dir) / f"{spec.name}.db")
     try:
         updated = store.requeue(unit)

@@ -194,7 +194,7 @@ Canva의 무료 템플릿이 유료 인쇄 서비스와 함께 쓰이는 것과 
 
 | 작업 | 내용 | 완료 기준 |
 |---|---|---|
-| **REST 증분 워터마크** (선행) | `incremental: { param: updated_after, field: updated_at, window: 1d, lag: 5m }`. 실행마다 마지막 워터마크부터 지금까지를 시간 창 unit으로 낸다. 창은 약간 겹치고 중복은 sink `merge_key`가 흡수 | "매일 새 주문만"이 REST에서 된다. 지금은 offset/page 완료 후 no-op, cursor 소진 후 unit 없음 — 시나리오 1·2·6의 전제 |
+| **REST 증분 워터마크** (선행) | ✅ `source.incremental: { since_param, until_param, start, window, lag, format }`. 시간 창 `[since, until)`이 unit이고, 창을 완주하면 워터마크가 전진해 완료된 창은 다시 열거되지 않는다. 겹침 대신 `lag`로 늦게 도착하는 데이터를 흡수한다(겹침은 결정적 unit ID와 양립 불가) | "매일 새 주문만"이 REST에서 된다 — 시나리오 1·2·6의 전제 |
 | `--json` 전 명령 | `run`, `status`, `dlq list`, `compile`, `profile`, `doctor`, `plan`의 출력을 구조화 | 모든 명령이 `--json`으로 파싱 가능한 단일 객체를 stdout에 낸다. 사람용 출력은 그대로 |
 | `arsenal profile <path\|url>` | 컬럼명·타입·null 비율·distinct·샘플 5행. Parquet·CSV·REST 응답 샘플 | 에이전트가 데이터를 보지 않고 transform을 쓰는 일이 없어진다 |
 | `arsenal plan` | pugio dry-run(unit 수·재개 지점) + gladius compile + 영향 경로 목록 + 위험 표현식 경고 | 실행 없이 "무엇이 일어날지"를 한 객체로 |
