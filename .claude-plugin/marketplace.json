@@ -1,0 +1,16 @@
+{
+  "name": "de-arsenal",
+  "owner": { "name": "KooEric", "url": "https://github.com/KooEric" },
+  "metadata": {
+    "description": "Skills for DE Arsenal — a data platform with no signup and no metering, driven by the AI you already use."
+  },
+  "plugins": [
+    {
+      "name": "de-arsenal",
+      "source": "./",
+      "description": "Build, transform, validate, operate, and schedule DE Arsenal data pipelines.",
+      "version": "0.3.0",
+      "category": "data-engineering"
+    }
+  ]
+}

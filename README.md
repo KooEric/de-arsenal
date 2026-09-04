@@ -32,6 +32,21 @@ The last row is the honest boundary. Scale beyond one machine, cloud storage fee
 
 Not companies replacing Databricks, but the people Databricks never targeted: solo analysts, early startups, students and researchers, marketers who want to touch their own data, side projects. Canva did not beat Photoshop; it took the people who were never going to buy Photoshop. Same seat.
 
+## Use it from Claude Code (or any agent)
+
+The tool is the engine; your AI is the driver. Five skills in [`skills/`](skills/) teach an
+agent to build, transform, validate, operate and schedule Arsenal pipelines — with the
+same honesty about limits as these docs. No LLM code ships in the tool.
+
+```
+/plugin marketplace add KooEric/de-arsenal
+/plugin install de-arsenal@de-arsenal
+```
+
+Then just ask: *"collect the issues of duckdb/duckdb into Parquet and keep only open ones"*.
+Manual install and other agents: [skills/README.md](skills/README.md). Scheduling in
+AWS/GCP/Cloudflare composes with that provider's own skill ([`arsenal-deploy`](skills/arsenal-deploy/SKILL.md)).
+
 ## The armory (internal architecture)
 
 Users only need to know `arsenal`. Underneath are independent tools, one per problem domain — each installable and usable on its own (no lock-in), loosely coupled through an Arrow/Parquet hub.

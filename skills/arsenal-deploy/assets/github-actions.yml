@@ -1,0 +1,41 @@
+# Scheduled DE Arsenal run on GitHub Actions.
+# Copy to .github/workflows/arsenal.yml in the project that holds arsenal.yaml.
+# Fill in: the cron, the secret names your YAML references, and (optionally) the
+# S3/R2 bucket used to persist .arsenal/ state between runs.
+name: arsenal
+
+on:
+  schedule:
+    - cron: "0 2 * * *"        # daily 02:00 UTC — match the data's change rate
+  workflow_dispatch:           # manual trigger for the first run and for recovery
+
+concurrency:
+  group: arsenal-${{ github.ref }}
+  cancel-in-progress: false    # never kill a run mid-unit; resume handles the rest
+
+jobs:
+  run:
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    env:
+      # One line per env var named in collect.yaml / transform.yaml (names only).
+      GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      # PG_DSN: ${{ secrets.PG_DSN }}
+      # AWS_ACCESS_KEY_ID / AWS_SECRET_ACCESS_KEY / AWS_REGION for s3:// sinks or state sync
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v5
+      - run: uv tool install de-arsenal        # add "de-arsenal[postgres]" if the sink is postgres
+
+      # Optional: restore state so re-runs resume instead of re-fetching.
+      # - run: aws s3 sync s3://<bucket>/arsenal-state/.arsenal .arsenal
+
+      - run: arsenal run
+        working-directory: .                  # dir containing arsenal.yaml
+
+      # Optional: persist state even when the run failed, so the next run resumes.
+      # - if: always()
+      #   run: aws s3 sync .arsenal s3://<bucket>/arsenal-state/.arsenal
+
+      - if: always()
+        run: pugio status collect.yaml --cost --max-age-seconds 93600 || true

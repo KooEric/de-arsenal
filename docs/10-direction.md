@@ -194,12 +194,13 @@ Canva의 무료 템플릿이 유료 인쇄 서비스와 함께 쓰이는 것과 
 
 | 작업 | 내용 | 완료 기준 |
 |---|---|---|
+| **REST 증분 워터마크** (선행) | `incremental: { param: updated_after, field: updated_at, window: 1d, lag: 5m }`. 실행마다 마지막 워터마크부터 지금까지를 시간 창 unit으로 낸다. 창은 약간 겹치고 중복은 sink `merge_key`가 흡수 | "매일 새 주문만"이 REST에서 된다. 지금은 offset/page 완료 후 no-op, cursor 소진 후 unit 없음 — 시나리오 1·2·6의 전제 |
 | `--json` 전 명령 | `run`, `status`, `dlq list`, `compile`, `profile`, `doctor`, `plan`의 출력을 구조화 | 모든 명령이 `--json`으로 파싱 가능한 단일 객체를 stdout에 낸다. 사람용 출력은 그대로 |
 | `arsenal profile <path\|url>` | 컬럼명·타입·null 비율·distinct·샘플 5행. Parquet·CSV·REST 응답 샘플 | 에이전트가 데이터를 보지 않고 transform을 쓰는 일이 없어진다 |
 | `arsenal plan` | pugio dry-run(unit 수·재개 지점) + gladius compile + 영향 경로 목록 + 위험 표현식 경고 | 실행 없이 "무엇이 일어날지"를 한 객체로 |
 | `arsenal doctor` | 마지막 실행의 실패를 `Fatal/Retryable/AuthExpired` + 원인 + **다음 행동** 으로 진단 | 에이전트 루프가 닫힌다: run → doctor → 행동 → run |
 | 경로 허용 목록 | `arsenal.yaml`의 `sandbox.paths` 또는 `--sandbox` | 프로젝트 밖 경로 접근 시 plan 단계에서 FatalError |
-| 스킬 | `.claude/skills/arsenal/SKILL.md` + 스키마·플레이북 참조 | Claude Code에서 시나리오 1·2 완주 |
+| 스킬 | ✅ `skills/` 5종 + `.claude-plugin/` 플러그인·마켓플레이스 매니페스트. 스키마 참조는 `gen_schema_docs.py`가 생성 | Claude Code에서 시나리오 1·2 완주 (외부 사용자 검증은 남음) |
 | JSON Schema 게시 | `schemas/*.json`을 패키지에 포함, `arsenal schema pipeline\|transform` 명령 | 에이전트가 실행 전 스펙을 로컬 검증 |
 | 원격 상태 | `state_dir: s3://…` / `r2://…`. 실행 전 pull, 종료 시 push, 실패 시에도 push | 클라우드 컨테이너에서 재개·멱등이 유지된다. 조합의 선행 조건 |
 | 배포 매니페스트 | `arsenal deploy manifest --json` + 종료 코드 규약 | 다른 스킬이 이 객체만 보고 배포할 수 있다 |

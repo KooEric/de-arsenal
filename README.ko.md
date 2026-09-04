@@ -32,6 +32,21 @@ arsenal query "SELECT * FROM './data/clean/*.parquet' LIMIT 10"
 
 Databricks를 대체하려는 회사가 아니라, **Databricks가 애초에 상대하지 않는 사람들** — 1인 분석가, 초기 스타트업, 학생·연구자, 데이터를 직접 만지고 싶은 마케터, 사이드 프로젝트. Canva가 Photoshop을 이긴 게 아니라 Photoshop을 평생 살 일 없는 사람을 데려간 것과 같은 자리다.
 
+## Claude Code에서 쓰기 (다른 에이전트도 됨)
+
+도구는 엔진이고, 운전은 당신의 AI가 한다. [`skills/`](skills/)의 스킬 다섯 개가
+에이전트에게 파이프라인 구축·변환·검증·운영·스케줄링을 가르친다. 이 문서들과 같은
+수준으로 한계를 정직하게 적었고, 도구 안에 LLM 코드는 없다.
+
+```
+/plugin marketplace add KooEric/de-arsenal
+/plugin install de-arsenal@de-arsenal
+```
+
+그다음은 말로 한다. *"duckdb/duckdb 저장소 이슈를 Parquet로 받아서 open만 남겨줘"*.
+수동 설치와 다른 에이전트: [skills/README.md](skills/README.md). AWS·GCP·Cloudflare
+스케줄링은 그 클라우드의 스킬과 조합한다 ([`arsenal-deploy`](skills/arsenal-deploy/SKILL.md)).
+
 ## 무기 체계 (내부 아키텍처)
 
 사용자는 `arsenal` 하나만 알면 된다. 그 아래는 문제 영역별 독립 도구들 — 각각 따로 설치·사용 가능하고(락인 없음), Arrow/Parquet 허브로 느슨하게 맞물린다.

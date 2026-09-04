@@ -26,6 +26,10 @@ _PIPELINE_JSON: Final = Path("schemas/pipeline.json")
 _PIPELINE_MD: Final = Path("docs/reference/pipeline-schema.md")
 _TRANSFORM_JSON: Final = Path("schemas/transform.json")
 _TRANSFORM_MD: Final = Path("docs/reference/transform-schema.md")
+# Copies shipped inside the Claude Code skills (skills/ is installed standalone,
+# so it cannot reach docs/). Same content, same drift guard.
+_PIPELINE_SKILL_MD: Final = Path("skills/arsenal-pipeline/references/pipeline-schema.md")
+_TRANSFORM_SKILL_MD: Final = Path("skills/arsenal-transform/references/transform-schema.md")
 
 
 def _import_pipeline_spec() -> type[Any]:
@@ -204,6 +208,8 @@ def generate_artifacts() -> dict[Path, str]:
         _PIPELINE_MD: pipeline_md,
         _TRANSFORM_JSON: _render_json_schema(transform_spec),
         _TRANSFORM_MD: transform_md,
+        _PIPELINE_SKILL_MD: pipeline_md,
+        _TRANSFORM_SKILL_MD: transform_md,
     }
 
 

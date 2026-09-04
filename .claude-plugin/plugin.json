@@ -1,0 +1,11 @@
+{
+  "name": "de-arsenal",
+  "description": "Operate DE Arsenal, the free local-first data platform: build resumable pipelines, transform Parquet, gate data quality, recover from failures, and schedule runs together with your cloud provider's skill.",
+  "version": "0.3.0",
+  "author": { "name": "KooEric", "url": "https://github.com/KooEric/de-arsenal" },
+  "homepage": "https://github.com/KooEric/de-arsenal",
+  "repository": "https://github.com/KooEric/de-arsenal",
+  "license": "Apache-2.0",
+  "keywords": ["data-engineering", "etl", "pipeline", "duckdb", "parquet", "data-quality"],
+  "skills": "./skills"
+}
