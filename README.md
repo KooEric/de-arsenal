@@ -1,21 +1,36 @@
 # DE Arsenal
 
-> **One laptop is a data platform.** One install, one command: ingest → validate → transform → query.
+> **A data platform with no signup and no metering.** Runs on the laptop you already have, driven by the AI you already use.
 
 **English** | [한국어](README.ko.md)
 
-A one-command answer to the problems data engineers and analysts hit every day — ingestion jobs that die at 3 AM, expired tokens, piles of CSVs you can't even query. No servers, no clusters, no DAG code.
+Video, marketing and design are full of free tools. Data has none. Snowflake and Databricks bill by credits and DBUs, and the free tier turns into an invoice once data accumulates. That is not stinginess, it is architecture: they process your data on their servers. DE Arsenal is built the other way round. No server, no account, no meter. Compute is your laptop; the driver is the AI you already pay for (Claude Code, Cursor, or a local model). The full direction is in [docs/10-direction.md](docs/10-direction.md) (Korean).
 
 ```bash
-uv tool install de-arsenal                    # or: pip install de-arsenal
+uv tool install de-arsenal                    # or: pip install de-arsenal — no signup
 arsenal init csv-cleanup                      # start from a recipe (github-issues · csv-cleanup · api-to-postgres)
 arsenal run                                   # ingest → validate → transform; interrupted? rerun to resume
 arsenal query "SELECT * FROM './data/clean/*.parquet' LIMIT 10"
 ```
 
-> **Status: v0.3.0, live on PyPI.** All 8 packages are published. Ingestion, transformation, the umbrella CLI, and the P1 extensions (dlt/dbt interop, schema drift policies, cloud sinks, Python UDFs, observability, orchestration, backfill, data contracts) work today. The transform package is distributed as `de-gladius`; its Python import and CLI remain `gladius`.
+> **Status: v0.3.0, live on PyPI.** All 8 packages are published. Ingestion, transformation, the umbrella CLI, and the P1 extensions (dlt/dbt interop, schema drift policies, cloud sinks, Python UDFs, observability, orchestration, backfill, data contracts) work today. The transform package is distributed as `de-gladius`; its Python import and CLI remain `gladius`. **Next: the AI agent layer (Augur)** — L1/L2 roadmap in [docs/10-direction.md](docs/10-direction.md).
 
-The **completeness** of a Databricks or Snowflake, in the **opposite shape**. While the big platforms do a hundred things at 80%, we do one thing at 100%. Reliability (idempotency, resume, validation) is the default, and the zero-margin cost structure ([docs/07](docs/07-cost-efficiency.md)) falls out of the architecture.
+## What it costs
+
+| | Snowflake | Databricks | BigQuery | **DE Arsenal** |
+|---|---|---|---|---|
+| Billing unit | Credits (warehouse uptime) | DBUs + cloud infra | Bytes scanned + storage | **None** |
+| Free scope | Trial credits, expire | Trial period, limited community edition | 1 TB queries / 10 GB storage per month | **Everything, forever** |
+| Account | Required | Required | Required | **Not needed** |
+| Where the data lives | Their servers | Their servers (or your cloud + a management margin) | Their servers | **Your laptop, open Parquet** |
+| Cost to leave | Egress + migration | Egress + migration | Egress | **0 — the files are already yours** |
+| Ceiling | None (if you pay) | None (if you pay) | None (if you pay) | **Single-node envelope — [docs/08](docs/08-limits.md)** |
+
+The last row is the honest boundary. Scale beyond one machine, cloud storage fees and LLM tokens are yours, and we add no margin on any of them. The core stays free forever; the exact scope of that promise is in [docs/08-limits.md, "The free boundary"](docs/08-limits.md#무료의-경계).
+
+## Who it is for
+
+Not companies replacing Databricks, but the people Databricks never targeted: solo analysts, early startups, students and researchers, marketers who want to touch their own data, side projects. Canva did not beat Photoshop; it took the people who were never going to buy Photoshop. Same seat.
 
 ## The armory (internal architecture)
 
@@ -91,6 +106,7 @@ Design documents are currently written in Korean; schema references and the chan
 | [docs/07-cost-efficiency.md](docs/07-cost-efficiency.md) | Low-cost high-efficiency design — cost structure, incremental processing, targets |
 | [docs/08-limits.md](docs/08-limits.md) | Honest limits — single-node envelope, unsupported scope, per-sink idempotency guarantees |
 | [docs/09-oss-leverage.md](docs/09-oss-leverage.md) | Open-source leverage — what we borrow, dlt/dbt interop, adoption criteria |
+| [docs/10-direction.md](docs/10-direction.md) | **Direction** — the Canva of data, the AI agent layer (Augur), L1/L2/L3 roadmap, a day in 2027 |
 | [docs/tools.md](docs/tools.md) | When to use each tool, quick starts, comparisons |
 | [docs/roadmap.md](docs/roadmap.md) | Original roadmap (full problem statements) |
 

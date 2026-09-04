@@ -1,21 +1,36 @@
 # DE Arsenal
 
-> **노트북 한 대가 데이터 플랫폼이 된다.** 설치 하나, 명령 하나로 수집→검증→변환→쿼리.
+> **가입도 과금도 없는 데이터 플랫폼.** 이미 있는 노트북과 이미 쓰는 AI로 굴린다.
 
 [English](README.md) | **한국어**
 
-데이터 엔지니어와 분석가가 매일 부딪히는 문제들 — 새벽에 끊긴 수집, 만료된 토큰, 쿼리도 못 하는 CSV 뭉치 — 에 대한 **원클릭 솔루션**. 서버도, 클러스터도, DAG 코드도 없다.
+영상·마케팅·디자인에는 무료 툴이 넘치는데 데이터에는 없다. Snowflake도 Databricks도 크레딧과 DBU로 과금하고, 무료 티어는 데이터가 쌓이면 청구서로 바뀐다. 데이터에 무료가 없는 이유는 아키텍처 때문이다 — 그들의 서버에서 내 데이터를 처리하니까. DE Arsenal은 반대로 설계됐다. 서버 없음, 계정 없음, 미터링 없음. 컴퓨트는 당신의 노트북이고, 운전은 당신이 이미 쓰는 AI(Claude Code·Cursor·로컬 모델)가 한다. 방향성 전체는 [docs/10-direction.md](docs/10-direction.md).
 
 ```bash
-uv tool install de-arsenal        # 또는 pip install de-arsenal
+uv tool install de-arsenal        # 또는 pip install de-arsenal — 가입 없음
 arsenal init csv-cleanup           # 레시피로 시작 (github-issues · csv-cleanup · api-to-postgres)
 arsenal run                        # 수집→검증→변환. 끊겨도 재실행하면 이어서
 arsenal query "SELECT * FROM './data/clean/*.parquet' LIMIT 10"
 ```
 
-> **상태: v0.3.0 — PyPI 라이브.** 8개 패키지 전부 게시 완료. 수집·변환·우산 CLI와 P1의 dlt/dbt, schema drift, cloud sink, UDF, 관측성·오케스트레이션·백필·계약 패키지가 동작한다. 변환 패키지의 PyPI 배포명은 `de-gladius`이며 import와 CLI는 `gladius`를 유지한다.
+> **상태: v0.3.0 — PyPI 라이브.** 8개 패키지 전부 게시 완료. 수집·변환·우산 CLI와 P1의 dlt/dbt, schema drift, cloud sink, UDF, 관측성·오케스트레이션·백필·계약 패키지가 동작한다. 변환 패키지의 PyPI 배포명은 `de-gladius`이며 import와 CLI는 `gladius`를 유지한다. **다음 단계는 AI 에이전트 층(Augur)** — [docs/10-direction.md](docs/10-direction.md)의 L1/L2 로드맵.
 
-Databricks·Snowflake 수준의 **완성도**를, 그들과 정반대의 **형태**로. 거대 플랫폼이 백 가지를 80점으로 하는 동안, 우리는 한 가지를 100점으로. 신뢰성(멱등·재개·검증)이 기본값이고, 마진 없는 비용 구조([docs/07](docs/07-cost-efficiency.md))가 아키텍처에서 나온다.
+## 얼마가 드는가
+
+| | Snowflake | Databricks | BigQuery | **DE Arsenal** |
+|---|---|---|---|---|
+| 과금 단위 | 크레딧 (웨어하우스 가동 시간) | DBU + 클라우드 인프라 | 스캔 바이트 + 스토리지 | **없음** |
+| 무료 범위 | 체험 크레딧, 기간 만료 | 체험 기간, 커뮤니티 에디션 제한 | 월 1TB 쿼리·10GB 저장까지 | **전부, 영구** |
+| 계정 | 필요 | 필요 | 필요 | **불필요** |
+| 데이터 위치 | 그들의 서버 | 그들의 서버(또는 내 클라우드 + 관리 마진) | 그들의 서버 | **내 노트북, 오픈 Parquet** |
+| 나가는 비용 | 반출·마이그레이션 | 반출·마이그레이션 | 반출 | **0 — 파일이 이미 내 것** |
+| 한계 | 없음 (돈이 된다면) | 없음 (돈이 된다면) | 없음 (돈이 된다면) | **단일 노드 envelope — [docs/08](docs/08-limits.md)** |
+
+마지막 줄이 정직한 경계다. 노트북을 넘는 규모, 클라우드 스토리지 요금, LLM 토큰은 사용자 몫이고 우리는 거기에 마진을 붙이지 않는다. 코어는 영원히 무료다 — 이 약속의 정확한 범위는 [docs/08-limits.md의 "무료의 경계"](docs/08-limits.md#무료의-경계).
+
+## 누구를 위한 것인가
+
+Databricks를 대체하려는 회사가 아니라, **Databricks가 애초에 상대하지 않는 사람들** — 1인 분석가, 초기 스타트업, 학생·연구자, 데이터를 직접 만지고 싶은 마케터, 사이드 프로젝트. Canva가 Photoshop을 이긴 게 아니라 Photoshop을 평생 살 일 없는 사람을 데려간 것과 같은 자리다.
 
 ## 무기 체계 (내부 아키텍처)
 
@@ -60,6 +75,7 @@ Databricks·Snowflake 수준의 **완성도**를, 그들과 정반대의 **형�
 | [docs/07-cost-efficiency.md](docs/07-cost-efficiency.md) | 저비용 고효율 설계 — 비용 구조, 증분 처리, 효율 목표치 |
 | [docs/08-limits.md](docs/08-limits.md) | 정직한 한계선 — 단일 노드 처리 envelope, 미지원 범위, sink별 멱등 보장 |
 | [docs/09-oss-leverage.md](docs/09-oss-leverage.md) | 오픈소스 차용 전략 — 차용 지도, dlt·dbt 인터롭, 쓸만함 판정 기준 |
+| [docs/10-direction.md](docs/10-direction.md) | **방향성** — 데이터의 Canva, AI 에이전트 층(Augur), L1/L2/L3 로드맵, 2027년의 하루 |
 | [docs/tools.md](docs/tools.md) | 도구별 사용 시점·빠른 시작·장점 비교 |
 | [docs/plans/](docs/plans/) | 마일스톤별 상세 TDD 구현 계획 |
 | [docs/roadmap.md](docs/roadmap.md) | 원본 로드맵 (문제 정의 전체) |

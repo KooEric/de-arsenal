@@ -47,6 +47,7 @@ Databricks·Snowflake 수준의 **완성도**를 가진 솔루션을, 그들과 
 | **Ballista** | 대형 노포, 직사 | 대규모 분산 처리 | 단일 노드 초과 |
 | **Onager** | 투석기, 곡사 | 백필·대규모 재처리 | 한 번에 크게 |
 | **Scutum** | 방패, 방어축 | 데이터 품질·검증·보호 | 전체를 감싸는 계층 |
+| **Augur** | 점술관, 조언자 | AI 에이전트 인터페이스 (스킬·MCP·플레이북·벤치마크) | 직접 싸우지 않는다. 지휘관(사용자)의 AI가 무기들을 운전하게 한다 — [10-direction.md](10-direction.md) |
 
 공격 계열은 무게·사거리 순으로 늘어선다(Pugio→Gladius→Spatha→Hasta→Pilum→Scorpio→Ballista→Onager). Scutum만 그 전체를 방어로 감싼다.
 
