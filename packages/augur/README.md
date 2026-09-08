@@ -17,7 +17,8 @@ question ─▶ retrieve(catalog) ─▶ prompt ─▶ LLM ─▶ SQL ─▶ gua
 
 ```bash
 pip install de-augur
-export ANTHROPIC_API_KEY=...            # 또는 OPENAI_API_KEY + --provider openai
+augur auth set anthropic                 # 숨김 입력 → ~/.config/augur/credentials.json (0600)
+augur auth status                        # env | file | none — 값은 앞 4자리만
 
 augur index eval/sources.yaml            # {tables: {orders: './data/orders/*.parquet'}} → catalog.json
 augur ask "How many orders are paid?"    # SQL은 stderr, 결과는 stdout(jsonl)
@@ -25,6 +26,10 @@ augur eval eval/cases.yaml               # 실패 모드별 집계 + Parquet/JSO
 augur report                             # run 간 추이
 gladius query "SELECT failure_mode, count(*) FROM './data/augur/eval/*.parquet' GROUP BY 1"
 ```
+
+키는 `ANTHROPIC_API_KEY`/`OPENAI_API_KEY` 환경변수 → `augur auth set`으로 저장한 파일 →
+(TTY라면) 실행 시 숨김 프롬프트 순으로 찾는다. 인자로는 받지 않는다 — 셸 히스토리에 남는다.
+파일 위치는 `AUGUR_HOME`으로 바꿀 수 있다. 키는 trace·로그·`repr`에 절대 찍히지 않는다.
 
 ## 실패 모드 (자동 분류, 단계 순)
 

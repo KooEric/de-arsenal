@@ -34,9 +34,14 @@ def _index(tmp_path: Path, data_dir: Path) -> Path:
 
 
 def _patch_provider(monkeypatch: pytest.MonkeyPatch, fake: FakeProvider) -> None:
-    def factory(name: str, model: str | None = None) -> Provider:
+    def factory(name: str, model: str | None = None, api_key: str = "") -> Provider:
+        assert api_key == "sk-test"  # CLI는 키를 먼저 해결해 프로바이더에 넘긴다
         return fake
 
+    def resolve(provider: str, *, prompt: bool = True) -> str:
+        return "sk-test"
+
+    monkeypatch.setattr(cli, "resolve_api_key", resolve)
     monkeypatch.setattr(cli, "provider_from_name", factory)
 
 

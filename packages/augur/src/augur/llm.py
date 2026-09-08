@@ -1,13 +1,14 @@
 """LLM 제공자 — SDK 없이 httpx. 에러는 arsenal_core 분류 체계로 변환한다.
 
 429/5xx → RetryableError(with_retry가 backoff), 401 → AuthExpiredError, 그 외 4xx →
-FatalError. 비밀은 환경변수로만(ANTHROPIC_API_KEY / OPENAI_API_KEY). 로그에 키 출력 금지.
+FatalError. 키는 생성자 인자(augur.keys가 환경변수→설정 파일→프롬프트로 해결) 또는
+환경변수(ANTHROPIC_API_KEY / OPENAI_API_KEY). repr·로그·trace에 키 출력 금지.
 FakeProvider는 테스트·eval 재현용 — 질문→응답 사전을 그대로 돌려준다.
 """
 
 import os
 import typing as t
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 
 import httpx
 
@@ -54,15 +55,18 @@ def _env(key: str) -> str:
 @dataclass(frozen=True)
 class AnthropicProvider:
     model: str = "claude-sonnet-4-6"
+    api_key: str = field(default="", repr=False)  # 비어 있으면 환경변수에서 읽는다
     name: str = "anthropic"
 
     def complete(self, system: str, user: str) -> Completion:
+        api_key = self.api_key or _env("ANTHROPIC_API_KEY")
+
         def call() -> Completion:
             try:
                 resp = httpx.post(
                     ANTHROPIC_URL,
                     headers={
-                        "x-api-key": _env("ANTHROPIC_API_KEY"),
+                        "x-api-key": api_key,
                         "anthropic-version": ANTHROPIC_VERSION,
                         "content-type": "application/json",
                     },
@@ -96,14 +100,17 @@ class AnthropicProvider:
 @dataclass(frozen=True)
 class OpenAIProvider:
     model: str = "gpt-4o-mini"
+    api_key: str = field(default="", repr=False)  # 비어 있으면 환경변수에서 읽는다
     name: str = "openai"
 
     def complete(self, system: str, user: str) -> Completion:
+        api_key = self.api_key or _env("OPENAI_API_KEY")
+
         def call() -> Completion:
             try:
                 resp = httpx.post(
                     OPENAI_URL,
-                    headers={"authorization": f"Bearer {_env('OPENAI_API_KEY')}"},
+                    headers={"authorization": f"Bearer {api_key}"},
                     json={
                         "model": self.model,
                         "temperature": 0,
@@ -145,9 +152,10 @@ class FakeProvider:
         return Completion(self.default, "fake", len(user) // 4, 1)
 
 
-def provider_from_name(name: str, model: str | None = None) -> Provider:
+def provider_from_name(name: str, model: str | None = None, api_key: str = "") -> Provider:
+    """api_key가 비어 있으면 호출 시점에 환경변수에서 읽는다. CLI는 augur.keys로 먼저 해결한다."""
     if name == "anthropic":
-        return AnthropicProvider(model=model or AnthropicProvider.model)
+        return AnthropicProvider(model=model or AnthropicProvider.model, api_key=api_key)
     if name == "openai":
-        return OpenAIProvider(model=model or OpenAIProvider.model)
+        return OpenAIProvider(model=model or OpenAIProvider.model, api_key=api_key)
     raise FatalError(f"unknown provider: {name!r} (anthropic | openai)")
