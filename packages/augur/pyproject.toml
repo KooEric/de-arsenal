@@ -1,0 +1,40 @@
+[project]
+name = "de-augur"
+version = "0.3.0"
+description = "Augur — 자연어 → SQL. 스키마 RAG로 근거를 대고, eval 하네스로 실패를 분류한다"
+readme = "README.md"
+requires-python = ">=3.11"
+license = "Apache-2.0"
+dependencies = [
+    "arsenal-core>=0.3,<0.4",
+    "duckdb>=1.0",
+    "pyarrow>=17",
+    "typer>=0.12",
+    "httpx>=0.27",
+    "pydantic>=2",
+    "pyyaml>=6",
+]
+
+classifiers = [
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "License :: OSI Approved :: Apache Software License",
+    "Operating System :: OS Independent",
+    "Intended Audience :: Developers",
+    "Topic :: Software Development :: Libraries :: Python Modules",
+]
+
+[project.urls]
+Homepage = "https://github.com/KooEric/de-arsenal"
+Repository = "https://github.com/KooEric/de-arsenal"
+
+[project.scripts]
+augur = "augur.cli:app"
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/augur"]

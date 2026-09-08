@@ -26,6 +26,7 @@ on:
           - de-scorpio
           - de-scutum
           - spatha
+          - de-augur
 
 jobs:
   verify-and-build:
@@ -88,6 +89,7 @@ jobs:
             de-scorpio) package_prefix="de_scorpio" ;;
             de-onager) package_prefix="de_onager" ;;
             de-scutum) package_prefix="de_scutum" ;;
+            de-augur) package_prefix="de_augur" ;;
             pugio|spatha) package_prefix="$PUBLISH_PACKAGE" ;;
             *) echo "Unsupported package: $PUBLISH_PACKAGE" >&2; exit 1 ;;
           esac

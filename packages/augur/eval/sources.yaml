@@ -1,0 +1,4 @@
+tables:
+  customers: ./data/customers/*.parquet
+  products: ./data/products/*.parquet
+  orders: ./data/orders/*.parquet

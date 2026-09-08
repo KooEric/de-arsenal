@@ -30,6 +30,7 @@ Users only need to know `arsenal`. Underneath are independent tools, one per pro
 | **Scutum** | Data quality, validation, protection | P0 (idempotent guard) / P1 | ✅ contract · DLQ policy · lock retry/backoff |
 | **Scorpio** | Observability (monitoring, lineage) | P1 | ✅ lineage · freshness alert · cost summary |
 | **Onager** | Backfill & large-scale reprocessing | P1 | ✅ isolated backfill · small-file compaction |
+| **Augur** | Natural-language entry point (schema-RAG text-to-SQL) + eval harness | P1 | 🧪 experimental — `augur ask` · `augur eval` failure-mode classifier |
 | **Hasta** | Streaming & CDC | P2 | 📋 planned |
 | **Pilum** | Dispatch & reverse ETL | P2 | 📋 planned |
 | **Ballista** | Large-scale distributed processing | P2 | 📋 planned |
@@ -91,6 +92,7 @@ Design documents are currently written in Korean; schema references and the chan
 | [docs/07-cost-efficiency.md](docs/07-cost-efficiency.md) | Low-cost high-efficiency design — cost structure, incremental processing, targets |
 | [docs/08-limits.md](docs/08-limits.md) | Honest limits — single-node envelope, unsupported scope, per-sink idempotency guarantees |
 | [docs/09-oss-leverage.md](docs/09-oss-leverage.md) | Open-source leverage — what we borrow, dlt/dbt interop, adoption criteria |
+| [docs/10-augur-eval-protocol.md](docs/10-augur-eval-protocol.md) | Augur eval protocol — baseline runs, failure reading, one intervention at a time |
 | [docs/tools.md](docs/tools.md) | When to use each tool, quick starts, comparisons |
 | [docs/roadmap.md](docs/roadmap.md) | Original roadmap (full problem statements) |
 

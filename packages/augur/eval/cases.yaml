@@ -1,0 +1,171 @@
+# Augur eval 케이스 — 난이도: L1 단일 테이블 집계, L2 필터+그룹, L3 JOIN, L4 시간/윈도우, L5 함정(답 불가·리터럴 유도)
+# 골든은 실행 결과로 비교되므로 표현이 달라도 됨. tables는 검색이 반드시 맞혀야 하는 테이블.
+cases:
+  - id: l1-001
+    question: How many orders are there in total?
+    golden_sql: SELECT count(*) FROM './data/orders/*.parquet'
+    tables: [orders]
+  - id: l1-002
+    question: What is the total amount of all orders?
+    golden_sql: SELECT sum(amount) FROM './data/orders/*.parquet'
+    tables: [orders]
+  - id: l1-003
+    question: How many customers do we have?
+    golden_sql: SELECT count(*) FROM './data/customers/*.parquet'
+    tables: [customers]
+  - id: l1-004
+    question: List all product categories.
+    golden_sql: SELECT DISTINCT category FROM './data/products/*.parquet'
+    tables: [products]
+  - id: l1-005
+    question: What is the average order amount?
+    golden_sql: SELECT avg(amount) FROM './data/orders/*.parquet'
+    tables: [orders]
+  - id: l1-006
+    question: What is the most expensive product price?
+    golden_sql: SELECT max(price) FROM './data/products/*.parquet'
+    tables: [products]
+  - id: l2-001
+    question: How many orders are paid?
+    golden_sql: SELECT count(*) FROM './data/orders/*.parquet' WHERE status = 'paid'
+    tables: [orders]
+  - id: l2-002
+    question: Total revenue from paid orders only.
+    golden_sql: SELECT sum(amount) FROM './data/orders/*.parquet' WHERE status = 'paid'
+    tables: [orders]
+  - id: l2-003
+    question: Number of orders per status.
+    golden_sql: SELECT status, count(*) FROM './data/orders/*.parquet' GROUP BY status
+    tables: [orders]
+  - id: l2-004
+    question: How many customers are in each city?
+    golden_sql: SELECT city, count(*) FROM './data/customers/*.parquet' GROUP BY city
+    tables: [customers]
+  - id: l2-005
+    question: How many enterprise customers are there?
+    golden_sql: SELECT count(*) FROM './data/customers/*.parquet' WHERE segment = 'enterprise'
+    tables: [customers]
+  - id: l2-006
+    question: Total refunded amount.
+    golden_sql: SELECT sum(amount) FROM './data/orders/*.parquet' WHERE status = 'refunded'
+    tables: [orders]
+  - id: l2-007
+    question: How many orders have quantity greater than 3?
+    golden_sql: SELECT count(*) FROM './data/orders/*.parquet' WHERE quantity > 3
+    tables: [orders]
+  - id: l2-008
+    question: Which products are in the software category?
+    golden_sql: SELECT product_name FROM './data/products/*.parquet' WHERE category = 'software'
+    tables: [products]
+  - id: l2-009
+    question: Count of orders with amount over 200.
+    golden_sql: SELECT count(*) FROM './data/orders/*.parquet' WHERE amount > 200
+    tables: [orders]
+  - id: l2-010
+    question: Average quantity per order status.
+    golden_sql: SELECT status, avg(quantity) FROM './data/orders/*.parquet' GROUP BY status
+    tables: [orders]
+  - id: l3-001
+    question: Total paid revenue per product name.
+    golden_sql: >
+      SELECT p.product_name, sum(o.amount) FROM './data/orders/*.parquet' o
+      JOIN './data/products/*.parquet' p ON o.product_id = p.product_id
+      WHERE o.status = 'paid' GROUP BY p.product_name
+    tables: [orders, products]
+  - id: l3-002
+    question: Number of orders per customer city.
+    golden_sql: >
+      SELECT c.city, count(*) FROM './data/orders/*.parquet' o
+      JOIN './data/customers/*.parquet' c ON o.customer_id = c.customer_id GROUP BY c.city
+    tables: [orders, customers]
+  - id: l3-003
+    question: Revenue by product category.
+    golden_sql: >
+      SELECT p.category, sum(o.amount) FROM './data/orders/*.parquet' o
+      JOIN './data/products/*.parquet' p ON o.product_id = p.product_id GROUP BY p.category
+    tables: [orders, products]
+  - id: l3-004
+    question: How many customers have never placed an order?
+    golden_sql: >
+      SELECT count(*) FROM './data/customers/*.parquet' c
+      WHERE NOT EXISTS (SELECT 1 FROM './data/orders/*.parquet' o WHERE o.customer_id = c.customer_id)
+    tables: [customers, orders]
+  - id: l3-005
+    question: Total paid amount per customer segment.
+    golden_sql: >
+      SELECT c.segment, sum(o.amount) FROM './data/orders/*.parquet' o
+      JOIN './data/customers/*.parquet' c ON o.customer_id = c.customer_id
+      WHERE o.status = 'paid' GROUP BY c.segment
+    tables: [orders, customers]
+  - id: l3-006
+    question: Which city has the most paid orders?
+    golden_sql: >
+      SELECT c.city FROM './data/orders/*.parquet' o
+      JOIN './data/customers/*.parquet' c ON o.customer_id = c.customer_id
+      WHERE o.status = 'paid' GROUP BY c.city ORDER BY count(*) DESC LIMIT 1
+    tables: [orders, customers]
+  - id: l3-007
+    question: Average order amount for hardware products.
+    golden_sql: >
+      SELECT avg(o.amount) FROM './data/orders/*.parquet' o
+      JOIN './data/products/*.parquet' p ON o.product_id = p.product_id WHERE p.category = 'hardware'
+    tables: [orders, products]
+  - id: l4-001
+    question: How many orders were placed in March 2026?
+    golden_sql: SELECT count(*) FROM './data/orders/*.parquet' WHERE ordered_at >= DATE '2026-03-01' AND ordered_at < DATE '2026-04-01'
+    tables: [orders]
+  - id: l4-002
+    question: Monthly paid revenue for 2026.
+    golden_sql: >
+      SELECT date_trunc('month', ordered_at) AS m, sum(amount) FROM './data/orders/*.parquet'
+      WHERE status = 'paid' AND ordered_at >= DATE '2026-01-01' GROUP BY 1
+    tables: [orders]
+    notes: 월 표현이 DATE vs strftime 문자열로 갈리면 WRONG_RESULT — 골든 표현 합의 필요
+  - id: l4-003
+    question: How many customers signed up in 2025?
+    golden_sql: SELECT count(*) FROM './data/customers/*.parquet' WHERE signup_date >= DATE '2025-01-01' AND signup_date < DATE '2026-01-01'
+    tables: [customers]
+  - id: l4-004
+    question: What was the first order date?
+    golden_sql: SELECT min(ordered_at) FROM './data/orders/*.parquet'
+    tables: [orders]
+  - id: l4-005
+    question: Top 3 customers by paid amount (customer_id and total).
+    golden_sql: >
+      SELECT customer_id, sum(amount) AS total FROM './data/orders/*.parquet'
+      WHERE status = 'paid' GROUP BY customer_id ORDER BY total DESC LIMIT 3
+    tables: [orders]
+    notes: 동점이면 비결정적 — fixture seed 고정으로 회피
+  - id: l5-001
+    question: What is the shipping cost per order?
+    golden_sql: SELECT 'UNANSWERABLE' AS reason
+    tables: [orders]
+    answerable: false
+    notes: 컬럼 없음 — 답하면 HALLUCINATED_COLUMN 또는 WRONG_RESULT
+  - id: l5-002
+    question: How many orders are COMPLETED?
+    golden_sql: SELECT count(*) FROM './data/orders/*.parquet' WHERE status = 'paid'
+    tables: [orders]
+    notes: "함정: 'completed' 리터럴은 없다. 샘플값을 보고 paid로 매핑하는지, 아니면 0을 내는지"
+  - id: l5-003
+    question: Delete all cancelled orders.
+    golden_sql: SELECT 'UNANSWERABLE' AS reason
+    tables: [orders]
+    answerable: false
+    notes: NON_SELECT 가드 검증
+  - id: l5-004
+    question: Which employees processed the most refunds?
+    golden_sql: SELECT 'UNANSWERABLE' AS reason
+    tables: [orders]
+    answerable: false
+    notes: 존재하지 않는 테이블 — HALLUCINATED_TABLE 유도
+  - id: l5-005
+    question: 결제 완료된 주문의 총 금액은?
+    golden_sql: SELECT sum(amount) FROM './data/orders/*.parquet' WHERE status = 'paid'
+    tables: [orders]
+    notes: 한국어 질문 — 어휘 검색이 영문 스키마와 겹치지 않아 RETRIEVAL_MISS 가능성. 검색 한계 측정용
+  - id: l5-006
+    question: 도시별 고객 수를 알려줘
+    golden_sql: SELECT city, count(*) FROM './data/customers/*.parquet' GROUP BY city
+    tables: [customers]
+    notes: 한국어 — 검색 한계 측정용

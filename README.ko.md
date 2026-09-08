@@ -30,6 +30,7 @@ Databricks·Snowflake 수준의 **완성도**를, 그들과 정반대의 **형�
 | **Scutum** | 데이터 품질·검증·보호 | P0(멱등 가드)/P1 | ✅ contract · DLQ 정책 · lock retry/backoff |
 | **Scorpio** | 관측성 (모니터링·lineage) | P1 | ✅ lineage · freshness alert · cost 요약 |
 | **Onager** | 백필·대규모 재처리 | P1 | ✅ isolated backfill · small-file compaction |
+| **Augur** | 자연어 진입점(스키마 RAG text-to-SQL) + eval 하네스 | P1 | 🧪 experimental — `augur ask` · `augur eval` 실패 모드 분류 |
 | **Hasta** | 스트리밍·CDC | P2 | 📋 계획 |
 | **Pilum** | 디스패치·reverse ETL | P2 | 📋 계획 |
 | **Ballista** | 대규모 분산 처리 | P2 | 📋 계획 |
