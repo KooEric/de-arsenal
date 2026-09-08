@@ -15,6 +15,7 @@ members = [
     "arsenal-core",
     "de-arsenal",
     "de-arsenal-workspace",
+    "de-augur",
     "de-gladius",
     "de-onager",
     "de-scorpio",
@@ -483,6 +484,7 @@ source = { virtual = "." }
 dependencies = [
     { name = "arsenal-core" },
     { name = "de-arsenal" },
+    { name = "de-augur" },
     { name = "de-gladius" },
     { name = "de-onager" },
     { name = "de-scorpio" },
@@ -506,6 +508,7 @@ dev = [
 requires-dist = [
     { name = "arsenal-core", editable = "packages/arsenal-core" },
     { name = "de-arsenal", editable = "packages/arsenal" },
+    { name = "de-augur", editable = "packages/augur" },
     { name = "de-gladius", editable = "packages/gladius" },
     { name = "de-onager", editable = "packages/onager" },
     { name = "de-scorpio", editable = "packages/scorpio" },
@@ -523,6 +526,31 @@ dev = [
     { name = "respx", specifier = ">=0.21" },
     { name = "ruff", specifier = ">=0.6" },
     { name = "testcontainers", extras = ["postgres"], specifier = ">=4.7" },
+]
+
+[[package]]
+name = "de-augur"
+version = "0.3.0"
+source = { editable = "packages/augur" }
+dependencies = [
+    { name = "arsenal-core" },
+    { name = "duckdb" },
+    { name = "httpx" },
+    { name = "pyarrow" },
+    { name = "pydantic" },
+    { name = "pyyaml" },
+    { name = "typer" },
+]
+
+[package.metadata]
+requires-dist = [
+    { name = "arsenal-core", editable = "packages/arsenal-core" },
+    { name = "duckdb", specifier = ">=1.0" },
+    { name = "httpx", specifier = ">=0.27" },
+    { name = "pyarrow", specifier = ">=17" },
+    { name = "pydantic", specifier = ">=2" },
+    { name = "pyyaml", specifier = ">=6" },
+    { name = "typer", specifier = ">=0.12" },
 ]
 
 [[package]]
