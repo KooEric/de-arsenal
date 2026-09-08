@@ -13,6 +13,7 @@ DE Arsenal은 하나의 거대한 프레임워크가 아니라, Arrow/Parquet와
 | [Scutum](../packages/scutum/README.md) | Arrow 스키마 계약이나 프로세스 간 파일 잠금이 필요할 때 | Python에서 `DataContract` 사용 | 벡터화 계약 검증과 bounded retry/backoff lock을 제공한다. |
 | [Scorpio](../packages/scorpio/README.md) | 마지막 성공 시각을 기준으로 stale 상태를 판단할 때 | Python에서 `assess_freshness` 호출 | 외부 관측 플랫폼 없이 결정적인 freshness 판정을 만든다. |
 | [Spatha](../packages/spatha/README.md) | 의존성·우선순위·실행 window를 반영한 작업 실행이 필요할 때 | Python에서 `Workflow.run_ready` 호출 | 안정된 DAG 순서와 signal-aware 실행, 선택적 cross-process lock을 제공한다. |
+| [Augur](../packages/augur/README.md) | Parquet 레이크에 자연어로 묻고, 생성 SQL의 실패 모드를 재고 싶을 때 | `augur index` → `augur ask "..."` → `augur eval` | 스키마 RAG + SELECT-only 가드 + 실패 모드 자동 분류. 결과는 Parquet이라 `gladius query`로 집계한다. |
 | [arsenal-core](../packages/arsenal-core/README.md) | 자체 도구를 만들거나 상태·재시도 규약을 재사용할 때 | Python에서 `StateStore` 사용 | 결정적 unit ID와 SQLite 상태 저장소로 재개·멱등 기반을 제공한다. |
 
 ## 1. Arsenal — 대부분의 사용자에게 시작점

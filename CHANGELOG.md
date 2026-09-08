@@ -10,6 +10,22 @@ backward-compatible by policy (`arsenal-core` pinned `>=0.3,<0.4` across
 breaking axis, a release that changes behaviour incompatibly takes the next
 minor — which is why the fixes below ship as `0.3.0` rather than `0.2.3`.
 
+## [Unreleased]
+
+### Added
+
+- **`de-augur` (9th package, experimental).** A natural-language entry point on
+  top of the Parquet lake: schema retrieval (lexical, over table/column names and
+  sample values — no vector DB) → LLM (Anthropic or OpenAI over plain `httpx`, no
+  SDK) → SELECT-only guard → DuckDB. Every call is traced to JSONL. `augur eval`
+  runs a YAML case file against golden SQL and classifies each case into one of
+  nine outcomes (`RETRIEVAL_MISS`, `NON_SELECT`, `UNANSWERABLE`,
+  `HALLUCINATED_TABLE`, `HALLUCINATED_COLUMN`, `EXEC_ERROR`, `WRONG_SHAPE`,
+  `WRONG_RESULT`, `CORRECT`), writing results as Parquet so `gladius query` can
+  aggregate them. Ships 34 cases over a seed-fixed synthetic fixture, the
+  two-week analysis protocol ([docs/10-augur-eval-protocol.md](docs/10-augur-eval-protocol.md))
+  and an article template. Live API calls are not yet exercised in CI.
+
 ## [0.3.0] - 2026-08-14
 
 Correctness and hardening pass. Every item below was found by adversarially
