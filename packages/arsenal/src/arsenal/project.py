@@ -7,7 +7,7 @@
 from pathlib import Path
 
 import yaml
-from pydantic import BaseModel, ConfigDict, ValidationError
+from pydantic import BaseModel, ConfigDict, Field, ValidationError
 
 from arsenal_core.errors import FatalError
 from arsenal_core.yaml_io import yaml_error_summary
@@ -19,12 +19,34 @@ class DbtProjectRef(BaseModel):
     dbt: Path
 
 
+class StreamRef(BaseModel):
+    """A Hasta stream run as one catch-up pass inside ``arsenal run``."""
+
+    model_config = ConfigDict(frozen=True, extra="forbid")
+
+    spec: Path
+    max_batches: int = Field(default=1, ge=1)
+
+
+class DistributedRef(BaseModel):
+    """A Gladius transform submitted to Ballista (asynchronous)."""
+
+    model_config = ConfigDict(frozen=True, extra="forbid")
+
+    transform: Path
+    profile: Path
+    input_version: str = Field(min_length=1)
+    state_dir: Path = Path(".arsenal")
+
+
 class ArsenalProject(BaseModel):
     model_config = ConfigDict(frozen=True, extra="forbid")
 
     name: str
     pipelines: list[Path] = []  # pugio 스펙들 — 순서대로 실행
+    streams: list[StreamRef] = []  # hasta — pipelines 다음, transforms 전
     transforms: list[Path | DbtProjectRef] = []  # gladius/dbt 단계 — 순서대로
+    distributed: list[DistributedRef] = []  # ballista — 마지막, 제출만 하고 기다리지 않음
 
 
 def load_project(manifest_path: Path) -> ArsenalProject:
@@ -67,5 +89,15 @@ def load_project(manifest_path: Path) -> ArsenalProject:
     return ArsenalProject(
         name=parsed.name,
         pipelines=[base / p for p in parsed.pipelines],
+        streams=[StreamRef(spec=base / s.spec, max_batches=s.max_batches) for s in parsed.streams],
         transforms=transforms,
+        distributed=[
+            DistributedRef(
+                transform=base / d.transform,
+                profile=base / d.profile,
+                input_version=d.input_version,
+                state_dir=base / d.state_dir,
+            )
+            for d in parsed.distributed
+        ],
     )

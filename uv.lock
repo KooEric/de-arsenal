@@ -643,6 +643,7 @@ source = { editable = "packages/arsenal" }
 dependencies = [
     { name = "arsenal-core" },
     { name = "de-gladius" },
+    { name = "de-scorpio" },
     { name = "pugio" },
     { name = "typer" },
 ]
@@ -671,6 +672,7 @@ requires-dist = [
     { name = "de-ballista", marker = "extra == 'distributed'", editable = "packages/ballista" },
     { name = "de-gladius", editable = "packages/gladius" },
     { name = "de-hasta", marker = "extra == 'streaming'", editable = "packages/hasta" },
+    { name = "de-scorpio", editable = "packages/scorpio" },
     { name = "pugio", editable = "packages/pugio" },
     { name = "pugio", extras = ["dlt"], marker = "extra == 'dlt'", editable = "packages/pugio" },
     { name = "pugio", extras = ["postgres"], marker = "extra == 'postgres'", editable = "packages/pugio" },
