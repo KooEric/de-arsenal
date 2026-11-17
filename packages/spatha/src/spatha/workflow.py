@@ -28,6 +28,18 @@ class ExecutionWindow(BaseModel):
         return self.start <= current < self.end
 
 
+class BallistaReconcileAction(BaseModel):
+    """Wait for a submitted Ballista run by reconciling until it is terminal."""
+
+    model_config = ConfigDict(frozen=True, extra="forbid")
+
+    run_id: str = Field(min_length=1)
+    profile: Path
+    state_dir: Path = Path(".arsenal")
+    poll_seconds: float = Field(default=30, gt=0)
+    timeout_seconds: float = Field(default=3600, gt=0)
+
+
 class TaskSpec(BaseModel):
     model_config = ConfigDict(frozen=True, extra="forbid")
 
@@ -36,6 +48,15 @@ class TaskSpec(BaseModel):
     priority: int = 0
     signals: list[str] = Field(default_factory=list)
     window: ExecutionWindow | None = None
+    # Optional built-in actions run by ``spatha.actions.default_runner``.
+    command: list[str] | None = Field(default=None, min_length=1)
+    ballista_reconcile: BallistaReconcileAction | None = None
+
+    @model_validator(mode="after")
+    def _one_action(self) -> "TaskSpec":
+        if self.command is not None and self.ballista_reconcile is not None:
+            raise ValueError("a task declares either command or ballista_reconcile, not both")
+        return self
 
     @field_validator("name")
     @classmethod

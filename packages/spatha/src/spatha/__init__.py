@@ -7,6 +7,15 @@ try:
 except PackageNotFoundError:
     __version__ = "0.4.0"
 
-from spatha.workflow import ExecutionWindow, TaskSpec, Workflow
+from spatha.actions import TaskFailedError, TaskTimeoutError, default_runner
+from spatha.workflow import BallistaReconcileAction, ExecutionWindow, TaskSpec, Workflow
 
-__all__ = ["ExecutionWindow", "TaskSpec", "Workflow"]
+__all__ = [
+    "BallistaReconcileAction",
+    "ExecutionWindow",
+    "TaskFailedError",
+    "TaskSpec",
+    "TaskTimeoutError",
+    "Workflow",
+    "default_runner",
+]
