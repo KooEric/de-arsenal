@@ -1,5 +1,11 @@
 # v0.3.0 릴리스 절차
 
+> **v0.4.0 준비 메모 (P2 Phase 3):** `release.yml`에 `de-hasta`·`de-ballista`를 등록했다.
+> 0.4.0은 11개 패키지(0.3.0의 8개 + `de-augur`, `de-hasta`, `de-ballista`)를 `>=0.4,<0.5`로
+> 묶는 minor 릴리스이며(StateStore v3 forward migration), 세 배포명은 PyPI에 처음 올라가므로
+> 계정 소유자가 Pending publisher를 먼저 등록해야 한다. 이 문서의 0.4.0용 전면 갱신은
+> Phase 4(릴리스)에서 한다.
+
 실행 중인 코드를 적대적으로 돌려 찾은 결함 6종(표현식 SQL 문 주입, unit_key의
 페이지 크기 누락, Parquet 임시파일 충돌, unique 규칙 null 오탐, 릴리스 wheel 누락,
 YAML 오류 원시 노출)을 수정한 릴리스다. 전체 내역은 [CHANGELOG](../CHANGELOG.md).

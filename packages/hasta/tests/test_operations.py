@@ -268,3 +268,72 @@ def test_reset_refuses_while_a_runner_holds_the_lease(tmp_path: Path) -> None:
     assert "live-runner" in result.output
     store = state(tmp_path)
     assert store.checkpoint("orders", "orders").generation == 0  # type: ignore[union-attr]
+
+
+# --- health (Scorpio) -------------------------------------------------------------
+
+
+def test_show_reports_healthy_after_a_fresh_commit(tmp_path: Path) -> None:
+    path = write_spec(tmp_path)
+    store = state(tmp_path)
+    run_one_batch(tmp_path, store)
+    store.close()
+
+    payload = json.loads(cli.invoke(app, ["checkpoint", "show", str(path)]).stdout)
+
+    assert payload["health"]["status"] == "healthy"
+    assert payload["health"]["max_lag_seconds"] == 60
+    assert payload["checkpoint"]["updated_at"] is not None
+
+
+def test_show_flags_quarantined_batches_as_failing(tmp_path: Path) -> None:
+    path = write_spec(tmp_path)
+    store = state(tmp_path)
+    run_one_batch(tmp_path, store)
+    store.close()
+    dlq = tmp_path / "state" / "dlq" / "orders"
+    dlq.mkdir(parents=True)
+    (dlq / "batch-x.json").write_text("{}", encoding="utf-8")
+
+    payload = json.loads(cli.invoke(app, ["checkpoint", "show", str(path)]).stdout)
+
+    assert payload["batches"]["dlq"] == 1
+    assert payload["health"]["status"] == "failing"
+    assert payload["health"]["alert"] is True
+
+
+def test_show_flags_a_dead_runner_holding_an_expired_lease(tmp_path: Path) -> None:
+    path = write_spec(tmp_path)
+    store = state(tmp_path)
+    run_one_batch(tmp_path, store)
+    store.acquire_lease("stream:orders:orders", "dead", 0.001)
+    store.close()
+    time.sleep(0.05)  # coarse clocks (Windows) need margin past the 1 ms TTL
+
+    payload = json.loads(cli.invoke(app, ["checkpoint", "show", str(path)]).stdout)
+
+    assert payload["lease"]["expired"] is True
+    assert payload["health"]["status"] == "stalled"
+
+
+def test_postgres_sink_target_shows_env_var_name_not_dsn(tmp_path: Path) -> None:
+    from hasta.status import sink_target
+
+    data = H.spec(tmp_path).model_dump(mode="json", exclude_none=True, by_alias=True)
+    data["sink"] = {"type": "postgres", "dsn_env": "ORDERS_DSN", "table": "t", "merge_key": ["id"]}
+
+    assert sink_target(StreamSpec.model_validate(data)) == "$ORDERS_DSN#t"
+
+
+def test_runner_registers_itself_as_the_parquet_datasets_writer(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    from arsenal_core.writers import stream_writers
+
+    monkeypatch.chdir(tmp_path)
+    runner = StreamRunner(H.spec(tmp_path), source=H.Source(pa.table({"id": ["a"]})))
+    runner.close()
+
+    (writer,) = stream_writers(tmp_path / "out")
+    assert writer.resource == "stream:orders:orders"
+    assert Path(writer.state_db) == (tmp_path / "state" / "orders.db").resolve()

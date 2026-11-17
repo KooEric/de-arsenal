@@ -242,3 +242,29 @@ def test_v2_ledger_is_migrated_to_generation_aware_identity(tmp_path: Path) -> N
             event_hash="e",
             generation=1,
         )
+
+
+def test_checkpoint_and_runs_expose_timestamps_for_monitoring(tmp_path: Path) -> None:
+    clock = Clock()
+    store = StateStore(tmp_path / "state.db", clock=clock)
+    lease = store.acquire_lease("stream:p:orders", "a", 30)
+    _commit_batch(store, lease, "b1", 1, rows=5)
+    for run_id, pipeline in (("r1", "daily"), ("r2", "daily"), ("r3", "other")):
+        store.create_run(
+            run_id=run_id,
+            pipeline=pipeline,
+            revision="v",
+            mode="transform",
+            executor="spark_kubernetes",
+            guarantees={},
+        )
+        clock.advance(5)
+
+    checkpoint = store.checkpoint("p", "orders")
+    daily = store.runs(pipeline="daily")
+
+    assert checkpoint is not None
+    assert checkpoint.updated_at == "2026-08-22T00:00:00+00:00"
+    assert [run.run_id for run in daily] == ["r1", "r2"]
+    assert all(run.created_at is not None and run.updated_at is not None for run in daily)
+    assert len(store.runs()) == 3

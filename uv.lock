@@ -643,6 +643,7 @@ source = { editable = "packages/arsenal" }
 dependencies = [
     { name = "arsenal-core" },
     { name = "de-gladius" },
+    { name = "de-scorpio" },
     { name = "pugio" },
     { name = "typer" },
 ]
@@ -671,6 +672,7 @@ requires-dist = [
     { name = "de-ballista", marker = "extra == 'distributed'", editable = "packages/ballista" },
     { name = "de-gladius", editable = "packages/gladius" },
     { name = "de-hasta", marker = "extra == 'streaming'", editable = "packages/hasta" },
+    { name = "de-scorpio", editable = "packages/scorpio" },
     { name = "pugio", editable = "packages/pugio" },
     { name = "pugio", extras = ["dlt"], marker = "extra == 'dlt'", editable = "packages/pugio" },
     { name = "pugio", extras = ["postgres"], marker = "extra == 'postgres'", editable = "packages/pugio" },
@@ -840,6 +842,7 @@ version = "0.4.0"
 source = { editable = "packages/hasta" }
 dependencies = [
     { name = "arsenal-core" },
+    { name = "de-scorpio" },
     { name = "de-scutum" },
     { name = "httpx" },
     { name = "pugio" },
@@ -857,6 +860,7 @@ postgres = [
 [package.metadata]
 requires-dist = [
     { name = "arsenal-core", editable = "packages/arsenal-core" },
+    { name = "de-scorpio", editable = "packages/scorpio" },
     { name = "de-scutum", editable = "packages/scutum" },
     { name = "httpx", specifier = ">=0.27" },
     { name = "psycopg", extras = ["binary"], marker = "extra == 'postgres'", specifier = ">=3.1" },

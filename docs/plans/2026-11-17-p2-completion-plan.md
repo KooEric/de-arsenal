@@ -138,7 +138,13 @@ StateStore v2 마이그레이션은 breaking이므로 **P2는 `0.4.0`이어야 �
 
 ---
 
-### Phase 3 — P2-4 통합 (3~4일)
+### Phase 3 — P2-4 통합 (3~4일) — ✅ 2026-11-17 구현
+
+> 결과 (`feat/p2-phase3-integration`, #16 위에 적층): `arsenal.yaml`의 `streams:`/`distributed:`와
+> extra 미설치 시 설치 명령 안내, `arsenal status`(JSON, 경보 시 exit 1), Scorpio 스트림 건강도·run 요약,
+> Spatha 명령/`ballista reconcile` 대기 태스크, Onager가 활성·미커밋 스트림 출력을 재작성하지 않는 가드,
+> `release.yml`에 `de-hasta`·`de-ballista` 등록, Hasta 처리량 베이스라인(~334k events/s).
+> 남은 것: 분산 단계의 `input_version: auto`(Phase 1의 fingerprint가 머지된 뒤 연결), Ballista 성능 기준선(참조 클러스터 필요).
 
 > 지금 `arsenal` 우산 CLI에 `hasta`/`ballista` 참조가 **0건**이다. 사용자는 새 기능에 닿을 수 없다.
 

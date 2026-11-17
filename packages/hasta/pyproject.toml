@@ -9,6 +9,7 @@ dependencies = [
     "arsenal-core>=0.4,<0.5",
     "pugio>=0.4,<0.5",
     "de-scutum>=0.4,<0.5",
+    "de-scorpio>=0.4,<0.5",
     "httpx>=0.27",
     "pyarrow>=17",
     "pydantic>=2.7",

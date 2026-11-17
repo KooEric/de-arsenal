@@ -17,7 +17,8 @@ import duckdb
 import pyarrow.csv as pa_csv
 import typer
 
-from arsenal.project import DbtProjectRef, load_project
+from arsenal import stages
+from arsenal.project import ArsenalProject, DbtProjectRef, DistributedRef, StreamRef, load_project
 from arsenal_core.errors import ArsenalError, FatalError
 from arsenal_core.spec import load_pipeline
 from gladius import engine as gladius_engine
@@ -133,23 +134,84 @@ def _run_dbt(path: Path) -> None:
     typer.echo(f"  dbt {path}: run succeeded")
 
 
+def _check_optional_tools(proj: ArsenalProject) -> None:
+    """Fail before running anything if a declared stage's extra is missing."""
+    if proj.streams:
+        stages.require_tool("hasta")
+    if proj.distributed:
+        stages.require_tool("ballista")
+
+
+def _run_stream(ref: StreamRef) -> None:
+    report = stages.run_stream(ref)
+    typer.echo(
+        f"  stream {ref.spec.name}: committed={report.get('committed')} "
+        f"skipped={report.get('skipped')} exhausted={report.get('exhausted')}"
+    )
+
+
+def _run_distributed(project_name: str, ref: DistributedRef) -> None:
+    record = stages.submit_or_reconcile(project_name, ref)
+    typer.echo(
+        f"  distributed {ref.transform.name}: run={record.get('run_id')} "
+        f"status={record.get('status')} (follow with: arsenal status)"
+    )
+
+
 @app.command()
 def run(project: Path = Path(".")) -> None:
-    """arsenal.yaml 순서대로 수집→변환 일괄 실행. 재실행 = 재개."""
+    """arsenal.yaml 순서대로 수집→스트림→변환→분산 제출. 재실행 = 재개."""
     try:
         proj_dir = project if project.is_absolute() else project.absolute()
         proj = load_project(proj_dir / "arsenal.yaml")
+        _check_optional_tools(proj)
         with _chdir(proj_dir):
             for pipeline_path in proj.pipelines:
                 _run_pipeline(pipeline_path)
+            for stream in proj.streams:
+                _run_stream(stream)
             for transform in proj.transforms:
                 if isinstance(transform, DbtProjectRef):
                     _run_dbt(transform.dbt)
                 else:
                     _run_transform(transform)
+            for distributed in proj.distributed:
+                _run_distributed(proj.name, distributed)
     except ArsenalError as e:
         raise _fatal(e) from e
-    typer.echo(f"done: {len(proj.pipelines)} pipeline(s), {len(proj.transforms)} transform(s)")
+    parts = [f"{len(proj.pipelines)} pipeline(s)"]
+    if proj.streams:
+        parts.append(f"{len(proj.streams)} stream(s)")
+    parts.append(f"{len(proj.transforms)} transform(s)")
+    if proj.distributed:
+        parts.append(f"{len(proj.distributed)} distributed run(s) submitted")
+    typer.echo("done: " + ", ".join(parts))
+
+
+@app.command()
+def status(project: Path = Path(".")) -> None:
+    """Streams and distributed runs in arsenal.yaml: health, checkpoint, run state (JSON)."""
+    try:
+        proj_dir = project if project.is_absolute() else project.absolute()
+        proj = load_project(proj_dir / "arsenal.yaml")
+        _check_optional_tools(proj)
+        with _chdir(proj_dir):
+            streams = [stages.stream_status(ref) for ref in proj.streams]
+            distributed = [stages.distributed_status(proj.name, ref) for ref in proj.distributed]
+    except ArsenalError as e:
+        raise _fatal(e) from e
+    alerts = [s for s in streams if stages.needs_attention(s)] + [
+        d for d in distributed if stages.needs_attention(d)
+    ]
+    payload: dict[str, Any] = {
+        "project": proj.name,
+        "streams": streams,
+        "distributed": distributed,
+        "alert": bool(alerts),
+    }
+    typer.echo(json.dumps(payload, sort_keys=True, default=str))
+    if alerts:
+        raise typer.Exit(1)
 
 
 @app.command()

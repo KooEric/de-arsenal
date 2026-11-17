@@ -8,7 +8,6 @@ import threading
 import uuid
 from collections.abc import Generator
 from contextlib import contextmanager
-from datetime import UTC, datetime
 from pathlib import Path
 from types import FrameType
 from typing import Any
@@ -19,7 +18,7 @@ from arsenal_core.errors import ArsenalError
 from arsenal_core.state import StateStore
 from hasta.loader import load_stream
 from hasta.runner import StreamRunner
-from hasta.spec import StreamSpec
+from hasta.status import state_path, stream_resource, stream_status
 
 app = typer.Typer(help="Hasta — leased REST microbatch streaming.")
 checkpoint_app = typer.Typer(help="Inspect or reset a stream's durable checkpoint.")
@@ -87,63 +86,12 @@ def run_cmd(
     typer.echo(json.dumps(report.__dict__, sort_keys=True))
 
 
-def _state_path(spec: StreamSpec) -> Path:
-    return Path(spec.state_dir) / f"{spec.name}.db"
-
-
-def _resource(spec: StreamSpec) -> str:
-    return f"stream:{spec.name}:{spec.stream.name}"
-
-
-def _snapshot(spec: StreamSpec, store: StateStore) -> dict[str, Any]:
-    checkpoint = store.checkpoint(spec.name, spec.stream.name)
-    lease = store.lease(_resource(spec))
-    summary = store.stream_batch_summary(spec.name, spec.stream.name)
-    now = datetime.now(UTC)
-    return {
-        "stream": {"pipeline": spec.name, "name": spec.stream.name},
-        "checkpoint": None
-        if checkpoint is None
-        else {
-            "generation": checkpoint.generation,
-            "position": dict(checkpoint.position),
-            "watermark": checkpoint.watermark,
-            "last_batch_id": checkpoint.last_batch_id,
-        },
-        "lease": None
-        if lease is None
-        else {
-            "owner_id": lease.owner_id,
-            "fence": lease.fence,
-            "expires_at": lease.expires_at.isoformat(),
-            "expired": lease.is_expired(now),
-            "seconds_remaining": max(0.0, round((lease.expires_at - now).total_seconds(), 1)),
-        },
-        "batches": {
-            "by_status": dict(summary.by_status),
-            "rows": summary.rows,
-            "bytes": summary.bytes,
-            "late_rows": summary.late_rows,
-        },
-        "sink": {"type": spec.sink.type, "target": _sink_target(spec)},
-    }
-
-
-def _sink_target(spec: StreamSpec) -> str:
-    sink = spec.sink.model_dump()
-    for key in ("path", "table", "uri"):
-        value = sink.get(key)
-        if value:
-            return str(value)
-    return spec.sink.type
-
-
-def _show(spec_path: Path) -> None:
+def _show(spec_path: Path, max_lag_seconds: float | None) -> None:
     try:
         spec = load_stream(spec_path)
-        store = StateStore(_state_path(spec))
+        store = StateStore(state_path(spec))
         try:
-            payload = _snapshot(spec, store)
+            payload = stream_status(spec, store, max_lag_seconds=max_lag_seconds)
         finally:
             store.close()
     except ArsenalError as error:
@@ -152,18 +100,26 @@ def _show(spec_path: Path) -> None:
     typer.echo(json.dumps(payload, sort_keys=True))
 
 
-@app.command(name="status")
-def status_cmd(spec_path: Path) -> None:
-    """Show checkpoint, lease and batch ledger without polling (same as checkpoint show)."""
+_MAX_LAG = typer.Option(
+    None,
+    "--max-lag-seconds",
+    min=1,
+    help="Alert when the last commit is older than this (default: 5 polls, min 60 s).",
+)
 
-    _show(spec_path)
+
+@app.command(name="status")
+def status_cmd(spec_path: Path, max_lag_seconds: float | None = _MAX_LAG) -> None:
+    """Show health, checkpoint, lease and ledger without polling (= checkpoint show)."""
+
+    _show(spec_path, max_lag_seconds)
 
 
 @checkpoint_app.command(name="show")
-def checkpoint_show(spec_path: Path) -> None:
-    """Show checkpoint, lease holder/expiry and batch ledger totals as JSON."""
+def checkpoint_show(spec_path: Path, max_lag_seconds: float | None = _MAX_LAG) -> None:
+    """Show health, checkpoint, lease holder/expiry and batch ledger totals as JSON."""
 
-    _show(spec_path)
+    _show(spec_path, max_lag_seconds)
 
 
 @checkpoint_app.command(name="reset")
@@ -183,9 +139,9 @@ def checkpoint_reset(
 
     try:
         spec = load_stream(spec_path)
-        store = StateStore(_state_path(spec))
+        store = StateStore(state_path(spec))
         try:
-            before = _snapshot(spec, store)
+            before = stream_status(spec, store)
             current = before["checkpoint"]
             next_generation = (current["generation"] if current else 0) + 1
             after: dict[str, Any] = {
@@ -217,7 +173,7 @@ def checkpoint_reset(
                 typer.echo(json.dumps(plan, sort_keys=True))
                 typer.echo("dry-run: re-run with --confirm to apply", err=True)
                 return
-            token = store.acquire_lease(_resource(spec), f"hasta-reset-{uuid.uuid4()}", 30)
+            token = store.acquire_lease(stream_resource(spec), f"hasta-reset-{uuid.uuid4()}", 30)
             if token is None:
                 typer.echo("error: stream lease was taken while resetting", err=True)
                 raise typer.Exit(1)
