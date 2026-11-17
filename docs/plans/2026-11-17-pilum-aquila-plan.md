@@ -235,5 +235,5 @@ pilum reset churn.yaml --confirm  # 원장 초기화 (다음 run이 전량 재�
 | AQ-2 | ✅ | 3단 fixture(pugio→gladius→ballista) 상·하류 그래프, SCC 순환 감지, mermaid |
 | AQ-3 | ✅ | 계약 해시 변경·스키마 불일치, 태그·FTS5 검색, deprecated 하류 경고 |
 | AQ-4 | ✅ | Augur `--aquila`(34 case eval 결과 동일), `arsenal status` catalog 블록, Scorpio freshness, Hasta/Ballista 스캐너 |
-| 0.5.0 릴리스 | 대기 | 0.4.0 태그 뒤 버전 일괄 상향(0.5.0) + PyPI pending publisher `de-aquila` |
+| 0.5.0 릴리스 | 준비 완료 | 12개 패키지 0.5.0·핀 `>=0.5,<0.6`, CHANGELOG·[upgrade-0.5](../upgrade-0.5.md)·[release](../release.md) 갱신. 남은 것: `de-aquila` pending publisher 등록 → 최초 게시 → `v0.5.0` 태그 |
 | Pilum PL-0~ | 대기 | Aquila 0.5.0 출시 후 |

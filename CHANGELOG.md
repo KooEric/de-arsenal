@@ -12,20 +12,40 @@ minor.
 
 ## [Unreleased]
 
+## [0.5.0] - TBD
+
+Catalog release: a 12th package, **Aquila**, records what data exists, where it
+came from and whether it still matches its contract — without any other tool
+depending on it. All 12 distributions ship in lockstep with internal pins moved
+to `>=0.5,<0.6`. No state migration. Upgrade notes:
+[docs/upgrade-0.5.md](docs/upgrade-0.5.md).
+
+### ⚠️ Upgrade notes
+
+- **Pins move to `>=0.5,<0.6`.** Install the whole set together.
+- **StateStore is unchanged (schema v3).** 0.5 neither migrates nor backs up any
+  state DB; rolling back to 0.4 is a reinstall.
+- **`arsenal status` can now exit 1 on contract findings** — only when
+  `de-arsenal[catalog]` is installed and `.arsenal/aquila.db` exists.
+
 ### Added
 
-- **`de-aquila` (12th package, preview — targets 0.5.0).** A file-backed
-  catalog: `aquila scan` reads Pugio/Gladius/Ballista/Hasta specs, the tools'
-  state databases (read-only) and local Parquet footers into `.arsenal/aquila.db`
-  — datasets keyed by normalized location, schema versions with diffs,
-  cross-tool dataset lineage with cycle detection and Mermaid output, contract
-  hash tracking and schema checks, tags, deprecation warnings and FTS5 search.
-  Nothing depends on it.
+- **`de-aquila` (12th package, preview).** A file-backed catalog: `aquila scan`
+  reads Pugio/Gladius/Ballista/Hasta specs, the tools' state databases
+  (read-only — never migrated, locked or backed up) and local Parquet footers
+  into `.arsenal/aquila.db`. Datasets are keyed by normalized location, so
+  `out/`, `out/*.parquet` and `./out` are one dataset whichever tool names it.
+  Schema versions with diffs (`history`), cross-tool dataset lineage with cycle
+  detection and Mermaid output (`lineage`), contract hash tracking and checks
+  against the latest schema (`show`), tags, descriptions, deprecation warnings
+  for every reader and FTS5 search. Rescans are idempotent. Nothing depends on
+  it (tested in both directions).
 - `augur index --aquila PATH` (and automatically `.arsenal/aquila.db` when no
-  sources file is given) reads table locations from Aquila; eval results are
-  identical either way.
-- `arsenal status` gains a `catalog` block (and alerts on contract findings)
-  when `de-arsenal[catalog]` is installed and a catalog exists.
+  sources file is given) reads table locations from Aquila through read-only
+  sqlite, so `de-augur` gains no dependency. The 34-case eval gives identical
+  per-case outcomes with either source.
+- `arsenal status` gains a `catalog` block — totals, contract findings,
+  deprecation warnings — with the `de-arsenal[catalog]` extra.
 
 ## [0.4.0] - 2026-11-17
 

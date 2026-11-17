@@ -13,7 +13,7 @@ arsenal run                        # 수집→검증→변환. 끊겨도 재실�
 arsenal query "SELECT * FROM './data/clean/*.parquet' LIMIT 10"
 ```
 
-> **상태: v0.4.0 — 11개 패키지.** 수집·변환·우산 CLI와 P1의 dlt/dbt, schema drift, cloud sink, UDF, 관측성·오케스트레이션·백필·계약 패키지가 동작한다. 0.4는 P2 도구 두 개를 beta로 추가한다 — **Hasta**(폴링 마이크로배치 스트리밍·Postgres outbox CDC)와 **Ballista**(portable Gladius 플랜을 Spark/Kubernetes에서 실행, Iceberg 출력). 둘 다 optional extra이며, 실험 패키지 **Augur**도 포함된다. 0.3에서 올리기: [docs/upgrade-0.4.md](docs/upgrade-0.4.md). 변환 패키지의 PyPI 배포명은 `de-gladius`이며 import와 CLI는 `gladius`를 유지한다.
+> **상태: v0.5.0 — 12개 패키지.** 수집·변환·우산 CLI와 P1의 dlt/dbt, schema drift, cloud sink, UDF, 관측성·오케스트레이션·백필·계약 패키지가 동작한다. 0.4는 P2 도구 두 개를 beta로 추가한다 — **Hasta**(폴링 마이크로배치 스트리밍·Postgres outbox CDC)와 **Ballista**(portable Gladius 플랜을 Spark/Kubernetes에서 실행, Iceberg 출력). 둘 다 optional extra이며, 실험 패키지 **Augur**도 포함된다. 0.5는 다른 도구가 의존하지 않는 파일 기반 카탈로그 **Aquila**(데이터셋·스키마 이력·도구 간 lineage·계약·태그)를 추가한다. 업그레이드: [0.4 → 0.5](docs/upgrade-0.5.md) · [0.3 → 0.4](docs/upgrade-0.4.md). 변환 패키지의 PyPI 배포명은 `de-gladius`이며 import와 CLI는 `gladius`를 유지한다.
 
 Databricks·Snowflake 수준의 **완성도**를, 그들과 정반대의 **형태**로. 거대 플랫폼이 백 가지를 80점으로 하는 동안, 우리는 한 가지를 100점으로. 신뢰성(멱등·재개·검증)이 기본값이고, 마진 없는 비용 구조([docs/07](docs/07-cost-efficiency.md))가 아키텍처에서 나온다.
 
@@ -23,18 +23,18 @@ Databricks·Snowflake 수준의 **완성도**를, 그들과 정반대의 **형�
 
 | 무기 | 담당 영역 | 우선순위 | 상태 |
 |---|---|---|---|
-| **Arsenal** (우산 CLI) | 단일 진입점 — init/run/query, 원클릭 레시피 3종 | P0 (M4) | ✅ v0.4.0 |
-| **Pugio** | 수집·전송 (ETL 엔진) | P0 + P1 | ✅ v0.4.0 |
-| **Gladius** | 변환·쿼리 (핵심 처리) | P0 + P1 | ✅ v0.4.0 |
+| **Arsenal** (우산 CLI) | 단일 진입점 — init/run/query, 원클릭 레시피 3종 | P0 (M4) | ✅ v0.5.0 |
+| **Pugio** | 수집·전송 (ETL 엔진) | P0 + P1 | ✅ v0.5.0 |
+| **Gladius** | 변환·쿼리 (핵심 처리) | P0 + P1 | ✅ v0.5.0 |
 | **Spatha** | 오케스트레이션 (의존성·스케줄링) | P0(멱등 코어)/P1 | ✅ signal DAG · priority · window · lock |
 | **Scutum** | 데이터 품질·검증·보호 | P0(멱등 가드)/P1 | ✅ contract · DLQ 정책 · lock retry/backoff |
 | **Scorpio** | 관측성 (모니터링·lineage) | P1 | ✅ lineage · freshness alert · cost 요약 |
 | **Onager** | 백필·대규모 재처리 | P1 | ✅ isolated backfill · small-file compaction |
 | **Augur** | 자연어 진입점(스키마 RAG text-to-SQL) + eval 하네스 | P1 | 🧪 experimental — `augur ask` · `augur eval` 실패 모드 분류 |
-| **Hasta** | 스트리밍·CDC | P2 | 🧪 beta (v0.4.0) — 폴링 마이크로배치 · Postgres outbox CDC · fenced 체크포인트 · `hasta checkpoint` |
+| **Hasta** | 스트리밍·CDC | P2 | 🧪 beta (v0.4.0부터) — 폴링 마이크로배치 · Postgres outbox CDC · fenced 체크포인트 · `hasta checkpoint` |
 | **Pilum** | 디스패치·reverse ETL | P2 | 📋 계획 |
-| **Ballista** | 대규모 분산 처리 | P2 | 🧪 beta (v0.4.0) — Spark on Kubernetes · Iceberg 커밋 · DuckDB↔Spark corpus · `plan --probe` |
-| **Aquila** | 카탈로그·거버넌스 (군단기 — 자산의 기준점) | P2 | 🧪 preview (0.5) — 데이터셋 레지스트리 · 스키마 이력 · 도구 간 lineage · 계약 · 태그/검색 |
+| **Ballista** | 대규모 분산 처리 | P2 | 🧪 beta (v0.4.0부터) — Spark on Kubernetes · Iceberg 커밋 · DuckDB↔Spark corpus · `plan --probe` |
+| **Aquila** | 카탈로그·거버넌스 (군단기 — 자산의 기준점) | P2 | 🧪 preview (v0.5.0) — 데이터셋 레지스트리 · 스키마 이력 · 도구 간 lineage · 계약 · 태그/검색 |
 
 > Databricks 제품군의 저비용 고효율 미니 버전을 지향한다 — 대응표는 [docs/00-overview.md](docs/00-overview.md), 비용 구조는 [docs/07-cost-efficiency.md](docs/07-cost-efficiency.md).
 
@@ -60,6 +60,7 @@ Databricks·Snowflake 수준의 **완성도**를, 그들과 정반대의 **형�
 | [docs/06-conventions.md](docs/06-conventions.md) | 코딩·커밋·브랜치·PR·CI 컨벤션 |
 | [docs/07-cost-efficiency.md](docs/07-cost-efficiency.md) | 저비용 고효율 설계 — 비용 구조, 증분 처리, 효율 목표치 |
 | [docs/08-limits.md](docs/08-limits.md) | 정직한 한계선 — 단일 노드 처리 envelope, 미지원 범위, sink별 멱등 보장 |
+| [docs/upgrade-0.5.md](docs/upgrade-0.5.md) | 0.4 → 0.5 업그레이드 — 핀, Aquila, 상태 마이그레이션 없음 |
 | [docs/upgrade-0.4.md](docs/upgrade-0.4.md) | 0.3 → 0.4 업그레이드 — StateStore v3 마이그레이션, 롤백 경계, 동작 변경 |
 | [docs/09-oss-leverage.md](docs/09-oss-leverage.md) | 오픈소스 차용 전략 — 차용 지도, dlt·dbt 인터롭, 쓸만함 판정 기준 |
 | [docs/tools.md](docs/tools.md) | 도구별 사용 시점·빠른 시작·장점 비교 |

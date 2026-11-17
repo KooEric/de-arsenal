@@ -13,7 +13,7 @@ arsenal run                                   # ingest → validate → transfor
 arsenal query "SELECT * FROM './data/clean/*.parquet' LIMIT 10"
 ```
 
-> **Status: v0.4.0 — 11 packages.** Ingestion, transformation, the umbrella CLI, and the P1 extensions (dlt/dbt interop, schema drift policies, cloud sinks, Python UDFs, observability, orchestration, backfill, data contracts) work today. 0.4 adds two P2 tools in beta — **Hasta** (polling microbatch streaming and Postgres outbox CDC) and **Ballista** (portable Gladius plans on Spark/Kubernetes with Iceberg output) — both optional extras, plus the experimental **Augur**. Upgrading from 0.3: [docs/upgrade-0.4.md](docs/upgrade-0.4.md). The transform package is distributed as `de-gladius`; its Python import and CLI remain `gladius`.
+> **Status: v0.5.0 — 12 packages.** Ingestion, transformation, the umbrella CLI, and the P1 extensions (dlt/dbt interop, schema drift policies, cloud sinks, Python UDFs, observability, orchestration, backfill, data contracts) work today. 0.4 adds two P2 tools in beta — **Hasta** (polling microbatch streaming and Postgres outbox CDC) and **Ballista** (portable Gladius plans on Spark/Kubernetes with Iceberg output) — both optional extras, plus the experimental **Augur**. 0.5 adds **Aquila**, a file-backed catalog (datasets, schema history, cross-tool lineage, contracts, tags) that nothing depends on. Upgrading: [0.4 → 0.5](docs/upgrade-0.5.md) · [0.3 → 0.4](docs/upgrade-0.4.md). The transform package is distributed as `de-gladius`; its Python import and CLI remain `gladius`.
 
 The **completeness** of a Databricks or Snowflake, in the **opposite shape**. While the big platforms do a hundred things at 80%, we do one thing at 100%. Reliability (idempotency, resume, validation) is the default, and the zero-margin cost structure ([docs/07](docs/07-cost-efficiency.md)) falls out of the architecture.
 
@@ -23,18 +23,18 @@ Users only need to know `arsenal`. Underneath are independent tools, one per pro
 
 | Weapon | Domain | Priority | Status |
 |---|---|---|---|
-| **Arsenal** (umbrella CLI) | Single entry point — init/run/query, 3 one-command recipes | P0 (M4) | ✅ v0.4.0 |
-| **Pugio** | Ingestion & loading (ETL engine) | P0 + P1 | ✅ v0.4.0 |
-| **Gladius** | Transformation & querying (core processing) | P0 + P1 | ✅ v0.4.0 |
+| **Arsenal** (umbrella CLI) | Single entry point — init/run/query, 3 one-command recipes | P0 (M4) | ✅ v0.5.0 |
+| **Pugio** | Ingestion & loading (ETL engine) | P0 + P1 | ✅ v0.5.0 |
+| **Gladius** | Transformation & querying (core processing) | P0 + P1 | ✅ v0.5.0 |
 | **Spatha** | Orchestration (dependencies, scheduling) | P0 (idempotent core) / P1 | ✅ signal DAG · priority · window · lock |
 | **Scutum** | Data quality, validation, protection | P0 (idempotent guard) / P1 | ✅ contract · DLQ policy · lock retry/backoff |
 | **Scorpio** | Observability (monitoring, lineage) | P1 | ✅ lineage · freshness alert · cost summary |
 | **Onager** | Backfill & large-scale reprocessing | P1 | ✅ isolated backfill · small-file compaction |
 | **Augur** | Natural-language entry point (schema-RAG text-to-SQL) + eval harness | P1 | 🧪 experimental — `augur ask` · `augur eval` failure-mode classifier |
-| **Hasta** | Streaming & CDC | P2 | 🧪 beta (v0.4.0) — polling microbatch · Postgres outbox CDC · fenced checkpoints · `hasta checkpoint` |
+| **Hasta** | Streaming & CDC | P2 | 🧪 beta (since v0.4.0) — polling microbatch · Postgres outbox CDC · fenced checkpoints · `hasta checkpoint` |
 | **Pilum** | Dispatch & reverse ETL | P2 | 📋 planned |
-| **Ballista** | Large-scale distributed processing | P2 | 🧪 beta (v0.4.0) — Spark on Kubernetes · Iceberg commit · DuckDB↔Spark corpus · `plan --probe` |
-| **Aquila** | Catalog & governance (the legion standard — reference point for assets) | P2 | 🧪 preview (0.5) — dataset registry · schema history · cross-tool lineage · contracts · tags/search |
+| **Ballista** | Large-scale distributed processing | P2 | 🧪 beta (since v0.4.0) — Spark on Kubernetes · Iceberg commit · DuckDB↔Spark corpus · `plan --probe` |
+| **Aquila** | Catalog & governance (the legion standard — reference point for assets) | P2 | 🧪 preview (v0.5.0) — dataset registry · schema history · cross-tool lineage · contracts · tags/search |
 
 > We aim to be the low-cost, high-efficiency mini version of the Databricks product line — the mapping is in [docs/00-overview.md](docs/00-overview.md), the cost structure in [docs/07-cost-efficiency.md](docs/07-cost-efficiency.md).
 
@@ -93,6 +93,7 @@ Design documents are currently written in Korean; schema references and the chan
 | [docs/08-limits.md](docs/08-limits.md) | Honest limits — single-node envelope, unsupported scope, per-sink idempotency guarantees |
 | [docs/09-oss-leverage.md](docs/09-oss-leverage.md) | Open-source leverage — what we borrow, dlt/dbt interop, adoption criteria |
 | [docs/10-augur-eval-protocol.md](docs/10-augur-eval-protocol.md) | Augur eval protocol — baseline runs, failure reading, one intervention at a time |
+| [docs/upgrade-0.5.md](docs/upgrade-0.5.md) | 0.4 → 0.5 upgrade — pins, Aquila, no state migration |
 | [docs/upgrade-0.4.md](docs/upgrade-0.4.md) | 0.3 → 0.4 upgrade — StateStore v3 migration, rollback boundary, behaviour changes |
 | [docs/tools.md](docs/tools.md) | When to use each tool, quick starts, comparisons |
 | [docs/roadmap.md](docs/roadmap.md) | Original roadmap (full problem statements) |
