@@ -74,3 +74,35 @@ input size: 1010.9 MB (1,010,883,636 bytes)
 - Use this as a same-machine, same-method baseline for regression comparison
   (e.g. "did median time double after this change?"), not as a
   cross-machine or cross-workload performance claim.
+
+---
+
+# Hasta Stream Benchmark — Results
+
+Regression reference, **not a gate**. `benchmarks/bench_stream.py` streams
+synthetic events from an in-process cursor API (no network) through the real
+`RestPollingSource` → `StreamRunner` → Parquet sink and SQLite ledger.
+
+## Run: 2026-11-17
+
+**Machine:** Apple M3 Pro, 36 GB RAM, macOS 26.7.1, arm64, local NVMe.
+Python 3.11.4, PyArrow 24.0.0, httpx 0.28.1.
+`uv run python benchmarks/bench_stream.py` (median of 3).
+
+| Workload | Result |
+|---|---|
+| 1,000,000 events, 5,000/page (200 batches) | **2.99 s → ~334k events/s** |
+| Re-run over the fully committed stream | 0.9 ms (the exhausted checkpoint short-circuits before polling) |
+
+What this measures: per-batch overhead of the ledger (plan → write → fenced
+commit), JSON→Arrow conversion and one Parquet file per batch. It excludes
+network latency, which dominates real REST sources, so treat it as the
+engine's ceiling, not an expected production rate.
+
+# Ballista — no local benchmark yet
+
+Distributed throughput depends on the cluster, storage and data skew, so no
+number is committed. The `ballista-e2e` CI job (kind, 1 executor, a 3-row
+table) proves correctness only; its ~4 minutes are dominated by image build
+and pod scheduling. A real baseline needs a reference cluster and workload,
+recorded here with the same format once one exists.
