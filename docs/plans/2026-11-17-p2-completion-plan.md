@@ -100,13 +100,15 @@ StateStore v2 마이그레이션은 breaking이므로 **P2는 `0.4.0`이어야 �
 
 ---
 
-### Phase 1 — 설계자가 의도적으로 남긴 구멍 메우기 (3~5일) — 🟡 2026-11-17 구현, E2E 미실행
+### Phase 1 — 설계자가 의도적으로 남긴 구멍 메우기 (3~5일) — ✅ 2026-11-17 완료
 
 > 결과 (`feat/p2-phase1-ballista`): 1.1 `ObjectStoreBlobStore`, 1.2 `KubernetesEnvironmentProbe`,
 > 1.3 `IcebergOutputCommitter` + `SnapshotInputReader` + `ballista-worker`, CLI 실배선,
 > 1.5 골든 corpus 9케이스(DuckDB 로컬 통과, Spark는 CI `portable-equivalence` 잡),
-> 1.4 `ballista-e2e.yml`(kind + MinIO + Iceberg REST). 로컬에 Docker·Java가 없어
-> **Spark 쪽 corpus와 E2E는 아직 한 번도 실행되지 않았다** — CI 결과로 확인한다.
+> 1.4 `ballista-e2e.yml`(kind + MinIO + Iceberg REST).
+> CI 검증: `portable-equivalence`에서 Spark 3.5.3이 corpus 9케이스 모두 DuckDB와 일치,
+> `ballista-e2e`에서 plan --probe(ready) → run → reconcile(SUCCEEDED) → Iceberg 출력 검증 →
+> 재 reconcile no-op까지 통과 (run 44041731863).
 
 > P2-0C·P2-3B에서 "범위 밖"으로 남긴 것들. 이게 없으면 Ballista는 Spark submit 래퍼다.
 
