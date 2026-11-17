@@ -5,6 +5,7 @@ description = "Arsenal — 원클릭 데이터 스택. 수집→검증→변환�
 readme = "README.md"
 requires-python = ">=3.11"
 license = "Apache-2.0"
+license-files = ["LICENSE"]
 dependencies = [
     "arsenal-core>=0.4,<0.5",
     "pugio>=0.4,<0.5",

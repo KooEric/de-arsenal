@@ -27,7 +27,7 @@ minor.
 - `arsenal status` gains a `catalog` block (and alerts on contract findings)
   when `de-arsenal[catalog]` is installed and a catalog exists.
 
-## [0.4.0] - TBD
+## [0.4.0] - 2026-11-17
 
 P2 release: two new execution tools (Hasta streaming/CDC, Ballista
 distributed transforms) on a shared, engine-neutral execution contract, plus

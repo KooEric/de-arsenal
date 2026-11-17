@@ -5,6 +5,7 @@ description = "Ballista — capability-gated remote execution lifecycle for Glad
 readme = "README.md"
 requires-python = ">=3.11"
 license = "Apache-2.0"
+license-files = ["LICENSE"]
 dependencies = [
     "arsenal-core>=0.4,<0.5",
     "de-gladius>=0.4,<0.5",
