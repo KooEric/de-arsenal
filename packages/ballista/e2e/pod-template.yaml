@@ -1,0 +1,10 @@
+# Applied to both driver and executor pods. Credentials stay in Kubernetes
+# objects; the Ballista profile only references this file.
+apiVersion: v1
+kind: Pod
+spec:
+  containers:
+    - name: spark
+      envFrom:
+        - secretRef: {name: ballista-e2e-s3}
+        - configMapRef: {name: ballista-e2e-env}

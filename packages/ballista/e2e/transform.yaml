@@ -1,0 +1,8 @@
+name: e2e_daily
+input: iceberg://e2e.orders
+steps:
+  - filter: amount > 0
+  - derive:
+      gross: amount * qty
+  - select: [id, gross]
+output: iceberg://e2e.daily

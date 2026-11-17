@@ -125,6 +125,9 @@ class FakeFrame:
         self.writes += 1
         return FakeWriter(self, table)
 
+    def limit(self, count: int) -> FakeFrame:
+        return FakeFrame(self.spark, self.rows[:count])
+
 
 class FakeWriter:
     def __init__(self, frame: FakeFrame, table: str) -> None:
@@ -142,7 +145,8 @@ class FakeWriter:
         return self
 
     def create(self) -> None:
-        assert self.table not in self.frame.spark.tables
+        if self.table in self.frame.spark.tables:
+            raise RuntimeError("TableAlreadyExistsException")
         self.frame.spark.commit(self.table, self.frame.rows, self.properties)
 
     def overwrite(self, condition: Any) -> None:
@@ -172,11 +176,14 @@ def test_first_commit_creates_table_and_tags_snapshot_with_run_identity() -> Non
 
     proof = committer(spark).commit(FakeFrame(spark, [(1.0,), (2.0,)]), value)
 
-    summary = spark.tables[TABLE].snapshots[0]["summary"]
+    snapshots = spark.tables[TABLE].snapshots
+    assert len(snapshots) == 2  # empty create, then the tagged overwrite
+    assert RUN_ID_PROPERTY not in snapshots[0]["summary"]
+    summary = snapshots[1]["summary"]
     assert summary[RUN_ID_PROPERTY] == "run-1"
     assert summary[MANIFEST_HASH_PROPERTY] == value.content_hash
     assert summary[MANIFEST_CREATED_PROPERTY] == "2026-08-22T00:00:00+00:00"
-    assert proof.output_version == proof.output.version == "1001"
+    assert proof.output_version == proof.output.version == "1002"
     assert proof.row_count == 2
     assert proof.input_versions == ("snapshot-1",)
 
@@ -202,7 +209,7 @@ def test_retry_of_same_run_returns_existing_snapshot_without_writing() -> None:
     second = committer(spark).commit(retry_frame, value)
 
     assert retry_frame.writes == 0
-    assert len(spark.tables[TABLE].snapshots) == 1
+    assert len(spark.tables[TABLE].snapshots) == 2
     assert second.output_version == first.output_version
 
 
@@ -216,7 +223,7 @@ def test_next_run_overwrites_previous_result_in_one_snapshot() -> None:
 
     assert spark.tables[TABLE].rows == [(3.0,)]
     assert proof.row_count == 1
-    assert len(spark.tables[TABLE].snapshots) == 2
+    assert len(spark.tables[TABLE].snapshots) == 3
 
 
 def test_stale_attempt_never_overwrites_a_newer_run() -> None:
@@ -343,3 +350,27 @@ def test_reader_reads_unchanged_parquet_through_s3a() -> None:
 def test_reader_requires_exactly_one_versioned_input(inputs: tuple[ArtifactRef, ...]) -> None:
     with pytest.raises(FatalError):
         SnapshotInputReader().read(FakeSpark(), inputs)
+
+
+def test_losing_a_create_race_still_commits_the_tagged_overwrite(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    spark = FakeSpark()
+    real_exists = spark.tableExists
+    checks: list[bool] = []
+
+    def racing_exists(table: str) -> bool:
+        # The pre-create check says "absent" while another attempt creates it.
+        if len(checks) == 2:
+            spark.commit(table, [], {})
+            checks.append(False)
+            return False
+        checks.append(real_exists(table))
+        return checks[-1]
+
+    monkeypatch.setattr(spark, "tableExists", racing_exists)
+    proof = committer(spark).commit(FakeFrame(spark, [(1.0,)]), manifest())
+
+    assert checks[:3] == [False, False, False]  # create raised, then re-checked
+    assert proof.row_count == 1
+    assert spark.tables[TABLE].rows == [(1.0,)]

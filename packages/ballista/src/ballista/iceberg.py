@@ -182,10 +182,20 @@ class IcebergOutputCommitter:
             (MANIFEST_CREATED_PROPERTY, _utc_iso(manifest.created_at)),
         ):
             writer = writer.option(f"snapshot-property.{key}", value)
-        if self._table_exists(table):
-            writer.overwrite(self._functions.lit(True))
-        else:
-            writer.using("iceberg").create()
+        if not self._table_exists(table):
+            self._create_empty(frame, table)
+        # snapshot-property.* is honoured on DataFrameWriterV2 writes; the
+        # tagged result is always an overwrite, never a CTAS.
+        writer.overwrite(self._functions.lit(True))
+
+    def _create_empty(self, frame: Any, table: str) -> None:
+        try:
+            frame.limit(0).writeTo(table).using("iceberg").create()
+        except Exception:
+            # A concurrent attempt may have created it first; only a table that
+            # still does not exist is a real failure.
+            if not self._table_exists(table):
+                raise
 
     def _table_exists(self, table: str) -> bool:
         return bool(self._spark.catalog.tableExists(table))
