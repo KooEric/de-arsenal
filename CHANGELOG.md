@@ -12,7 +12,7 @@ minor.
 
 ## [Unreleased]
 
-## [0.5.2] - TBD
+## [0.5.2] - 2026-11-17
 
 Patch release: two correctness fixes (a Pugio run racing Onager compaction, a
 Hasta token rotation duplicating a batch), continuous Hasta polling, and the

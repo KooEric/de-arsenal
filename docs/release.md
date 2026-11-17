@@ -1,7 +1,7 @@
 # v0.5.2 패치 릴리스 절차
 
 정확성 수정 두 개와 기능 보완을 담은 패치다(#21). 내역은
-[CHANGELOG](../CHANGELOG.md#052---tbd).
+[CHANGELOG](../CHANGELOG.md#052---2026-11-17).
 
 - **수정:** 실행 중인 Pugio의 Parquet 출력을 Onager가 compact할 수 있던 문제. Hasta API
   토큰을 교체하면 커밋 전 batch가 새 identity로 두 번 쓰이던 문제.
