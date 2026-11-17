@@ -8,5 +8,22 @@ except PackageNotFoundError:
     __version__ = "0.4.0"
 
 from scorpio.freshness import Freshness, assess_freshness
+from scorpio.streams import (
+    RunObservation,
+    RunsSummary,
+    StreamHealth,
+    StreamObservation,
+    assess_stream,
+    summarize_runs,
+)
 
-__all__ = ["Freshness", "assess_freshness"]
+__all__ = [
+    "Freshness",
+    "RunObservation",
+    "RunsSummary",
+    "StreamHealth",
+    "StreamObservation",
+    "assess_freshness",
+    "assess_stream",
+    "summarize_runs",
+]

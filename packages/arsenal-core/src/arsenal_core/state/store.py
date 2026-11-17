@@ -94,6 +94,8 @@ class RunRecord:
     attempt: int
     external_job: Mapping[str, Any] | None
     error: str | None
+    created_at: str | None = None
+    updated_at: str | None = None
 
 
 @dataclass(frozen=True)
@@ -104,6 +106,7 @@ class StreamCheckpoint:
     position: Mapping[str, Any]
     watermark: str | None
     last_batch_id: str | None
+    updated_at: str | None = None
 
 
 @dataclass(frozen=True)
@@ -580,15 +583,34 @@ class StateStore:
         )
         self._conn.commit()
 
+    _RUN_COLUMNS = (
+        "run_id, pipeline, revision, mode, executor, status, attempt, "
+        "external_job_json, error, created_at, updated_at"
+    )
+
     def run(self, run_id: str) -> RunRecord | None:
         row = self._conn.execute(
-            "SELECT run_id, pipeline, revision, mode, executor, status, attempt, "
-            "external_job_json, error "
-            "FROM runs WHERE run_id=?",
+            f"SELECT {self._RUN_COLUMNS} FROM runs WHERE run_id=?",
             (run_id,),
         ).fetchone()
-        if row is None:
-            return None
+        return None if row is None else self._run_record(row)
+
+    def runs(self, *, pipeline: str | None = None) -> list[RunRecord]:
+        """All runs, oldest first, optionally for one pipeline (for monitoring)."""
+        if pipeline is None:
+            rows = self._conn.execute(
+                f"SELECT {self._RUN_COLUMNS} FROM runs ORDER BY created_at, run_id"
+            ).fetchall()
+        else:
+            rows = self._conn.execute(
+                f"SELECT {self._RUN_COLUMNS} FROM runs WHERE pipeline=? "
+                "ORDER BY created_at, run_id",
+                (pipeline,),
+            ).fetchall()
+        return [self._run_record(row) for row in rows]
+
+    @staticmethod
+    def _run_record(row: Any) -> RunRecord:
         return RunRecord(
             run_id=row[0],
             pipeline=row[1],
@@ -599,6 +621,8 @@ class StateStore:
             attempt=row[6],
             external_job=json.loads(row[7]) if row[7] else None,
             error=row[8],
+            created_at=row[9],
+            updated_at=row[10],
         )
 
     def update_run(
@@ -638,8 +662,8 @@ class StateStore:
 
     def checkpoint(self, pipeline: str, stream_name: str) -> StreamCheckpoint | None:
         row = self._conn.execute(
-            "SELECT pipeline, stream_name, generation, position_json, watermark, last_batch_id "
-            "FROM stream_checkpoints WHERE pipeline=? AND stream_name=?",
+            "SELECT pipeline, stream_name, generation, position_json, watermark, last_batch_id, "
+            "updated_at FROM stream_checkpoints WHERE pipeline=? AND stream_name=?",
             (pipeline, stream_name),
         ).fetchone()
         if row is None:
@@ -651,6 +675,7 @@ class StateStore:
             position=json.loads(row[3]),
             watermark=row[4],
             last_batch_id=row[5],
+            updated_at=row[6],
         )
 
     def plan_stream_batch(
