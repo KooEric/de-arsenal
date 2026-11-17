@@ -121,6 +121,31 @@ class StreamBatch:
     bytes: int | None
     late_rows: int
     error: str | None
+    generation: int = 0
+
+
+@dataclass(frozen=True)
+class LeaseRecord:
+    """Read-only view of who holds a resource lease and until when."""
+
+    resource: str
+    owner_id: str
+    fence: int
+    expires_at: datetime
+    updated_at: datetime
+
+    def is_expired(self, now: datetime) -> bool:
+        return self.expires_at <= now
+
+
+@dataclass(frozen=True)
+class StreamBatchSummary:
+    """Ledger totals for one stream; rows/bytes count committed batches only."""
+
+    by_status: Mapping[str, int]
+    rows: int
+    bytes: int
+    late_rows: int
 
 
 class LeaseLostError(RuntimeError):
@@ -511,6 +536,21 @@ class StateStore:
         self._conn.commit()
         return cur.rowcount == 1
 
+    def lease(self, resource: str) -> LeaseRecord | None:
+        row = self._conn.execute(
+            "SELECT resource, owner_id, fence, expires_at, updated_at FROM leases WHERE resource=?",
+            (resource,),
+        ).fetchone()
+        if row is None:
+            return None
+        return LeaseRecord(
+            resource=row[0],
+            owner_id=row[1],
+            fence=int(row[2]),
+            expires_at=datetime.fromisoformat(row[3]),
+            updated_at=datetime.fromisoformat(row[4]),
+        )
+
     def _assert_active_lease(self, token: LeaseToken) -> None:
         now = self._now()
         row = self._conn.execute(
@@ -623,24 +663,40 @@ class StateStore:
         start_position: Mapping[str, Any],
         end_position: Mapping[str, Any],
         event_hash: str,
+        generation: int = 0,
     ) -> StreamBatch:
         """Record a deterministic batch identity without changing its checkpoint."""
         start_json, end_json = canonical_json(start_position), canonical_json(end_position)
         now = self._now()
         self._conn.execute(
             "INSERT OR IGNORE INTO stream_batches(batch_id, pipeline, stream_name, revision, "
-            "start_position_json, end_position_json, event_hash, status, created_at, updated_at) "
-            "VALUES (?, ?, ?, ?, ?, ?, ?, 'planned', ?, ?)",
-            (batch_id, pipeline, stream_name, revision, start_json, end_json, event_hash, now, now),
+            "generation, start_position_json, end_position_json, event_hash, status, "
+            "created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'planned', ?, ?)",
+            (
+                batch_id,
+                pipeline,
+                stream_name,
+                revision,
+                generation,
+                start_json,
+                end_json,
+                event_hash,
+                now,
+                now,
+            ),
         )
         self._conn.commit()
         batch = self.stream_batch(batch_id)
-        if batch is None:  # pragma: no cover - database corruption guard
-            raise RuntimeError(f"failed to register stream batch {batch_id}")
+        if batch is None:
+            raise ValueError(
+                f"batch_id {batch_id!r} conflicts with an existing batch for the same "
+                "source range and generation"
+            )
         identity = (
             batch.pipeline,
             batch.stream_name,
             batch.revision,
+            batch.generation,
             batch.start_position,
             batch.end_position,
         )
@@ -648,6 +704,7 @@ class StateStore:
             pipeline,
             stream_name,
             revision,
+            generation,
             json.loads(start_json),
             json.loads(end_json),
         )
@@ -659,7 +716,7 @@ class StateStore:
         row = self._conn.execute(
             "SELECT batch_id, pipeline, stream_name, revision, start_position_json, "
             "end_position_json, event_hash, status, output_ref_json, rows, bytes, late_rows, "
-            "error FROM stream_batches "
+            "error, generation FROM stream_batches "
             "WHERE batch_id=?",
             (batch_id,),
         ).fetchone()
@@ -679,6 +736,7 @@ class StateStore:
             bytes=row[10],
             late_rows=row[11],
             error=row[12],
+            generation=int(row[13]),
         )
 
     def commit_stream_batch(
@@ -734,6 +792,56 @@ class StateStore:
             if self._conn.in_transaction:
                 self._conn.rollback()
             raise
+
+    def stream_batch_summary(self, pipeline: str, stream_name: str) -> StreamBatchSummary:
+        counts = self._conn.execute(
+            "SELECT status, COUNT(*) FROM stream_batches WHERE pipeline=? AND stream_name=? "
+            "GROUP BY status",
+            (pipeline, stream_name),
+        ).fetchall()
+        totals = self._conn.execute(
+            "SELECT COALESCE(SUM(rows), 0), COALESCE(SUM(bytes), 0), COALESCE(SUM(late_rows), 0) "
+            "FROM stream_batches WHERE pipeline=? AND stream_name=? AND status='committed'",
+            (pipeline, stream_name),
+        ).fetchone()
+        return StreamBatchSummary(
+            by_status={str(status): int(count) for status, count in counts},
+            rows=int(totals[0]),
+            bytes=int(totals[1]),
+            late_rows=int(totals[2]),
+        )
+
+    def reset_checkpoint(
+        self, pipeline: str, stream_name: str, *, lease: LeaseToken
+    ) -> StreamCheckpoint:
+        """Start a new checkpoint generation from the source's beginning.
+
+        The batch ledger is kept for audit. Callers fold the generation into
+        batch identities, so the replay produces new batches instead of being
+        skipped as already committed. Fenced like every checkpoint mutation.
+        """
+        self._conn.execute("BEGIN IMMEDIATE")
+        try:
+            self._assert_active_lease(lease)
+            current = self.checkpoint(pipeline, stream_name)
+            generation = (current.generation if current is not None else 0) + 1
+            self._conn.execute(
+                "INSERT INTO stream_checkpoints(pipeline, stream_name, generation, position_json, "
+                "watermark, last_batch_id, updated_at) VALUES (?, ?, ?, ?, NULL, NULL, ?) "
+                "ON CONFLICT(pipeline, stream_name) DO UPDATE SET generation=excluded.generation, "
+                "position_json=excluded.position_json, watermark=NULL, last_batch_id=NULL, "
+                "updated_at=excluded.updated_at",
+                (pipeline, stream_name, generation, canonical_json({}), self._now()),
+            )
+            self._conn.commit()
+        except BaseException:
+            if self._conn.in_transaction:
+                self._conn.rollback()
+            raise
+        reset = self.checkpoint(pipeline, stream_name)
+        if reset is None:  # pragma: no cover - database corruption guard
+            raise RuntimeError(f"failed to reset checkpoint for {pipeline}/{stream_name}")
+        return reset
 
     def fail_stream_batch(self, batch_id: str, *, lease: LeaseToken, error: str) -> None:
         """Fenced failure recording that leaves the checkpoint unchanged."""

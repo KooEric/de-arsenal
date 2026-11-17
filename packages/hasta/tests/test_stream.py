@@ -289,7 +289,7 @@ def test_cli_once_and_max_batches_select_the_expected_runner_path(
     calls: list[tuple[str, int | None, bool | None]] = []
 
     class FakeRunner:
-        def __init__(self, loaded_spec: StreamSpec) -> None:
+        def __init__(self, loaded_spec: StreamSpec, **_kwargs: object) -> None:
             assert loaded_spec.name == "orders"
 
         def run_once(self) -> object:

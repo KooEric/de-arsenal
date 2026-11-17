@@ -5,7 +5,7 @@ from __future__ import annotations
 import sqlite3
 from collections.abc import Callable
 
-CURRENT_SCHEMA_VERSION = 2
+CURRENT_SCHEMA_VERSION = 3
 
 _V1_STATEMENTS = (
     """CREATE TABLE IF NOT EXISTS units (
@@ -48,7 +48,20 @@ _V2_STATEMENTS = (
         (pipeline, stream_name, revision, start_position_json, end_position_json)""",
 )
 
-MIGRATIONS: dict[int, tuple[str, ...]] = {1: _V1_STATEMENTS, 2: _V2_STATEMENTS}
+# v3: a checkpoint reset starts a new generation that replays the same source
+# ranges, so the ledger identity must include the generation.
+_V3_STATEMENTS = (
+    "ALTER TABLE stream_batches ADD COLUMN generation INTEGER NOT NULL DEFAULT 0",
+    "DROP INDEX stream_batches_identity",
+    """CREATE UNIQUE INDEX stream_batches_identity ON stream_batches
+        (pipeline, stream_name, revision, generation, start_position_json, end_position_json)""",
+)
+
+MIGRATIONS: dict[int, tuple[str, ...]] = {
+    1: _V1_STATEMENTS,
+    2: _V2_STATEMENTS,
+    3: _V3_STATEMENTS,
+}
 
 
 def apply_migrations(
