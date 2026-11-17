@@ -34,7 +34,7 @@ Databricks·Snowflake 수준의 **완성도**를, 그들과 정반대의 **형�
 | **Hasta** | 스트리밍·CDC | P2 | 🧪 beta (v0.4.0) — 폴링 마이크로배치 · Postgres outbox CDC · fenced 체크포인트 · `hasta checkpoint` |
 | **Pilum** | 디스패치·reverse ETL | P2 | 📋 계획 |
 | **Ballista** | 대규모 분산 처리 | P2 | 🧪 beta (v0.4.0) — Spark on Kubernetes · Iceberg 커밋 · DuckDB↔Spark corpus · `plan --probe` |
-| **Aquila** | 카탈로그·거버넌스 (군단기 — 자산의 기준점) | P2 | 💡 제안 |
+| **Aquila** | 카탈로그·거버넌스 (군단기 — 자산의 기준점) | P2 | 🧪 preview (0.5) — 데이터셋 레지스트리 · 스키마 이력 · 도구 간 lineage · 계약 · 태그/검색 |
 
 > Databricks 제품군의 저비용 고효율 미니 버전을 지향한다 — 대응표는 [docs/00-overview.md](docs/00-overview.md), 비용 구조는 [docs/07-cost-efficiency.md](docs/07-cost-efficiency.md).
 

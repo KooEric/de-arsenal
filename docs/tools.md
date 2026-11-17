@@ -139,7 +139,25 @@ completed = workflow.run_ready(lambda task: print(f"run {task.name}"), signals={
 작업 그래프의 누락 의존성과 순환을 미리 검증하며, 선택적으로 파일 잠금을 써서
 여러 프로세스가 같은 작업을 중복 실행하는 일을 막는다.
 
-## 8. arsenal-core — 확장 도구를 위한 신뢰성 기반
+## 8. Aquila (`de-aquila`) — 데이터셋 카탈로그
+
+레포의 파이프라인·변환·스트림 YAML과 상태 DB(읽기 전용)를 스캔해, 어떤 데이터셋이
+어디 있고 스키마가 언제 바뀌었고 무엇이 무엇을 읽는지를 `.arsenal/aquila.db` 하나에
+모은다. 다른 도구는 Aquila에 의존하지 않는다(pull 모델).
+
+```bash
+pip install de-aquila                # 또는 de-arsenal[catalog]
+aquila scan
+aquila lineage orders_daily --direction up --format mermaid
+aquila history orders
+aquila tag orders pii=true && aquila search pii
+```
+
+같은 위치는 어느 도구가 부르든 같은 데이터셋이다(`out/`와 `out/*.parquet`는 하나).
+계약은 최신 스키마와 대조해 `aquila show`가 어긋남을 보고하고, deprecated
+데이터셋을 읽는 하류는 scan·show마다 경고된다. 상세: [packages/aquila/README.md](../packages/aquila/README.md).
+
+## 9. arsenal-core — 확장 도구를 위한 신뢰성 기반
 
 일반 사용자는 직접 설치할 필요가 없지만, DE Arsenal에 새 source/sink/도구를
 붙일 때 공통 상태 모델과 재시도 규약을 재사용할 수 있다.

@@ -34,7 +34,7 @@ Users only need to know `arsenal`. Underneath are independent tools, one per pro
 | **Hasta** | Streaming & CDC | P2 | 🧪 beta (v0.4.0) — polling microbatch · Postgres outbox CDC · fenced checkpoints · `hasta checkpoint` |
 | **Pilum** | Dispatch & reverse ETL | P2 | 📋 planned |
 | **Ballista** | Large-scale distributed processing | P2 | 🧪 beta (v0.4.0) — Spark on Kubernetes · Iceberg commit · DuckDB↔Spark corpus · `plan --probe` |
-| **Aquila** | Catalog & governance (the legion standard — reference point for assets) | P2 | 💡 proposed |
+| **Aquila** | Catalog & governance (the legion standard — reference point for assets) | P2 | 🧪 preview (0.5) — dataset registry · schema history · cross-tool lineage · contracts · tags/search |
 
 > We aim to be the low-cost, high-efficiency mini version of the Databricks product line — the mapping is in [docs/00-overview.md](docs/00-overview.md), the cost structure in [docs/07-cost-efficiency.md](docs/07-cost-efficiency.md).
 

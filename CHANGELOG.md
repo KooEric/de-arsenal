@@ -12,6 +12,21 @@ minor.
 
 ## [Unreleased]
 
+### Added
+
+- **`de-aquila` (12th package, preview — targets 0.5.0).** A file-backed
+  catalog: `aquila scan` reads Pugio/Gladius/Ballista/Hasta specs, the tools'
+  state databases (read-only) and local Parquet footers into `.arsenal/aquila.db`
+  — datasets keyed by normalized location, schema versions with diffs,
+  cross-tool dataset lineage with cycle detection and Mermaid output, contract
+  hash tracking and schema checks, tags, deprecation warnings and FTS5 search.
+  Nothing depends on it.
+- `augur index --aquila PATH` (and automatically `.arsenal/aquila.db` when no
+  sources file is given) reads table locations from Aquila; eval results are
+  identical either way.
+- `arsenal status` gains a `catalog` block (and alerts on contract findings)
+  when `de-arsenal[catalog]` is installed and a catalog exists.
+
 ## [0.4.0] - TBD
 
 P2 release: two new execution tools (Hasta streaming/CDC, Ballista
