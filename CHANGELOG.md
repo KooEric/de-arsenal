@@ -12,6 +12,12 @@ minor.
 
 ## [Unreleased]
 
+## [0.5.1] - TBD
+
+Patch release: one data-correctness fix. All 12 packages move to `0.5.1`
+together; internal pins stay `>=0.5,<0.6`, so `0.5.0` installs pick it up on
+upgrade. No state migration, no behaviour change other than the fix below.
+
 ### Fixed
 
 - **`arsenal run` never reprocessed new data for `distributed:` stages with

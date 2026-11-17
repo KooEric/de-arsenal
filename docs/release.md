@@ -1,4 +1,60 @@
-# v0.5.0 릴리스 절차
+# v0.5.1 패치 릴리스 절차
+
+데이터 정확성 수정 하나를 담은 패치다. `arsenal.yaml`의 `distributed:` 단계에서
+`input_version: auto`가 run id를 리터럴 `"auto"`로 만들어, 입력이 바뀌어도 이미 성공한
+첫 Ballista run만 reconcile하고 새 데이터를 처리하지 않던 문제를 고친다(#20).
+내역은 [CHANGELOG](../CHANGELOG.md#051---tbd).
+
+**patch인 이유**: 공개 API·스펙 필드·상태 DB가 그대로이고 동작 변경은 버그 수정뿐이다.
+12개 패키지를 0.5.1로 함께 올리고 교차 핀은 `>=0.5,<0.6`을 유지한다 — 0.5.0 사용자는
+업그레이드만 하면 받는다. 신규 PyPI 프로젝트가 없으므로 pending publisher 등록·수동
+부트스트랩도 없다.
+
+## 절차
+
+1. #20 `fix/distributed-auto-input`(수정 + 0.5.1 버전·문서) CI green 확인 후 `main`에 머지
+2. `main`에서 검증
+
+   ```bash
+   uv sync
+   uv run python scripts/check_release_metadata.py   # "12 packages at v0.5.1"
+   uv run ruff check . && uv run ruff format --check .
+   uv run pyright
+   uv run python scripts/gen_schema_docs.py --check
+   uv run pytest
+   uv build --all-packages && ls dist/ | wc -l       # 24
+   ```
+
+3. CHANGELOG의 `## [0.5.1] - TBD`를 실제 날짜로 바꾼다.
+4. 검증 전용 수동 실행 후 태그
+
+   ```bash
+   gh workflow run release.yml -f version=0.5.1 -f publish_package=none
+   git tag v0.5.1 && git push origin v0.5.1
+   ```
+
+5. 게시 확인 — 12개 모두 `200`, 그리고 새 venv 설치
+
+   ```bash
+   for p in arsenal-core de-arsenal pugio de-gladius de-scorpio de-scutum de-onager spatha \
+            de-augur de-hasta de-ballista de-aquila; do
+     curl -s -o /dev/null -w "$p %{http_code}\n" "https://pypi.org/pypi/$p/0.5.1/json"
+   done
+   uv tool install --force "de-arsenal[streaming,distributed,catalog]==0.5.1"
+   ```
+
+6. GitHub Release `v0.5.1`을 만들고 CHANGELOG 0.5.1 항목을 붙인다. 아직 없는
+   `v0.4.0`·`v0.5.0` Release 페이지도 이때 함께 만든다(태그는 이미 있다).
+
+   ```bash
+   gh release create v0.5.1 --title v0.5.1 --notes-file <(sed -n '/^## \[0.5.1\]/,/^## \[0.5.0\]/p' CHANGELOG.md | sed '$d')
+   ```
+
+실패 시 처리는 아래 0.5.0 절차와 같다(같은 번호 재게시 불가 → 0.5.2).
+
+---
+
+# v0.5.0 릴리스 절차 (참고: 마지막 minor)
 
 카탈로그 릴리스다. 12번째 패키지 **Aquila**(`de-aquila`)가 처음 배포된다 — 레포의
 스펙·상태 DB(읽기 전용)·Parquet footer를 스캔해 데이터셋·스키마 이력·도구 간 lineage·
