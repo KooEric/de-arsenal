@@ -323,3 +323,17 @@ def test_postgres_sink_target_shows_env_var_name_not_dsn(tmp_path: Path) -> None
     data["sink"] = {"type": "postgres", "dsn_env": "ORDERS_DSN", "table": "t", "merge_key": ["id"]}
 
     assert sink_target(StreamSpec.model_validate(data)) == "$ORDERS_DSN#t"
+
+
+def test_runner_registers_itself_as_the_parquet_datasets_writer(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    from arsenal_core.writers import stream_writers
+
+    monkeypatch.chdir(tmp_path)
+    runner = StreamRunner(H.spec(tmp_path), source=H.Source(pa.table({"id": ["a"]})))
+    runner.close()
+
+    (writer,) = stream_writers(tmp_path / "out")
+    assert writer.resource == "stream:orders:orders"
+    assert Path(writer.state_db) == (tmp_path / "state" / "orders.db").resolve()

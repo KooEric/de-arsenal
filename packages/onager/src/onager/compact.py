@@ -7,6 +7,7 @@ import json
 import os
 import shutil
 import tempfile
+import uuid
 from dataclasses import dataclass
 from pathlib import Path
 
@@ -14,6 +15,7 @@ import duckdb
 from scutum import FileLock
 
 from arsenal_core.errors import FatalError
+from arsenal_core.writers import exclusive_dataset
 
 
 @dataclass(frozen=True)
@@ -72,7 +74,12 @@ def compact_dataset(
 ) -> CompactionReport:
     _validate_options(dataset, target_bytes, min_files, max_input_bytes)
     lock_path = dataset.parent / f".{dataset.name}.onager.lock"
-    with FileLock(lock_path):
+    # Hold every registered stream writer's lease too: a live stream makes
+    # this refuse, and a stream cannot start while the directory is swapped.
+    with (
+        FileLock(lock_path),
+        exclusive_dataset(dataset, owner_id=f"onager-{uuid.uuid4()}"),
+    ):
         return _compact_dataset_locked(
             dataset,
             target_bytes=target_bytes,

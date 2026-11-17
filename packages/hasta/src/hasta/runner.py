@@ -28,6 +28,7 @@ from arsenal_core.execution import (
 )
 from arsenal_core.schema import compare_schema_snapshots
 from arsenal_core.state import LeaseLostError, StateStore, StreamCheckpoint, UnitSpec
+from arsenal_core.writers import StreamWriter, register_stream_writer
 from hasta.model import (
     BatchLimits,
     CdcEvent,
@@ -184,6 +185,8 @@ class StreamRunner:
         self._sink = sink or self._build_sink(spec)
         self._store = store or StateStore(Path(spec.state_dir) / f"{spec.name}.db")
         self._owns_store = store is None
+        if self._owns_store:
+            self._register_dataset_writer()
         self._owner_id = owner_id or f"hasta-{uuid.uuid4()}"
         self._revision = spec_revision(spec.revision_payload())
         self._contract = _build_contract(spec)
@@ -226,6 +229,22 @@ class StreamRunner:
     @property
     def resource(self) -> str:
         return f"stream:{self.spec.name}:{self.spec.stream.name}"
+
+    def _register_dataset_writer(self) -> None:
+        """Let directory-rewriting maintenance (Onager) find and fence this stream."""
+
+        sink = self.spec.sink
+        if sink.type != "parquet" or "://" in sink.path:
+            return
+        register_stream_writer(
+            Path(sink.path),
+            StreamWriter(
+                state_db=str((Path(self.spec.state_dir) / f"{self.spec.name}.db").resolve()),
+                resource=self.resource,
+                pipeline=self.spec.name,
+                stream_name=self.spec.stream.name,
+            ),
+        )
 
     def run_once(self) -> StreamReport:
         return self.run(max_batches=1)
