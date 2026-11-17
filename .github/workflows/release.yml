@@ -29,6 +29,7 @@ on:
           - de-augur
           - de-hasta
           - de-ballista
+          - de-aquila
 
 jobs:
   verify-and-build:

@@ -1,0 +1,186 @@
+"""Scan orchestration and the read models behind ``aquila show``/``history``."""
+
+from __future__ import annotations
+
+import json
+from dataclasses import asdict
+from pathlib import Path
+from typing import Any
+
+from scorpio import assess_freshness
+
+from aquila.lineage import find_cycles
+from aquila.model import ScanResult, SourceFile
+from aquila.scanners import (
+    classify,
+    distributed_transforms,
+    file_hash,
+    iter_spec_files,
+    load_yaml,
+    parquet_schema,
+    scan_spec,
+)
+from aquila.store import CatalogStore, Dataset, ScanReport
+from arsenal_core.schema import compare_schema_snapshots
+
+DEFAULT_DB = Path(".arsenal") / "aquila.db"
+
+
+def collect(paths: list[Path], *, root: Path) -> ScanResult:
+    """Read every spec under ``paths``; nothing is written anywhere."""
+
+    result = ScanResult()
+    files = list(iter_spec_files(paths))
+    parsed = [(f, load_yaml(f)) for f in files]
+    ballista: set[Path] = set()
+    for path, raw in parsed:
+        if raw is not None and classify(raw) == "arsenal":
+            ballista |= distributed_transforms(path, raw)
+    for path, raw in parsed:
+        kind = classify(raw) if raw is not None else None
+        if raw is None or kind is None:
+            continue
+        if kind == "arsenal":
+            result.sources.append(SourceFile(str(path), kind, file_hash(path)))
+            continue
+        if kind == "gladius" and path.resolve() in ballista:
+            kind = "ballista"
+        scan_spec(path, raw, kind, root, result)
+        result.sources.append(SourceFile(str(path), kind, file_hash(path)))
+    for uri in sorted(result.datasets):
+        if result.datasets[uri].format == "parquet":
+            parquet_schema(uri, result)
+    return result
+
+
+def scan(store: CatalogStore, paths: list[Path], *, root: Path) -> ScanReport:
+    return store.apply(collect(paths, root=root))
+
+
+def schema_fields(snapshot: str) -> list[dict[str, Any]]:
+    return list(json.loads(snapshot))
+
+
+def contract_findings(store: CatalogStore, dataset: Dataset) -> list[str]:
+    """Where the latest observed schema breaks a declared contract."""
+
+    latest = store.latest_schema(dataset.dataset_id)
+    if latest is None:
+        return []
+    actual = {f["name"]: f for f in schema_fields(latest.snapshot)}
+    findings: list[str] = []
+    for contract in store.contracts(dataset.dataset_id):
+        for column in contract.contract.get("columns", []):
+            name = column.get("name")
+            field = actual.get(name)
+            if field is None:
+                findings.append(f"{name}: missing (contract {contract.path})")
+            elif "type" in column and column["type"] != field["type"]:
+                findings.append(f"{name}: type {field['type']} != contract {column['type']}")
+            elif column.get("nullable") is False and field.get("nullable") is True:
+                findings.append(f"{name}: nullable in data, NOT NULL in contract")
+        if not contract.contract.get("allow_extra", False):
+            declared = {c.get("name") for c in contract.contract.get("columns", [])}
+            for extra in sorted(set(actual) - declared):
+                findings.append(f"{extra}: not in contract {contract.path}")
+    return findings
+
+
+def deprecated_upstreams(store: CatalogStore, ident: str) -> list[Dataset]:
+    ups = {e.upstream_id for e in store.edges() if e.downstream_id == ident}
+    return [
+        d for d in (store.get(u) for u in sorted(ups)) if d is not None and d.status == "deprecated"
+    ]
+
+
+def deprecation_warnings(store: CatalogStore) -> list[str]:
+    warnings: list[str] = []
+    names = {d.dataset_id: d.name for d in store.datasets()}
+    for edge in store.edges():
+        upstream = store.get(edge.upstream_id)
+        if upstream is not None and upstream.status == "deprecated":
+            reason = f" ({upstream.deprecation_reason})" if upstream.deprecation_reason else ""
+            reader = names.get(edge.downstream_id)
+            warnings.append(f"{reader} reads deprecated {upstream.name}{reason} via {edge.via}")
+    return warnings
+
+
+def cycle_names(store: CatalogStore) -> list[list[str]]:
+    names = {d.dataset_id: d.name for d in store.datasets()}
+    return [[names.get(n, n) for n in cycle] for cycle in find_cycles(store.edges())]
+
+
+def show(
+    store: CatalogStore, dataset: Dataset, *, max_age_seconds: float | None = None
+) -> dict[str, Any]:
+    names = {d.dataset_id: d.name for d in store.datasets()}
+    edges = store.edges()
+    latest = store.latest_schema(dataset.dataset_id)
+    freshness: dict[str, Any] = {"last_updated_at": dataset.last_updated_at}
+    if max_age_seconds is not None:
+        assessed = assess_freshness(dataset.last_updated_at, max_age_seconds=max_age_seconds)
+        freshness |= {
+            "status": assessed.status,
+            "age_seconds": assessed.age_seconds,
+            "alert": assessed.alert,
+        }
+    return {
+        "dataset": asdict(dataset),
+        "schema": schema_fields(latest.snapshot) if latest else None,
+        "schema_versions": len(store.schema_versions(dataset.dataset_id)),
+        "contracts": [
+            {"path": c.path, "hash": c.contract_hash, "changed_at": c.changed_at}
+            for c in store.contracts(dataset.dataset_id)
+        ],
+        "contract_findings": contract_findings(store, dataset),
+        "upstream": sorted(
+            {
+                f"{names.get(e.upstream_id)} ({e.via})"
+                for e in edges
+                if e.downstream_id == dataset.dataset_id
+            }
+        ),
+        "downstream": sorted(
+            {
+                f"{names.get(e.downstream_id)} ({e.via})"
+                for e in edges
+                if e.upstream_id == dataset.dataset_id
+            }
+        ),
+        "warnings": [
+            f"reads deprecated {d.name}"
+            + (f" ({d.deprecation_reason})" if d.deprecation_reason else "")
+            for d in deprecated_upstreams(store, dataset.dataset_id)
+        ],
+        "freshness": freshness,
+    }
+
+
+def history(store: CatalogStore, dataset: Dataset) -> list[dict[str, Any]]:
+    timeline: list[dict[str, Any]] = []
+    previous: str | None = None
+    for version in store.schema_versions(dataset.dataset_id):
+        entry: dict[str, Any] = {
+            "schema_hash": version.schema_hash[:12],
+            "first_seen_at": version.first_seen_at,
+            "last_seen_at": version.last_seen_at,
+            "origin": version.origin,
+            "columns": len(schema_fields(version.snapshot)),
+        }
+        if previous is not None:
+            diff = compare_schema_snapshots(previous, version.snapshot)
+            entry["diff"] = {
+                "added": [c.field for c in diff.added],
+                "removed": [c.field for c in diff.removed],
+                "changed": [
+                    {
+                        "field": c.field,
+                        "before": (c.before or {}).get("type"),
+                        "after": (c.after or {}).get("type"),
+                    }
+                    for c in diff.changed
+                ],
+            }
+        timeline.append(entry)
+        previous = version.snapshot
+    return timeline
