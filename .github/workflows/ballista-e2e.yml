@@ -55,8 +55,9 @@ jobs:
 
       - name: Build worker image
         run: |
-          uv build --package arsenal-core --package de-gladius --package de-ballista \
-            --wheel --out-dir packages/ballista/docker/wheels
+          for package in arsenal-core de-gladius de-ballista; do
+            uv build --package "$package" --wheel --out-dir packages/ballista/docker/wheels
+          done
           docker build --build-arg SPARK_VERSION="$SPARK_VERSION" -t "$IMAGE" packages/ballista/docker
 
       - uses: helm/kind-action@v1

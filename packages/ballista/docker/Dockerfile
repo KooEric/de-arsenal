@@ -5,8 +5,8 @@
 # python:3.11 base. Build context is this directory with the workspace wheels
 # for arsenal-core, de-gladius and de-ballista placed in ./wheels/.
 #
-#   uv build --package arsenal-core --package de-gladius --package de-ballista \
-#       --wheel --out-dir packages/ballista/docker/wheels
+#   for p in arsenal-core de-gladius de-ballista; do
+#     uv build --package "$p" --wheel --out-dir packages/ballista/docker/wheels; done
 #   docker build -t ballista-worker:dev packages/ballista/docker
 ARG SPARK_VERSION=3.5.3
 
