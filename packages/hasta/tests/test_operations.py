@@ -308,7 +308,7 @@ def test_show_flags_a_dead_runner_holding_an_expired_lease(tmp_path: Path) -> No
     run_one_batch(tmp_path, store)
     store.acquire_lease("stream:orders:orders", "dead", 0.001)
     store.close()
-    time.sleep(0.01)
+    time.sleep(0.05)  # coarse clocks (Windows) need margin past the 1 ms TTL
 
     payload = json.loads(cli.invoke(app, ["checkpoint", "show", str(path)]).stdout)
 
