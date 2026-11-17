@@ -5,15 +5,78 @@ All notable changes to this project are documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 This project has not yet reached a public API stability commitment (see
 [Known limitations](#known-limitations)); spec-field additions are
-backward-compatible by policy (`arsenal-core` pinned `>=0.3,<0.4` across
-`pugio`/`de-gladius`/`de-arsenal`). Because `0.x` treats the *minor* as the
+backward-compatible by policy (every internal dependency is pinned to the
+current minor, e.g. `>=0.4,<0.5`). Because `0.x` treats the *minor* as the
 breaking axis, a release that changes behaviour incompatibly takes the next
-minor — which is why the fixes below ship as `0.3.0` rather than `0.2.3`.
+minor.
 
 ## [Unreleased]
 
+## [0.4.0] - 2026-11-17
+
+P2 release: two new execution tools (Hasta streaming/CDC, Ballista
+distributed transforms) on a shared, engine-neutral execution contract, plus
+the experimental Augur package. 11 distributions now ship in lockstep with
+internal pins moved to `>=0.4,<0.5`. Upgrade notes:
+[docs/upgrade-0.4.md](docs/upgrade-0.4.md).
+
+### ⚠️ Upgrade notes
+
+- **StateStore schema v3 (forward-only).** The first `0.4` process that opens a
+  `0.3` state DB migrates it (v1 → v3: additive tables plus one ledger index)
+  and first writes a backup next to it (`backups/<name>-v<old>-<stamp>.sqlite`).
+  A DB written by a newer version is refused, never downgraded. Rollback to
+  `0.3` = stop all runners and restore that backup.
+- **Pins move to `>=0.4,<0.5`.** Install the whole set together; `0.3.x`
+  installs will not pick this up automatically.
+- **`onager compact` may now refuse.** A dataset that a Hasta stream writes to is
+  compacted only while no runner holds its lease and no batch is
+  written-but-uncommitted (`DatasetBusyError`). Batch-only datasets are
+  unaffected.
+
 ### Added
 
+- **`de-hasta` (10th package).** Leased polling microbatch streaming from cursor
+  REST APIs and Postgres outbox CDC (`I`/`U`/`D` envelopes ordered by
+  `sequence`, applied transactionally to DuckDB/Postgres with an event-id
+  ledger). Each batch is written before its fenced checkpoint advances, so a
+  crash replays at most the uncommitted batch under the same identity —
+  100,000 events through 12 crashing runners arrive exactly once
+  (`tests/test_resume_100k.py`). Operations: `hasta checkpoint show|reset`
+  (`hasta status` alias, health block, `--max-lag-seconds`), graceful
+  `SIGINT`/`SIGTERM` stop, a runnable quickstart under `examples/hasta`.
+  Throughput ceiling ~334k events/s in-process on an M3 Pro, network
+  excluded ([benchmarks/RESULTS.md](benchmarks/RESULTS.md)).
+- **`de-ballista` (11th package).** Spark-on-Kubernetes execution of a portable
+  Gladius plan with Iceberg as the only accepted production output: one tagged
+  snapshot per logical run, retries reuse it, input versions pinned by Iceberg
+  snapshot id or Parquet listing fingerprint. `ballista plan --probe` checks the
+  live environment (spark-submit, API `/readyz`, driver RBAC, staging
+  create-only writes, Iceberg catalog, digest-pinned image). The base install
+  has no Spark/Kubernetes/Iceberg dependency (`spark-kubernetes`, `iceberg`,
+  `object-store` extras). Verified in CI by a DuckDB↔Spark golden corpus and a
+  kind + MinIO + Iceberg REST end-to-end run.
+- **Engine-neutral execution contract (`arsenal-core`).** Execution
+  models/capabilities, canonical hashing, output proofs, fenced leases, run
+  records and a stream checkpoint/batch ledger in StateStore;
+  `arsenal_core.writers` lets maintenance tools take every registered stream
+  writer's lease (`exclusive_dataset`).
+- **Gladius portable `LogicalPlan` v1** with DuckDB and Spark renderers.
+  `compile_sql()` stays as a compatibility wrapper; raw `sql` and Python UDF
+  steps remain local-only and are rejected by portable preflight. `concat()` is
+  not portable (NULL semantics differ) — use `||`.
+- **Pugio sink capability contracts** and CDC apply sinks used by Hasta.
+- **Scorpio stream health and run summaries.** `assess_stream`
+  (healthy/lagging/stalled/failing/unknown with reasons) and `summarize_runs`.
+- **Spatha built-in actions.** `command` tasks (argv, no shell, output kept out
+  of errors) and `ballista_reconcile`, so dependents start only after a
+  distributed run succeeds.
+- **`arsenal.yaml` `streams:` and `distributed:` stages** behind the
+  `de-arsenal[streaming]` / `de-arsenal[distributed]` extras, run in order
+  collect → stream → transform → distributed; re-running reconciles the same
+  Ballista run. `arsenal status` prints stream health and run state as JSON and
+  exits 1 when something needs attention. A missing extra fails before
+  anything runs, with the install command.
 - **`de-augur` (9th package, experimental).** A natural-language entry point on
   top of the Parquet lake: schema retrieval (lexical, over table/column names and
   sample values — no vector DB) → LLM (Anthropic or OpenAI over plain `httpx`, no
@@ -25,6 +88,13 @@ minor — which is why the fixes below ship as `0.3.0` rather than `0.2.3`.
   aggregate them. Ships 34 cases over a seed-fixed synthetic fixture, the
   two-week analysis protocol ([docs/10-augur-eval-protocol.md](docs/10-augur-eval-protocol.md))
   and an article template. Live API calls are not yet exercised in CI.
+
+### Fixed
+
+- Hasta source errors no longer leak credentials: HTTP failures become
+  classified `FatalError`/`RetryableError` lines with the URL's password and
+  query values masked (previously a raw `httpx` traceback with the full URL),
+  and Postgres outbox errors mask the DSN.
 
 ## [0.3.0] - 2026-08-14
 

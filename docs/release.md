@@ -1,106 +1,136 @@
-# v0.3.0 릴리스 절차
+# v0.4.0 릴리스 절차
 
-> **v0.4.0 준비 메모 (P2 Phase 3):** `release.yml`에 `de-hasta`·`de-ballista`를 등록했다.
-> 0.4.0은 11개 패키지(0.3.0의 8개 + `de-augur`, `de-hasta`, `de-ballista`)를 `>=0.4,<0.5`로
-> 묶는 minor 릴리스이며(StateStore v3 forward migration), 세 배포명은 PyPI에 처음 올라가므로
-> 계정 소유자가 Pending publisher를 먼저 등록해야 한다. 이 문서의 0.4.0용 전면 갱신은
-> Phase 4(릴리스)에서 한다.
+P2 릴리스다. 새 실행 도구 두 개(**Hasta** 스트리밍·CDC, **Ballista** 분산 변환)가
+공통 실행 계약(`arsenal-core`의 StateStore v3, fenced lease, 출력 증명) 위에 올라가고,
+실험 패키지 **Augur**가 함께 처음 배포된다. 전체 내역은 [CHANGELOG](../CHANGELOG.md),
+사용자 업그레이드 절차는 [upgrade-0.4.md](upgrade-0.4.md).
 
-실행 중인 코드를 적대적으로 돌려 찾은 결함 6종(표현식 SQL 문 주입, unit_key의
-페이지 크기 누락, Parquet 임시파일 충돌, unique 규칙 null 오탐, 릴리스 wheel 누락,
-YAML 오류 원시 노출)을 수정한 릴리스다. 전체 내역은 [CHANGELOG](../CHANGELOG.md).
-
-**패치가 아니라 minor인 이유**: `unit_key` 수정이 offset/page 파이프라인의 unit_id를
-바꾸는 파괴적 변경이다. 교차 패키지 핀이 `>=0.2,<0.3`이라 0.2.3으로 내면 기존
-사용자가 자동으로 파괴적 변경에 업그레이드된다 — 핀이 막으라고 있는 상황이다.
-0.x에서 minor가 파괴적 축이므로 0.3.0으로 올리고 핀도 `>=0.3,<0.4`로 옮긴다.
-
-**마이그레이션(사용자 고지 필요)**: offset/page 파이프라인은 첫 실행 전에
-`state_dir`와 sink 출력 디렉터리를 비워야 한다. 비우지 않으면 전량 재수집 후
-옛 unit_id 파일이 남아 중복이 된다. cursor/link와 비REST 소스는 영향 없다.
+**minor인 이유**: StateStore가 forward-only로 v3까지 마이그레이션된다(0.4가 연 DB는
+다운그레이드 경로가 없다). `onager compact`가 스트림이 쓰는 데이터셋에서 거부할 수
+있게 됐다. 0.x에서 minor가 파괴적 축이므로 교차 패키지 핀을 `>=0.4,<0.5`로 옮긴다.
+배치 파이프라인의 unit id·sink 파일명·변환 SQL은 바뀌지 않는다.
 
 ## 확정 정책
 
-- 배포 패키지 8개는 v0.3.0으로 동기화한다.
-- 교차 패키지 의존 범위는 `>=0.3,<0.4`로 이동한다.
+- 배포 패키지 11개를 v0.4.0으로 동기화한다: `arsenal-core`, `de-arsenal`, `pugio`,
+  `de-gladius`, `de-scorpio`, `de-scutum`, `de-onager`, `spatha`, **`de-augur`**,
+  **`de-hasta`**, **`de-ballista`** (굵은 셋은 PyPI 첫 게시).
+- 교차 패키지 의존 범위는 `>=0.4,<0.5`.
 - 루트 workspace 프로젝트는 배포하지 않으므로 `0.0.0`을 유지한다.
-- 변환 패키지의 PyPI 배포명은 `de-gladius`다.
-- 운영 관측 패키지의 PyPI 배포명은 `de-scorpio`다.
-- `de-scorpio`도 import 경로와 기존 모듈명 `scorpio`를 유지한다.
-- 계약·잠금 패키지의 PyPI 배포명은 `de-scutum`이다.
-- 백필 패키지의 PyPI 배포명은 `de-onager`이다.
-- Python import 경로, 소스 디렉터리, CLI 명령은 하위 호환을 위해 `gladius`를 유지한다.
-- `Falcata`는 향후 브랜딩 후보이며 v0.3.0 범위에는 포함하지 않는다.
+- import 경로·CLI 이름은 그대로다(`gladius`, `scorpio`, `scutum`, `onager`, `hasta`, `ballista`, `augur`).
+- `de-arsenal` 기본 설치는 Spark·Kubernetes·Iceberg·Kafka·obstore·psycopg를 끌어오지
+  않는다. Hasta·Ballista는 `de-arsenal[streaming]`·`de-arsenal[distributed]` extra,
+  Ballista의 클러스터 런타임은 다시 `de-ballista[spark-kubernetes,iceberg,object-store]`.
+- Hasta·Ballista는 **beta**, Augur는 **experimental**로 표기한다.
+
+## 머지 순서
+
+P2 작업은 쌓인 PR 다섯 개다. 각각 CI green 확인 후 순서대로 머지한다.
+
+1. #14 `feat/p2-hasta-ballista` → `main` (Phase 0: P2 골격, 0.4.0 버전)
+2. #15 `feat/p2-phase1-ballista` → `main` (Ballista 실클러스터 연동, Spark corpus, kind E2E)
+3. #16 `feat/p2-phase2-hasta` → `main` (Hasta 운영 명령, 10만 이벤트 재개 증명)
+4. #17 `feat/p2-phase3-integration` → `main` (Scorpio·Onager·Spatha·Arsenal 통합)
+5. 릴리스 PR (이 문서, CHANGELOG, README) → 위 전부가 합쳐진 `main`
+
+\#15와 #16은 서로 독립이다. 쌓인 PR의 base 브랜치가 먼저 머지되면 GitHub가 다음 PR의
+base를 자동으로 바꾸지 않을 수 있으니, 머지 후 base가 `main`을 가리키는지 확인한다.
 
 ## 태그 전 검증
 
 ```bash
 uv sync
-uv run python scripts/check_release_metadata.py
+uv run python scripts/check_release_metadata.py   # "11 packages at v0.4.0"
 uv run ruff check .
 uv run ruff format --check .
 uv run pyright
 uv run python scripts/gen_schema_docs.py --check
 uv run pytest
 uv build --all-packages
+ls dist/ | wc -l                                  # sdist + wheel × 11 = 22
 ```
 
-모든 패키지의 버전은 같아야 하며, `packages/gladius/pyproject.toml`의
-배포명은 `de-gladius`와 `de-scorpio`여야 한다. 빌드 결과에는 8개 패키지의 sdist와 wheel이
-포함되어야 한다.
+추가로 CI에서 확인할 것:
+
+- `ci.yml` — 3 OS × Python 3.11/3.12 green, `portable-equivalence`(Java 17 + pyspark 3.5.3) green.
+- `ballista-e2e.yml` — kind + MinIO + Iceberg REST 실행이 `main` 기준 green.
+  수동 실행: `gh workflow run ballista-e2e.yml`.
+
+릴리스 전 수동 점검 체크리스트:
+
+- [ ] `pip install de-arsenal`(새 venv)에 `pyspark`/`kubernetes`/`pyiceberg`가 없다
+      (`packages/arsenal/tests/test_base_install.py`가 workspace에서 같은 것을 확인).
+- [ ] 0.3.0으로 만든 상태 DB를 0.4로 열면 `backups/`에 백업이 생기고 `schema_version == 3`.
+- [ ] `examples/hasta` quickstart가 README대로 돈다(`tests/e2e/test_hasta_quickstart.py`).
+- [ ] CHANGELOG의 `## [0.4.0] - 2026-11-17` 날짜가 실제 릴리스 날짜와 맞는지 확인한다.
+
+## PyPI 준비 — 신규 배포명 3개 (계정 소유자)
+
+`de-augur`, `de-hasta`, `de-ballista`는 PyPI 첫 게시 대상이다. Trusted Publishing으로
+처음 만들려면 PyPI 계정의 **Publishing → Pending publishers**에 등록한다.
+동일한 저장소·workflow·환경 조합은 여러 신규 프로젝트에 동시에 등록할 수 없다.
+따라서 아래 표의 값으로 **하나씩 등록 → 해당 패키지만 수동 최초 게시 → 성공 확인**한 뒤
+다음 패키지를 등록한다. 첫 게시 후 pending publisher는 일반 publisher로 전환된다.
+
+| 필드 | 값 |
+|---|---|
+| PyPI project name | `de-augur` / `de-hasta` / `de-ballista` |
+| Owner / Repository | `KooEric` / `de-arsenal` |
+| Workflow name | `release.yml` |
+| Environment name | `pypi` |
+
+GitHub 저장소의 `pypi` environment는 0.3.0 때 만든 것을 그대로 쓴다. API token은
+저장소에 넣지 않는다.
 
 ## GitHub 릴리스
 
-태그를 만들기 전에 Actions 탭에서 `release` workflow가 보이는지 확인한다.
-`publish_package=none`인 수동 실행은 검증만 한다. PyPI 신규 프로젝트를
-Trusted Publisher로 처음 만들 때만 `publish_package`에 패키지 하나를 선택한다.
+먼저 검증만 하는 수동 실행으로 빌드가 되는지 본다.
 
 ```bash
-gh workflow list
-gh workflow run release.yml -f version=0.3.0 -f publish_package=none
+gh workflow run release.yml -f version=0.4.0 -f publish_package=none
 gh run list --workflow release.yml --limit 1
 ```
 
-수동 실행의 `verify-and-build`가 성공한 뒤에만 태그를 만든다.
+`v*` 태그 push에서 [release workflow](../.github/workflows/release.yml)가 전체 게이트와
+테스트 → `uv build --all-packages` → 산출물 보관 → PyPI Trusted Publishing 순으로 실행한다.
+신규 셋의 최초 게시를 아래 순서로 마친 뒤 태그를 push한다. 태그 실행은 11개를
+모두 게시하며, 먼저 게시된 파일은 `skip-existing`으로 건너뛴다.
+
+**태그 전 — 하나씩 부트스트랩:** `de-augur` 등록 후 첫 명령을 실행하고 성공을 확인한다.
+그 다음 `de-hasta` 등록·게시, 마지막으로 `de-ballista` 등록·게시한다. 세 명령을
+동시에 실행하지 않는다. 모두 동일한 검증된 `main` 커밋을 사용한다.
 
 ```bash
-git tag v0.3.0
-git push origin v0.3.0
+gh workflow run release.yml -f version=0.4.0 -f publish_package=de-augur
+gh workflow run release.yml -f version=0.4.0 -f publish_package=de-hasta
+gh workflow run release.yml -f version=0.4.0 -f publish_package=de-ballista
 ```
 
-`v*` 태그가 push되면 [release workflow](../.github/workflows/release.yml)가
-다음을 순서대로 수행한다.
+세 신규 패키지의 부트스트랩이 모두 성공하면 태그를 만든다.
 
-1. 전체 품질 게이트와 테스트 실행
-2. `uv build --all-packages` 실행
-3. 빌드 산출물 보관
-4. PyPI Trusted Publishing으로 게시
+```bash
+git tag v0.4.0
+git push origin v0.4.0
+```
 
-`publish` job은 tag push에서 실행된다. 단, 신규 PyPI 프로젝트를 순서대로
-만들어야 하는 최초 부트스트랩 기간에는 수동 실행에서 패키지 하나를 지정해
-그 패키지만 게시할 수 있다. 이미 게시된 파일은 `skip-existing`으로 재실행 시
-건너뛴다.
+## 게시 후 확인
 
-부트스트랩 순서(신규 배포명이 생길 때만 필요):
+```bash
+uv tool install --force "de-arsenal[streaming,distributed]==0.4.0"
+arsenal --help && hasta --help && ballista --help
+```
 
-1. PyPI 계정의 **Pending publishers**에 `arsenal-core`를 등록한다.
-2. `gh workflow run release.yml -f version=0.3.0 -f publish_package=arsenal-core`를 실행한다.
-3. `arsenal-core`가 생성되면 PyPI의 동일 publisher를 `de-arsenal`에 등록하고,
-   같은 방식으로 나머지 패키지를 하나씩 게시한다.
-4. 8개 패키지가 모두 PyPI에 존재하면 `publish_package=none`으로 검증한 뒤
-   `v0.3.0` 태그를 push한다. 태그 실행은 이미 존재하는 파일을 건너뛰고
-   누락된 파일만 보완한다.
-
-게시 전 GitHub 저장소의 `pypi` environment와 PyPI Trusted Publisher 설정이
-필요하다. API token을 저장소에 넣지 않는다.
-
-## 이름 변경 원칙
-
-`de-gladius`는 배포명만 바꾼 것이므로 기존 사용자는 `import gladius`와
-`gladius` 명령을 계속 사용할 수 있다. 향후 `Falcata`로 import 이름까지
-바꾸려면 별도 마이그레이션 릴리스와 deprecation 기간을 둔다.
+- PyPI 11개 프로젝트 페이지가 0.4.0을 보이고, README가 렌더된다.
+- GitHub Release 노트에 CHANGELOG 0.4.0 항목과 upgrade-0.4.md 링크를 붙인다.
 
 ## 실패 시 처리
 
-PyPI에 업로드된 버전은 같은 번호로 덮어쓰지 않는다. 게시 후 오류가 발견되면
-수정된 패키지 전체를 다음 패치 버전으로 올려 다시 릴리스한다.
+PyPI에 업로드된 버전은 같은 번호로 덮어쓰지 않는다. 일부 패키지만 게시된 상태에서
+결함이 발견되면, 나머지를 같은 0.4.0으로 마저 게시하지 말고 수정 후 **11개 전체를
+0.4.1로** 다시 릴리스한다(핀이 `>=0.4,<0.5`라 0.4.1이 자동으로 선택된다). 0.4.0
+자체는 PyPI에서 yank해 새 설치가 고르지 않게 한다.
+
+## 이름 원칙
+
+배포명만 `de-` 접두어를 쓰고 import·CLI 이름은 짧은 이름을 유지한다. `Falcata` 등
+import 이름 변경은 별도 마이그레이션 릴리스와 deprecation 기간을 둔다.

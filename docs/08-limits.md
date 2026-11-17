@@ -42,8 +42,8 @@ Arsenal(Pugio/Gladius)은 분산 엔진을 만들지 않는다([설계 원칙 1]
 
 | 항목 | 우선순위 | 왜 지금은 아닌가 |
 |---|---|---|
-| 실시간 스트리밍 (Hasta) | P2 | Pugio/Gladius는 배치. Hasta는 폴링 마이크로배치(초~분)부터 시작하고, 밀리초급 실시간은 전용 인프라 없이는 P2 이후에도 불가함을 미리 밝혀둔다 ([07-cost-efficiency.md](07-cost-efficiency.md) "줄여주지 못하는 비용"). |
-| 분산 실행 (Ballista) | P2 | 단일 노드 벡터화 밖(TB급·고동시성)은 처음부터 지원 범위 밖 — Executor 인터페이스로 백엔드 교체는 P2 계획이며, 그 인프라 비용은 사용자가 선택적으로 진다. |
+| 밀리초급 실시간 스트리밍 | 범위 밖 | Hasta(0.4)는 폴링 마이크로배치(초~분)다. Kafka·binlog/WAL 등 log 기반 CDC, Flink식 상태 연산·윈도 조인, exactly-once 외부 전송은 하지 않는다 — 아래 [Hasta 절](#hasta-스트리밍의-보장과-한계-04) 참고. 밀리초급은 전용 인프라 없이는 불가하다([07-cost-efficiency.md](07-cost-efficiency.md) "줄여주지 못하는 비용"). |
+| 범용 분산 실행 | 범위 밖 | Ballista(0.4)는 portable Gladius 플랜 하나를 Spark on Kubernetes에서 실행하고 Iceberg로만 커밋한다. raw Parquet 원격 출력의 원자성, 임의 Spark 코드·raw SQL·Python UDF의 분산 실행, 클러스터 프로비저닝은 하지 않으며 그 인프라 비용은 사용자가 진다 — 아래 [Ballista 절](#ballista-분산-실행의-보장과-한계-04) 참고. |
 | 스키마 드리프트 감지+정책 | P1 | `schema_drift`로 `allow`/`warn`/`block`을 선택한다. `warn`은 경고 후 최신 스냅샷을 기록하고, `block`은 해당 unit을 failed 처리해 적재를 막는다. 현재는 첫 non-empty batch의 필드명·타입·nullable 비교만 지원한다. |
 | 증분 변환 (`incremental: by_unit/by_key`) | P1 | 입력 파일 시그니처와 변환 스펙 해시를 SQLite에 기록한다. 신규 파일은 `by_unit`에서 append하고 `by_key`에서는 신규 결과가 기존 키를 덮어쓴다. 기존 파일 변경·삭제 또는 스펙 변경은 안전성을 위해 전체 재계산한다. `by_key`는 소스에서 삭제된 행을 추론하지 않는다. |
 | Python UDF step | P1 | `steps`의 `python`, `args`, `output`으로 `module:function`을 등록하고 SQL 호출로 컴파일한다. 실행 환경에는 `de-gladius[python]`(numpy)가 필요하며, 함수의 부작용·분산 실행·벡터화는 보장하지 않는다. |
@@ -96,6 +96,23 @@ Scutum 설계 원칙("끝점 능력별 멱등 전략을 명시", [roadmap.md](ro
   DSN 마스킹만 검증하고 Fatal/Retryable 분류는 검증하지 않는다). 재시도
   백오프가 소진될 때까지 불필요하게 재시도된다는 뜻이며, 결과가 틀리게
   나오지는 않는다.
+
+## Hasta 스트리밍의 보장과 한계 (0.4)
+
+| 항목 | 보장하는 것 | 보장하지 않는 것 |
+|---|---|---|
+| 전달 | batch를 sink에 먼저 쓰고 lease로 fence된 체크포인트를 그다음에 전진시킨다. 어느 시점에 죽어도 커밋 안 된 batch 하나만 **같은 identity**로 재생되고 sink가 멱등하게 쓴다 — 12번 죽는 러너로 10만 이벤트가 정확히 한 번 도착(`packages/hasta/tests/test_resume_100k.py`) | 소스가 같은 cursor에 다른 이벤트를 돌려주는 경우. 이벤트 id·cursor가 안정적이어야 한다 |
+| CDC | Postgres outbox의 `I`/`U`/`D` envelope를 `sequence` 순으로 DuckDB/Postgres에 트랜잭션으로 적용, event-id ledger로 재생 안전 | Kafka, binlog/WAL 등 log 기반 CDC. table cursor 선언은 hard delete를 볼 수 없어 CDC로 취급하지 않는다 |
+| 동시성 | 스트림당 러너 하나(SQLite lease). Onager compaction은 lease를 잡고서만 실행되고 반쯤 커밋된 batch가 있으면 거부한다 | 여러 호스트에 걸친 lease, 데몬 감독·자동 재시작 |
+| 종료·재처리 | `SIGINT`/`SIGTERM`은 진행 중 batch를 커밋하고 멈춘다. `checkpoint reset --confirm`은 새 generation으로 재생하고 ledger를 감사용으로 남긴다 | Parquet sink는 append라 reset 재생분이 기존 파일 옆에 쌓인다 — 원치 않으면 출력부터 비운다 |
+| 끝없는 스트림 | — | cursor API가 null cursor를 돌려주면 스트림이 영구 종료(`_hasta_exhausted`)된다. 계속 받으려면 빈 페이지에서 마지막 cursor를 그대로 돌려줘야 한다 |
+| 처리량 | 같은 머신 회귀 기준 ~334k events/s(in-process, 네트워크 제외, [`benchmarks/RESULTS.md`](../benchmarks/RESULTS.md)) | 실제 REST 소스 처리량 — 네트워크 지연이 지배한다 |
+
+**자격증명:** REST `headers`는 YAML에 그대로 적힌 값을 쓴다(환경변수 치환 없음).
+오류 메시지에는 URL의 비밀번호·쿼리 값이 마스킹되고 header 값은 나오지 않지만,
+YAML 파일 자체는 비밀로 취급해야 한다. URL 쿼리에 토큰을 넣으면 소스 식별자
+(`rest_poll:<url>`)로 상태 DB에 저장되므로 header로 보내라. Outbox는 `dsn_env`로
+DSN을 환경변수에서만 읽고, 오류 메시지에서 DSN을 마스킹한다.
 
 ## Ballista 분산 실행의 보장과 한계 (0.4)
 

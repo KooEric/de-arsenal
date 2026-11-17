@@ -163,12 +163,15 @@ StateStore v2 마이그레이션은 breaking이므로 **P2는 `0.4.0`이어야 �
 
 설계문서 §12 체크리스트를 그대로 사용한다.
 
-- [ ] README·README.ko의 Hasta/Ballista 상태를 `📋 planned` → 실제 상태로 갱신 (**DoD 통과 후에만** — §P2-0A 규칙 3)
-- [ ] `docs/08-limits.md`에 구현한 것/안 한 것 정직하게 반영 (Kafka·log CDC·Flink·remote raw Parquet 보장 없음)
-- [ ] CHANGELOG `0.4.0` 항목 + 0.3 → 0.4 upgrade guide (StateStore 마이그레이션 절차, rollback 경계)
-- [ ] base install이 Spark/K8s/Iceberg/Kafka 의존성을 끌어오지 않음을 테스트로 확인
-- [ ] 모든 명령이 secret·DSN·token을 로그/오류에 출력하지 않음을 확인
-- [ ] 11개 패키지 README·`py.typed`·license·PyPI metadata 정합
+- [x] README·README.ko의 Hasta/Ballista 상태를 `📋 planned` → 실제 상태로 갱신 (**DoD 통과 후에만** — §P2-0A 규칙 3)
+- [x] `docs/08-limits.md`에 구현한 것/안 한 것 정직하게 반영 (Kafka·log CDC·Flink·remote raw Parquet 보장 없음)
+- [x] CHANGELOG `0.4.0` 항목 + 0.3 → 0.4 upgrade guide (StateStore 마이그레이션 절차, rollback 경계)
+- [x] base install이 Spark/K8s/Iceberg/Kafka 의존성을 끌어오지 않음을 테스트로 확인
+- [x] 모든 명령이 secret·DSN·token을 로그/오류에 출력하지 않음을 확인
+- [x] 11개 패키지 README·`py.typed`·license·PyPI metadata 정합
+- [ ] (계정 소유자) PyPI Pending publisher 3개 등록 → PR 머지 → `v0.4.0` 태그 — 절차: [release.md](../release.md)
+
+> 진행 (2026-11-17): 문서·검증 항목 완료(`feat/p2-phase4-release`). 시크릿 점검에서 Hasta REST 오류의 URL 노출과 outbox DSN 에코를 발견해 마스킹으로 고쳤다(`hasta/redact.py`). 남은 것은 PyPI 등록과 머지·태그뿐이다.
 
 ---
 
