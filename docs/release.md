@@ -1,23 +1,31 @@
-# v0.5.1 패치 릴리스 절차
+# v0.5.2 패치 릴리스 절차
 
-데이터 정확성 수정 하나를 담은 패치다. `arsenal.yaml`의 `distributed:` 단계에서
-`input_version: auto`가 run id를 리터럴 `"auto"`로 만들어, 입력이 바뀌어도 이미 성공한
-첫 Ballista run만 reconcile하고 새 데이터를 처리하지 않던 문제를 고친다(#20).
-내역은 [CHANGELOG](../CHANGELOG.md#051---2026-11-17).
+정확성 수정 두 개와 기능 보완을 담은 패치다(#21). 내역은
+[CHANGELOG](../CHANGELOG.md#052---tbd).
 
-**patch인 이유**: 공개 API·스펙 필드·상태 DB가 그대로이고 동작 변경은 버그 수정뿐이다.
-12개 패키지를 0.5.1로 함께 올리고 교차 핀은 `>=0.5,<0.6`을 유지한다 — 0.5.0 사용자는
-업그레이드만 하면 받는다. 신규 PyPI 프로젝트가 없으므로 pending publisher 등록·수동
-부트스트랩도 없다.
+- **수정:** 실행 중인 Pugio의 Parquet 출력을 Onager가 compact할 수 있던 문제. Hasta API
+  토큰을 교체하면 커밋 전 batch가 새 identity로 두 번 쓰이던 문제.
+- **추가:** Hasta `cursor.on_null: last_event_id`(연속 폴링), Aquila 다중 writer 경고·삭제된
+  스펙 정리·원격 스키마(`--remote`, `--iceberg-uri`), `docs/adr/`, CI Actions의 Node 24 전환.
+
+**patch인 이유**: 스펙 필드는 기본값이 기존 동작인 추가뿐이고, 교차 핀 `>=0.5,<0.6`을
+유지한다. 상태 변경은 Aquila 전용 파일(`aquila.db` v1 → v2, 그 자리에서 마이그레이션)뿐이고
+파이프라인 상태 DB는 그대로다. 신규 PyPI 프로젝트가 없다.
+
+**사용자 고지 (CHANGELOG Upgrade notes와 같음):**
+- `headers`가 있는 Hasta 스트림은 업그레이드 직후 revision이 한 번 바뀐다. 업그레이드 전에
+  진행 중 batch를 커밋해 둔다(`hasta checkpoint show`의 `planned`가 0).
+- Pugio 실행은 같은 파이프라인의 다른 실행이나 그 출력의 compaction이 lease를 잡고 있으면
+  시작을 거부한다. 강제 종료된 실행의 lease는 60초 안에 풀린다.
 
 ## 절차
 
-1. #20 `fix/distributed-auto-input`(수정 + 0.5.1 버전·문서) CI green 확인 후 `main`에 머지
+1. #21 CI green → `main` 머지(auto-merge)
 2. `main`에서 검증
 
    ```bash
    uv sync
-   uv run python scripts/check_release_metadata.py   # "12 packages at v0.5.1"
+   uv run python scripts/check_release_metadata.py   # "12 packages at v0.5.2"
    uv run ruff check . && uv run ruff format --check .
    uv run pyright
    uv run python scripts/gen_schema_docs.py --check
@@ -25,32 +33,32 @@
    uv build --all-packages && ls dist/ | wc -l       # 24
    ```
 
-3. CHANGELOG의 `## [0.5.1] - TBD`를 실제 날짜로 바꾼다.
+3. CHANGELOG의 `## [0.5.2] - TBD`를 실제 날짜로 바꾼다.
 4. 검증 전용 수동 실행 후 태그
 
    ```bash
-   gh workflow run release.yml -f version=0.5.1 -f publish_package=none
-   git tag v0.5.1 && git push origin v0.5.1
+   gh workflow run release.yml -f version=0.5.2 -f publish_package=none
+   git tag v0.5.2 && git push origin v0.5.2
    ```
 
-5. 게시 확인 — 12개 모두 `200`, 그리고 새 venv 설치
+5. 게시 확인 — 12개 모두 `200`, 새 venv 설치
 
    ```bash
    for p in arsenal-core de-arsenal pugio de-gladius de-scorpio de-scutum de-onager spatha \
             de-augur de-hasta de-ballista de-aquila; do
-     curl -s -o /dev/null -w "$p %{http_code}\n" "https://pypi.org/pypi/$p/0.5.1/json"
+     curl -s -o /dev/null -w "$p %{http_code}\n" "https://pypi.org/pypi/$p/0.5.2/json"
    done
-   uv tool install --force "de-arsenal[streaming,distributed,catalog]==0.5.1"
+   uv tool install --force "de-arsenal[streaming,distributed,catalog]==0.5.2"
    ```
 
-6. GitHub Release `v0.5.1`을 만들고 CHANGELOG 0.5.1 항목을 붙인다. 아직 없는
-   `v0.4.0`·`v0.5.0` Release 페이지도 이때 함께 만든다(태그는 이미 있다).
+6. GitHub Release `v0.5.2`
 
    ```bash
-   gh release create v0.5.1 --title v0.5.1 --notes-file <(sed -n '/^## \[0.5.1\]/,/^## \[0.5.0\]/p' CHANGELOG.md | sed '$d')
+   gh release create v0.5.2 --title v0.5.2 --notes-file <(sed -n '/^## \[0.5.2\]/,/^## \[0.5.1\]/p' CHANGELOG.md | sed '$d')
    ```
 
-실패 시 처리는 아래 0.5.0 절차와 같다(같은 번호 재게시 불가 → 0.5.2).
+이번 릴리스는 setup-uv v10(commit pin)으로 도는 첫 release workflow다. 4번의 검증 전용
+실행이 성공하는지 먼저 확인한다. 실패 시 처리는 아래 0.5.0 절차와 같다(재게시 불가 → 0.5.3).
 
 ---
 

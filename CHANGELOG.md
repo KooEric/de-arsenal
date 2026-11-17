@@ -12,6 +12,14 @@ minor.
 
 ## [Unreleased]
 
+## [0.5.2] - TBD
+
+Patch release: two correctness fixes (a Pugio run racing Onager compaction, a
+Hasta token rotation duplicating a batch), continuous Hasta polling, and the
+Aquila follow-ups. All 12 packages move to `0.5.2`; internal pins stay
+`>=0.5,<0.6`. The only state change is `aquila.db` v1 → v2, migrated in place
+on first open; pipeline state DBs are untouched.
+
 ### ⚠️ Upgrade notes
 
 - **Hasta streams with `headers` get a new revision once.** Header values (tokens)
