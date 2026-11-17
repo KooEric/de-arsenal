@@ -11,6 +11,12 @@ from scorpio import assess_freshness
 
 from aquila.lineage import find_cycles
 from aquila.model import ScanResult, SourceFile
+from aquila.remote import (
+    REMOTE_PARQUET_SCHEMES,
+    TableLoader,
+    iceberg_schemas,
+    remote_parquet_schema,
+)
 from aquila.scanners import (
     classify,
     distributed_transforms,
@@ -26,10 +32,16 @@ from arsenal_core.schema import compare_schema_snapshots
 DEFAULT_DB = Path(".arsenal") / "aquila.db"
 
 
-def collect(paths: list[Path], *, root: Path) -> ScanResult:
+def collect(
+    paths: list[Path],
+    *,
+    root: Path,
+    remote: bool = False,
+    iceberg: TableLoader | None = None,
+) -> ScanResult:
     """Read every spec under ``paths``; nothing is written anywhere."""
 
-    result = ScanResult()
+    result = ScanResult(roots=[str(p.resolve()) for p in paths if p.is_dir()])
     files = list(iter_spec_files(paths))
     parsed = [(f, load_yaml(f)) for f in files]
     ballista: set[Path] = set()
@@ -48,13 +60,26 @@ def collect(paths: list[Path], *, root: Path) -> ScanResult:
         scan_spec(path, raw, kind, root, result)
         result.sources.append(SourceFile(str(path), kind, file_hash(path)))
     for uri in sorted(result.datasets):
-        if result.datasets[uri].format == "parquet":
+        fmt = result.datasets[uri].format
+        scheme = uri.split("://", 1)[0]
+        if fmt == "parquet" and scheme == "file":
             parquet_schema(uri, result)
+        elif fmt == "parquet" and remote and scheme in REMOTE_PARQUET_SCHEMES:
+            remote_parquet_schema(uri, result)
+        elif fmt == "iceberg" and iceberg is not None:
+            iceberg_schemas(uri, result, load_table=iceberg)
     return result
 
 
-def scan(store: CatalogStore, paths: list[Path], *, root: Path) -> ScanReport:
-    return store.apply(collect(paths, root=root))
+def scan(
+    store: CatalogStore,
+    paths: list[Path],
+    *,
+    root: Path,
+    remote: bool = False,
+    iceberg: TableLoader | None = None,
+) -> ScanReport:
+    return store.apply(collect(paths, root=root, remote=remote, iceberg=iceberg))
 
 
 def schema_fields(snapshot: str) -> list[dict[str, Any]]:
@@ -105,6 +130,20 @@ def deprecation_warnings(store: CatalogStore) -> list[str]:
     return warnings
 
 
+def multiple_writer_warnings(store: CatalogStore, ident: str | None = None) -> list[str]:
+    """Datasets that more than one spec writes — usually a copy-paste mistake."""
+
+    writers: dict[str, set[str]] = {}
+    for edge in store.edges():
+        writers.setdefault(edge.downstream_id, set()).add(edge.via)
+    names = {d.dataset_id: d.name for d in store.datasets()}
+    return [
+        f"{names.get(target, target)} is written by {len(vias)} specs: {', '.join(sorted(vias))}"
+        for target, vias in sorted(writers.items(), key=lambda item: names.get(item[0], item[0]))
+        if len(vias) > 1 and (ident is None or target == ident)
+    ]
+
+
 def cycle_names(store: CatalogStore) -> list[list[str]]:
     names = {d.dataset_id: d.name for d in store.datasets()}
     return [[names.get(n, n) for n in cycle] for cycle in find_cycles(store.edges())]
@@ -151,7 +190,8 @@ def show(
             f"reads deprecated {d.name}"
             + (f" ({d.deprecation_reason})" if d.deprecation_reason else "")
             for d in deprecated_upstreams(store, dataset.dataset_id)
-        ],
+        ]
+        + multiple_writer_warnings(store, dataset.dataset_id),
         "freshness": freshness,
     }
 

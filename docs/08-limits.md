@@ -105,12 +105,13 @@ Scutum 설계 원칙("끝점 능력별 멱등 전략을 명시", [roadmap.md](ro
 | CDC | Postgres outbox의 `I`/`U`/`D` envelope를 `sequence` 순으로 DuckDB/Postgres에 트랜잭션으로 적용, event-id ledger로 재생 안전 | Kafka, binlog/WAL 등 log 기반 CDC. table cursor 선언은 hard delete를 볼 수 없어 CDC로 취급하지 않는다 |
 | 동시성 | 스트림당 러너 하나(SQLite lease). Onager compaction은 lease를 잡고서만 실행되고 반쯤 커밋된 batch가 있으면 거부한다 | 여러 호스트에 걸친 lease, 데몬 감독·자동 재시작 |
 | 종료·재처리 | `SIGINT`/`SIGTERM`은 진행 중 batch를 커밋하고 멈춘다. `checkpoint reset --confirm`은 새 generation으로 재생하고 ledger를 감사용으로 남긴다 | Parquet sink는 append라 reset 재생분이 기존 파일 옆에 쌓인다 — 원치 않으면 출력부터 비운다 |
-| 끝없는 스트림 | — | cursor API가 null cursor를 돌려주면 스트림이 영구 종료(`_hasta_exhausted`)된다. 계속 받으려면 빈 페이지에서 마지막 cursor를 그대로 돌려줘야 한다 |
+| 끝없는 스트림 | `cursor.on_null: last_event_id`면 null cursor를 "따라잡음"으로 보고 마지막으로 커밋한 이벤트 id 다음부터 계속 폴링한다. 빈 폴링은 같은 ledger 행 하나로 합쳐진다 | 기본값(`end`)에서는 null cursor가 스트림을 영구 종료한다(`_hasta_exhausted`). `last_event_id`는 API가 이벤트 id를 cursor로 받아야 동작한다 |
 | 처리량 | 같은 머신 회귀 기준 ~334k events/s(in-process, 네트워크 제외, [`benchmarks/RESULTS.md`](../benchmarks/RESULTS.md)) | 실제 REST 소스 처리량 — 네트워크 지연이 지배한다 |
 
-**자격증명:** REST `headers`는 YAML에 그대로 적힌 값을 쓴다(환경변수 치환 없음).
-오류 메시지에는 URL의 비밀번호·쿼리 값이 마스킹되고 header 값은 나오지 않지만,
-YAML 파일 자체는 비밀로 취급해야 한다. URL 쿼리에 토큰을 넣으면 소스 식별자
+**자격증명:** REST `headers`의 토큰은 `${ENV_VAR}`로 넣는다 — 스펙을 읽을 때 치환되므로
+YAML에 비밀을 둘 필요가 없다. header *값*은 스트림 revision에 들어가지 않아 토큰을
+교체해도 batch identity가 바뀌지 않는다(커밋 전 batch가 다른 identity로 두 번 쓰이지 않는다).
+오류 메시지에는 URL의 비밀번호·쿼리 값이 마스킹되고 header 값은 나오지 않는다. URL 쿼리에 토큰을 넣으면 소스 식별자
 (`rest_poll:<url>`)로 상태 DB에 저장되므로 header로 보내라. Outbox는 `dsn_env`로
 DSN을 환경변수에서만 읽고, 오류 메시지에서 DSN을 마스킹한다.
 
@@ -148,10 +149,10 @@ preflight에서 거부된다.
 
 | 항목 | 보장하는 것 | 보장하지 않는 것 |
 |---|---|---|
-| 멱등 | 같은 입력 재스캔 시 데이터셋·스키마 버전·간선 행 수가 늘지 않는다. 스펙이 입력을 바꾸면 그 스펙의 옛 간선은 지운다 | 지워진 스펙 파일의 간선 — 스캔 대상에서 사라진 스펙의 간선은 남는다 |
+| 멱등 | 같은 입력 재스캔 시 데이터셋·스키마 버전·간선 행 수가 늘지 않는다. 스펙이 입력을 바꾸면 그 스펙의 옛 간선을, 스캔한 디렉터리에서 스펙 파일이 지워지면 그 스펙의 간선·계약을 지운다 | 스캔 범위 밖으로 옮긴 스펙 — 파일 하나만 스캔하면 다른 스펙은 지우지 않는다. 데이터셋 행과 스키마 이력은 남긴다 |
 | 정체성 | 같은 위치는 하나의 데이터셋(스킴 소문자, 끝 `/`·glob 제거, 쿼리·자격증명 제거) | 심볼릭 링크·마운트가 다른 두 경로, 대소문자를 무시하는 파일시스템의 같은 경로 |
-| lineage | 스펙 선언 기반의 데이터셋 단위 간선, 순환 감지 | 실제 읽기 관측(스펙에 없는 경로를 읽는 SQL), 컬럼 단위 lineage |
-| 스키마 이력 | Pugio가 기록한 모든 스냅샷 + 로컬 Parquet footer(이름순 마지막 파일). 버전 키는 schema hash | 원격(S3/GCS)·Iceberg·DuckDB·Postgres 데이터셋의 스키마. A→B→A로 돌아온 스키마는 한 버전으로 합쳐진다 |
+| lineage | 스펙 선언 기반의 데이터셋 단위 간선, 순환 감지, 같은 위치에 쓰는 스펙이 둘 이상이면 경고 | 실제 읽기 관측(스펙에 없는 경로를 읽는 SQL), 컬럼 단위 lineage |
+| 스키마 이력 | Pugio가 기록한 모든 스냅샷 + 로컬 Parquet footer(이름순 마지막 파일). `--remote`면 원격 Parquet footer, `--iceberg-uri`면 Iceberg 테이블이 거쳐 온 모든 스키마(처음 쓴 snapshot 시각). 버전 키는 schema hash | DuckDB·Postgres 데이터셋의 스키마. 원격 Parquet은 마지막 파일 footer만 본다. A→B→A로 돌아온 스키마는 한 버전으로 합쳐진다 |
 | 계약·거버넌스 | 계약 해시 변경 감지, 최신 스키마와의 불일치 보고, 태그·deprecate·FTS 검색 | 강제 — 접근 제어는 서버 없이는 불가, 계약 강제는 Scutum의 몫 |
 | 다른 도구에 대한 영향 | 상태 DB는 읽기 전용으로 열어 마이그레이션·백업·잠금을 일으키지 않는다 | 스캔과 동시에 쓰이는 WAL DB의 마지막 커밋 반영(다음 스캔에서 반영) |
 

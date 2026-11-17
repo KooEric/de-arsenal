@@ -18,7 +18,7 @@ from typing import Any
 from aquila.model import ScanResult, schema_hash
 from aquila.uri import dataset_id, default_name
 
-SCHEMA_VERSION = 1
+SCHEMA_VERSION = 2
 
 _V1 = (
     """CREATE TABLE datasets (
@@ -46,6 +46,9 @@ _V1 = (
         source_path TEXT PRIMARY KEY, kind TEXT NOT NULL, content_hash TEXT NOT NULL,
         scanned_at TEXT NOT NULL)""",
 )
+# v2: remember which spec file declared each edge, so a deleted spec's edges go too.
+_V2 = ("ALTER TABLE lineage_edges ADD COLUMN spec_path TEXT",)
+
 _FTS = (
     "CREATE VIRTUAL TABLE datasets_fts USING fts5("
     "dataset_id UNINDEXED, name, description, tags, columns, tokenize='unicode61')"
@@ -99,6 +102,7 @@ class ScanReport:
     new_schema_versions: list[str] = field(default_factory=lambda: [])
     contract_changes: list[str] = field(default_factory=lambda: [])
     removed_edges: int = 0
+    removed_contracts: int = 0
     skipped: list[tuple[str, str]] = field(default_factory=lambda: [])
 
 
@@ -124,15 +128,19 @@ class CatalogStore:
             raise RuntimeError(
                 f"aquila.db version {version} is newer than this Aquila ({SCHEMA_VERSION})"
             )
-        if version == SCHEMA_VERSION:
-            return
-        with self._conn:
-            for statement in _V1:
-                self._conn.execute(statement)
-            # SQLite built without FTS5: search falls back to LIKE
-            with contextlib.suppress(sqlite3.OperationalError):
-                self._conn.execute(_FTS)
-            self._conn.execute(f"PRAGMA user_version={SCHEMA_VERSION}")
+        if version < 1:
+            with self._conn:
+                for statement in _V1:
+                    self._conn.execute(statement)
+                # SQLite built without FTS5: search falls back to LIKE
+                with contextlib.suppress(sqlite3.OperationalError):
+                    self._conn.execute(_FTS)
+                self._conn.execute("PRAGMA user_version=1")
+        if version < 2:
+            with self._conn:
+                for statement in _V2:
+                    self._conn.execute(statement)
+                self._conn.execute("PRAGMA user_version=2")
 
     def close(self) -> None:
         self._conn.close()
@@ -153,11 +161,17 @@ class CatalogStore:
                 key = (dataset_id(edge.upstream), dataset_id(edge.downstream), edge.via)
                 observed.add(key)
                 self._conn.execute(
-                    "INSERT INTO lineage_edges VALUES (?, ?, ?, ?, ?) ON CONFLICT DO UPDATE SET "
-                    "revision=excluded.revision, observed_at=excluded.observed_at",
-                    (*key, edge.revision, now),
+                    "INSERT INTO lineage_edges "
+                    "(upstream_id, downstream_id, via, revision, observed_at, spec_path) "
+                    "VALUES (?, ?, ?, ?, ?, ?) ON CONFLICT DO UPDATE SET "
+                    "revision=excluded.revision, observed_at=excluded.observed_at, "
+                    "spec_path=excluded.spec_path",
+                    (*key, edge.revision, now, edge.spec_path or None),
                 )
             report.removed_edges = self._drop_stale_edges(scan.vias, observed)
+            removed_edges, removed_contracts = self._drop_deleted_specs(scan.roots, scan.spec_paths)
+            report.removed_edges += removed_edges
+            report.removed_contracts = removed_contracts
             for schema in scan.schemas:
                 if self._upsert_schema(
                     dataset_id(schema.uri), schema.snapshot, schema.origin, schema.observed_at
@@ -234,6 +248,38 @@ class CatalogStore:
                     )
                     removed += 1
         return removed
+
+    def _drop_deleted_specs(self, roots: list[str], seen: set[str]) -> tuple[int, int]:
+        """Edges and contracts declared by spec files that are gone from a scanned root."""
+
+        def gone(spec: str | None) -> bool:
+            if not spec or spec in seen:
+                return False
+            return any(Path(spec).is_relative_to(root) for root in roots)
+
+        edges = [
+            (up, down, via)
+            for up, down, via, spec in self._conn.execute(
+                "SELECT upstream_id, downstream_id, via, spec_path FROM lineage_edges"
+            ).fetchall()
+            if gone(spec)
+        ]
+        for edge in edges:
+            self._conn.execute(
+                "DELETE FROM lineage_edges WHERE upstream_id=? AND downstream_id=? AND via=?", edge
+            )
+        contracts = [
+            (ident, path)
+            for ident, path in self._conn.execute(
+                "SELECT dataset_id, contract_path FROM contracts"
+            ).fetchall()
+            if gone(path)
+        ]
+        for contract in contracts:
+            self._conn.execute(
+                "DELETE FROM contracts WHERE dataset_id=? AND contract_path=?", contract
+            )
+        return len(edges), len(contracts)
 
     def _upsert_schema(self, ident: str, snapshot: str, origin: str, seen: str) -> bool:
         digest = schema_hash(snapshot)

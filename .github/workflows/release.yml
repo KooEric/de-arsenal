@@ -9,7 +9,7 @@ on:
       version:
         description: "Package version to verify or publish"
         required: true
-        default: "0.5.1"
+        default: "0.5.2"
         type: string
       publish_package:
         description: "Manual PyPI bootstrap package (none = verify only)"
@@ -38,8 +38,8 @@ jobs:
     permissions:
       contents: read
     steps:
-      - uses: actions/checkout@v4
-      - uses: astral-sh/setup-uv@v3
+      - uses: actions/checkout@v7
+      - uses: astral-sh/setup-uv@68559e99cc807c1eb7e9238fd43a15bba460eec2 # v10.3.3 (no moving major tag)
       - run: uv python install 3.11
       - run: uv sync
       - name: Validate release metadata
@@ -57,7 +57,7 @@ jobs:
       - run: uv run python scripts/gen_schema_docs.py --check
       - run: uv run pytest
       - run: uv build --all-packages
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v7
         with:
           name: distributions
           path: dist/
@@ -74,7 +74,7 @@ jobs:
       id-token: write
       attestations: write
     steps:
-      - uses: actions/download-artifact@v4
+      - uses: actions/download-artifact@v8
         with:
           name: distributions
           path: dist/

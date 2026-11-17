@@ -1,8 +1,8 @@
 """Who writes into a dataset, and how maintenance takes it over safely.
 
-A long-running writer (a Hasta stream) registers itself next to the dataset it
-writes. Maintenance that rewrites the directory (Onager compaction) must then
-take each writer's *stream lease* for the duration:
+A writer (a Hasta stream, or a Pugio run with a local Parquet sink) registers
+itself next to the dataset it writes. Maintenance that rewrites the directory
+(Onager compaction) must then take each writer's lease for the duration:
 
 * a live runner holds the lease → maintenance refuses instead of racing it
   (a batch landing mid-swap would be deleted with the backup);
@@ -86,8 +86,8 @@ def exclusive_dataset(
                 holder = store.lease(writer.resource)
                 who = holder.owner_id if holder is not None else "another process"
                 raise DatasetBusyError(
-                    f"{dataset} is the live sink of stream {writer.pipeline}/"
-                    f"{writer.stream_name} (lease held by {who}); stop the stream first"
+                    f"{dataset} is being written by {writer.resource} "
+                    f"(lease held by {who}); wait for it or stop it first"
                 )
             stack.callback(store.release_lease, lease)
             pending = store.stream_batch_summary(writer.pipeline, writer.stream_name).by_status

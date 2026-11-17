@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from pathlib import Path
-from typing import Annotated, Any, Literal
+from typing import Annotated, Any, Literal, cast
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
@@ -19,6 +19,14 @@ class RestPollCursorSpec(_Frozen):
     request_param: str
     response_path: str
     event_id_path: str
+    on_null: Literal["end", "last_event_id"] = Field(
+        default="end",
+        description=(
+            "What a null/empty next cursor means. `end`: the stream is finished for good. "
+            "`last_event_id`: caught up — keep polling, asking for events after the last "
+            "event id seen (the API must accept that id as the cursor)."
+        ),
+    )
 
 
 class RestPollSourceSpec(_Frozen):
@@ -190,4 +198,16 @@ class StreamSpec(_Frozen):
         return self
 
     def revision_payload(self) -> dict[str, Any]:
-        return self.model_dump(mode="json", by_alias=True)
+        """What identifies this stream's output — never credentials.
+
+        Header *values* carry tokens that get rotated; keying batch identities on
+        them would give an uncommitted batch a new identity after a rotation and
+        write it twice. Only header names are part of the revision.
+        """
+
+        payload = self.model_dump(mode="json", by_alias=True)
+        source = cast(dict[str, Any], payload["source"])
+        headers: object = source.get("headers")
+        if isinstance(headers, dict):
+            source["headers"] = sorted(cast(dict[str, Any], headers))
+        return payload

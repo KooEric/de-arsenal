@@ -117,13 +117,15 @@ def scan_spec(path: Path, raw: dict[str, Any], kind: str, root: Path, result: Sc
     name = str(raw.get("name") or path.stem)
     via = f"{kind}:{name}"
     revision = canonical_hash(raw)
+    spec_path = str(path.resolve())
     result.vias.add(via)
+    result.spec_paths.add(spec_path)
     if kind == "gladius" or kind == "ballista":
         upstream = normalize_uri(raw["input"], root=root)
         downstream = normalize_uri(raw["output"], root=root)
         result.dataset(upstream, _format_of(upstream))
         result.dataset(downstream, _format_of(downstream), producer=via)
-        result.edges.append(EdgeObservation(upstream, downstream, via, revision))
+        result.edges.append(EdgeObservation(upstream, downstream, via, revision, spec_path))
         return
     sink = sink_uri(cast(dict[str, Any], raw["sink"]), root)
     if sink is None:
@@ -133,11 +135,11 @@ def scan_spec(path: Path, raw: dict[str, Any], kind: str, root: Path, result: Sc
     source = _source_uri(cast(dict[str, Any], raw["source"]), name, root)
     if source is not None:
         result.dataset(source[0], source[1])
-        result.edges.append(EdgeObservation(source[0], sink[0], via, revision))
+        result.edges.append(EdgeObservation(source[0], sink[0], via, revision, spec_path))
     contract = raw.get("contract")
     if isinstance(contract, dict):
         result.contracts.append(
-            ContractObservation(sink[0], str(path), cast(dict[str, Any], contract))
+            ContractObservation(sink[0], spec_path, cast(dict[str, Any], contract))
         )
     state = root / str(raw.get("state_dir", ".arsenal")) / f"{name}.db"
     if state.is_file():

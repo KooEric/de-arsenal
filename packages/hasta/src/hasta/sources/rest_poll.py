@@ -92,6 +92,8 @@ class RestPollingSource:
         raw_cursor = _dig(payload, self._spec.cursor.response_path)
         next_cursor = str(raw_cursor) if raw_cursor not in (None, "") else None
         start = after or StreamPosition({})
+        if next_cursor is None and self._spec.cursor.on_null == "last_event_id":
+            return self._caught_up(start, table, event_ids, typed_records)
         end = StreamPosition({"cursor": next_cursor, "_hasta_exhausted": next_cursor is None})
         return MicroBatch(
             start=start,
@@ -100,6 +102,26 @@ class RestPollingSource:
             event_hash=canonical_hash(event_ids),
             source_exhausted=next_cursor is None,
         )
+
+    def _caught_up(
+        self,
+        start: StreamPosition,
+        table: pa.Table,
+        event_ids: list[object],
+        records: list[Mapping[str, object]],
+    ) -> MicroBatch:
+        """Null cursor in continuous mode: resume after the last event, never end.
+
+        An empty caught-up page keeps the position, so repeated empty polls share
+        one ledger identity instead of growing the ledger.
+        """
+
+        if records:
+            last = _dig(records[-1], self._spec.cursor.event_id_path)
+            end = StreamPosition({"cursor": str(last)})
+        else:
+            end = start
+        return MicroBatch(start, end, table, canonical_hash(event_ids), False)
 
     def close(self) -> None:
         if self._owns_client:

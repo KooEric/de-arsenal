@@ -113,6 +113,7 @@ Postgres 싱크 (M2) — merge_key 기준 upsert.
 | `request_param` | string | Yes |  |  |
 | `response_path` | string | Yes |  |  |
 | `event_id_path` | string | Yes |  |  |
+| `on_null` | "end" \| "last_event_id" | No | `"end"` | What a null/empty next cursor means. `end`: the stream is finished for good. `last_event_id`: caught up — keep polling, asking for events after the last event id seen (the API must accept that id as the cursor). |
 
 ## RestPollSourceSpec
 

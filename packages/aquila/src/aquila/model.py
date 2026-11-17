@@ -37,6 +37,7 @@ class EdgeObservation:
     downstream: str
     via: str  # "gladius:orders_clean"
     revision: str  # canonical hash of the spec that declared the edge
+    spec_path: str = ""  # resolved path of that spec file
 
 
 @dataclass(frozen=True)
@@ -82,6 +83,8 @@ class ScanResult:
     sources: list[SourceFile] = field(default_factory=lambda: [])
     skipped: list[tuple[str, str]] = field(default_factory=lambda: [])
     vias: set[str] = field(default_factory=lambda: set())  # every spec this scan read
+    roots: list[str] = field(default_factory=lambda: [])  # directories scanned (resolved)
+    spec_paths: set[str] = field(default_factory=lambda: set())  # spec files read (resolved)
 
     def dataset(self, uri: str, fmt: str, producer: str | None = None) -> None:
         known = self.datasets.get(uri)

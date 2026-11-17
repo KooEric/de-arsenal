@@ -36,6 +36,7 @@ from pugio.sources.file import FileSource
 from pugio.sources.python_source import load_python_source
 from pugio.sources.rest import RestSource
 from pugio.validate.gate import Violation, check
+from pugio.writer_guard import pipeline_lease
 
 logger = logging.getLogger("pugio.runner")
 
@@ -175,160 +176,20 @@ def run_pipeline(
         sink_ref=sink_ref,
     )
     contract = _build_contract(spec.contract, spec.name)
-    fetched = written = skipped = done_count = quarantined = 0
-    schema_recorded = False  # 이번 run에서 스냅샷 기록 여부 (첫 non-empty batch에서 한 번만)
 
     try:
-        for unit in source.units():
-            store.register(unit)
-            if store.is_done(unit.unit_id):
-                skipped += 1
-                continue
-            store.mark_running(unit.unit_id)
-            started = time.monotonic()
-            try:
-                result = _fetch_with_auth_refresh(source, unit, auth, max_attempts)
-            except Exception as e:
-                store.mark_failed(unit.unit_id, str(e))
-                raise
-            fetched += 1
-            if not schema_recorded and result.batch is not None:
-                schema_json = _schema_json(result.batch)
-                previous_schema = store.last_schema(spec.name)
-                if previous_schema is not None:
-                    drift = compare_schema_snapshots(previous_schema, schema_json)
-                    if drift.has_changes:
-                        message = f"schema drift for pipeline {spec.name!r}: {drift.summary()}"
-                        if spec.schema_drift == "block":
-                            store.mark_failed(unit.unit_id, message)
-                            raise FatalError(message)
-                        if spec.schema_drift == "warn":
-                            logger.warning(message)
-                store.snapshot_schema(spec.name, schema_json)
-                schema_recorded = True
-            if contract is not None and result.batch is not None:
-                contract_report = contract.check(result.batch)
-                if not contract_report.ok:
-                    violations = [
-                        Violation("contract", violation.field, 1)
-                        for violation in contract_report.violations
-                    ]
-                    policy = spec.contract.on_violation if spec.contract is not None else "block"
-                    if policy == "block":
-                        message = f"contract failed for unit {unit.unit_key}: {violations}"
-                        store.mark_failed(unit.unit_id, message)
-                        raise FatalError(message)
-                    if policy == "warn":
-                        logger.warning(
-                            "contract violations in unit %s: %s", unit.unit_key, violations
-                        )
-                    if policy == "quarantine":
-                        write_dlq(spec.state_dir, spec.name, unit, result.batch, violations)
-                        reason = "; ".join(
-                            f"{violation.rule}:{violation.field}={violation.count}"
-                            for violation in violations
-                        )
-                        store.mark_quarantined(unit.unit_id, reason)
-                        quarantined += 1
-                        if result.exhausted:
-                            break
-                        continue
-            if spec.validation is not None and result.batch is not None:
-                report = check(result.batch, spec.validation.rules)
-                if not report.ok:
-                    policy = spec.validation.on_violation
-                    if policy == "block":
-                        # M2-E FIX 3: 이 FatalError는 _fetch_with_auth_refresh를 감싼
-                        # try/except(Exception → mark_failed → raise) 바깥에서 던져지므로,
-                        # 명시적으로 failed를 기록하지 않으면 unit이 영원히 'running'에
-                        # 갇힌다 (mark_running은 위에서 이미 호출됨). quarantine/warn은
-                        # 그대로 done/quarantined로 전이하므로 영향 없다.
-                        msg = f"validation failed for unit {unit.unit_key}: {report.violations}"
-                        store.mark_failed(unit.unit_id, msg)
-                        raise FatalError(msg)
-                    if policy == "warn":
-                        logger.warning(
-                            "validation violations in unit %s: %s",
-                            unit.unit_key,
-                            report.violations,
-                        )
-                    if policy == "quarantine":
-                        write_dlq(spec.state_dir, spec.name, unit, result.batch, report.violations)
-                        reason = "; ".join(
-                            f"{v.rule}:{v.field}={v.count}" for v in report.violations
-                        )
-                        store.mark_quarantined(unit.unit_id, reason)
-                        quarantined += 1
-                        # 쓰기·done 마킹 모두 건너뛰고 다음 unit으로 — 격리된 unit은
-                        # 커서를 진전시키지 않는다 (재실행 시 여전히 격리 상태로 재등록됨).
-                        #
-                        # M4 FIX (api-to-postgres 레시피 E2E에서 발견): offset/page
-                        # 페이지네이션은 무한 generator(itertools.count)라 이 루프를 끝내는
-                        # 유일한 신호가 아래쪽의 `if result.exhausted: break`뿐이다. 이
-                        # continue가 그 지점을 건너뛰므로, 검증 실패가 하필 마지막
-                        # 페이지(짧은 행 수로 exhausted를 알리는 바로 그 페이지)에서 나면
-                        # 러너가 종료 신호를 영영 못 보고 존재하지 않는 다음 페이지를
-                        # 무한히 요청한다. cursor/link 모드는 소스 내부 상태로 스스로
-                        # 멈추므로 이 break는 사실상 no-op이지만, offset/page 모드에는
-                        # 필수다.
-                        if result.exhausted:
-                            break
-                        continue
-            if result.batch is not None:
-                # M2-F FIX 7: sink.write는 fetch와 달리 감싸지지 않아, 실패해도
-                # mark_failed 없이 unit이 'running'에 영원히 갇혔다 (Retryable/Fatal
-                # 분류도 무의미해짐). fetch와 동일하게 with_retry로 감싸 RetryableError는
-                # 재시도하고, 그래도 실패하면(또는 FatalError면) mark_failed 후 전파한다.
-                try:
-                    with_retry(
-                        functools.partial(sink.write, unit, result.batch),
-                        max_attempts=max_attempts,
-                    )
-                except Exception as e:
-                    store.mark_failed(unit.unit_id, str(e))
-                    raise
-                written += 1
-            row_count = result.batch.num_rows if result.batch is not None else 0
-            byte_count = result.batch.nbytes if result.batch is not None else 0
-            duration_ms = int((time.monotonic() - started) * 1000)
-            # done 마킹 + 커서 전진 (핵심 불변식의 확장): cursor/link 모드는 이 둘을
-            # StateStore.mark_done_and_advance_cursor로 원자화해 한 커밋에 묶는다
-            # (M2 최종 리뷰 FIX 1). 예전엔 mark_done()과 set_cursor()가 별개
-            # 트랜잭션이라, 그 사이 크래시가 나면 unit은 done인데 커서는 그 unit을
-            # 만든 이전 값에 멈춰 재실행 시 같은(이미 done인) unit을 다시 seed →
-            # is_done skip → fetch() 미호출 → 커서 영원히 미전진(무한루프)이었다
-            # (cursor/link의 모든 중간 페이지에 영향 — 마지막 페이지의
-            # SOURCE_EXHAUSTED 센티널만 다뤘던 이전 수정으로는 부족했다).
-            #
-            # M2-B: cursor/link 모드가 next_cursor=None(=트래버설 완료)에 도달하면
-            # SOURCE_EXHAUSTED 센티널을 커서로 영속해 재실행이 clean no-op이 되게
-            # 한다 (완전 재수집은 P1, state를 지우면 됨).
-            if spec.source.type == "rest" and spec.source.pagination.mode in ("cursor", "link"):
-                cursor_value = (
-                    result.next_cursor if result.next_cursor is not None else SOURCE_EXHAUSTED
-                )
-                store.mark_done_and_advance_cursor(
-                    unit.unit_id,
-                    pipeline=spec.name,
-                    source=spec.source.url,
-                    cursor=cursor_value,
-                    row_count=row_count,
-                    byte_count=byte_count,
-                    duration_ms=duration_ms,
-                )
-            else:
-                store.mark_done(
-                    unit.unit_id,
-                    row_count=row_count,
-                    byte_count=byte_count,
-                    duration_ms=duration_ms,
-                )
-            done_count += 1
-            if on_unit_complete is not None:
-                on_unit_complete(done_count)
-            if result.exhausted:
-                break
-        return RunReport(fetched=fetched, written=written, skipped=skipped, quarantined=quarantined)
+        with pipeline_lease(spec, store) as renew_lease:
+            return _run_units(
+                spec,
+                store,
+                source,
+                auth,
+                sink,
+                contract,
+                on_unit_complete,
+                max_attempts,
+                renew_lease,
+            )
     finally:
         # close()는 Source 프로토콜의 선택적 훅 — httpx.Client 등 커넥션을 든 소스만
         # 구현한다 (RestSource). file/database/python 소스는 없으므로 getattr로 안전하게
@@ -337,3 +198,165 @@ def run_pipeline(
         if callable(close):
             close()
         store.close()
+
+
+def _run_units(
+    spec: PipelineSpec,
+    store: StateStore,
+    source: Source,
+    auth: AuthProvider | None,
+    sink: Any,
+    contract: DataContract | None,
+    on_unit_complete: Callable[[int], None] | None,
+    max_attempts: int,
+    renew_lease: Callable[[], None],
+) -> RunReport:
+    fetched = written = skipped = done_count = quarantined = 0
+    schema_recorded = False  # 이번 run에서 스냅샷 기록 여부 (첫 non-empty batch에서 한 번만)
+    for unit in source.units():
+        store.register(unit)
+        if store.is_done(unit.unit_id):
+            skipped += 1
+            continue
+        store.mark_running(unit.unit_id)
+        started = time.monotonic()
+        try:
+            result = _fetch_with_auth_refresh(source, unit, auth, max_attempts)
+        except Exception as e:
+            store.mark_failed(unit.unit_id, str(e))
+            raise
+        fetched += 1
+        if not schema_recorded and result.batch is not None:
+            schema_json = _schema_json(result.batch)
+            previous_schema = store.last_schema(spec.name)
+            if previous_schema is not None:
+                drift = compare_schema_snapshots(previous_schema, schema_json)
+                if drift.has_changes:
+                    message = f"schema drift for pipeline {spec.name!r}: {drift.summary()}"
+                    if spec.schema_drift == "block":
+                        store.mark_failed(unit.unit_id, message)
+                        raise FatalError(message)
+                    if spec.schema_drift == "warn":
+                        logger.warning(message)
+            store.snapshot_schema(spec.name, schema_json)
+            schema_recorded = True
+        if contract is not None and result.batch is not None:
+            contract_report = contract.check(result.batch)
+            if not contract_report.ok:
+                violations = [
+                    Violation("contract", violation.field, 1)
+                    for violation in contract_report.violations
+                ]
+                policy = spec.contract.on_violation if spec.contract is not None else "block"
+                if policy == "block":
+                    message = f"contract failed for unit {unit.unit_key}: {violations}"
+                    store.mark_failed(unit.unit_id, message)
+                    raise FatalError(message)
+                if policy == "warn":
+                    logger.warning("contract violations in unit %s: %s", unit.unit_key, violations)
+                if policy == "quarantine":
+                    write_dlq(spec.state_dir, spec.name, unit, result.batch, violations)
+                    reason = "; ".join(
+                        f"{violation.rule}:{violation.field}={violation.count}"
+                        for violation in violations
+                    )
+                    store.mark_quarantined(unit.unit_id, reason)
+                    quarantined += 1
+                    if result.exhausted:
+                        break
+                    continue
+        if spec.validation is not None and result.batch is not None:
+            report = check(result.batch, spec.validation.rules)
+            if not report.ok:
+                policy = spec.validation.on_violation
+                if policy == "block":
+                    # M2-E FIX 3: 이 FatalError는 _fetch_with_auth_refresh를 감싼
+                    # try/except(Exception → mark_failed → raise) 바깥에서 던져지므로,
+                    # 명시적으로 failed를 기록하지 않으면 unit이 영원히 'running'에
+                    # 갇힌다 (mark_running은 위에서 이미 호출됨). quarantine/warn은
+                    # 그대로 done/quarantined로 전이하므로 영향 없다.
+                    msg = f"validation failed for unit {unit.unit_key}: {report.violations}"
+                    store.mark_failed(unit.unit_id, msg)
+                    raise FatalError(msg)
+                if policy == "warn":
+                    logger.warning(
+                        "validation violations in unit %s: %s",
+                        unit.unit_key,
+                        report.violations,
+                    )
+                if policy == "quarantine":
+                    write_dlq(spec.state_dir, spec.name, unit, result.batch, report.violations)
+                    reason = "; ".join(f"{v.rule}:{v.field}={v.count}" for v in report.violations)
+                    store.mark_quarantined(unit.unit_id, reason)
+                    quarantined += 1
+                    # 쓰기·done 마킹 모두 건너뛰고 다음 unit으로 — 격리된 unit은
+                    # 커서를 진전시키지 않는다 (재실행 시 여전히 격리 상태로 재등록됨).
+                    #
+                    # M4 FIX (api-to-postgres 레시피 E2E에서 발견): offset/page
+                    # 페이지네이션은 무한 generator(itertools.count)라 이 루프를 끝내는
+                    # 유일한 신호가 아래쪽의 `if result.exhausted: break`뿐이다. 이
+                    # continue가 그 지점을 건너뛰므로, 검증 실패가 하필 마지막
+                    # 페이지(짧은 행 수로 exhausted를 알리는 바로 그 페이지)에서 나면
+                    # 러너가 종료 신호를 영영 못 보고 존재하지 않는 다음 페이지를
+                    # 무한히 요청한다. cursor/link 모드는 소스 내부 상태로 스스로
+                    # 멈추므로 이 break는 사실상 no-op이지만, offset/page 모드에는
+                    # 필수다.
+                    if result.exhausted:
+                        break
+                    continue
+        if result.batch is not None:
+            # M2-F FIX 7: sink.write는 fetch와 달리 감싸지지 않아, 실패해도
+            # mark_failed 없이 unit이 'running'에 영원히 갇혔다 (Retryable/Fatal
+            # 분류도 무의미해짐). fetch와 동일하게 with_retry로 감싸 RetryableError는
+            # 재시도하고, 그래도 실패하면(또는 FatalError면) mark_failed 후 전파한다.
+            try:
+                with_retry(
+                    functools.partial(sink.write, unit, result.batch),
+                    max_attempts=max_attempts,
+                )
+            except Exception as e:
+                store.mark_failed(unit.unit_id, str(e))
+                raise
+            written += 1
+        row_count = result.batch.num_rows if result.batch is not None else 0
+        byte_count = result.batch.nbytes if result.batch is not None else 0
+        duration_ms = int((time.monotonic() - started) * 1000)
+        # done 마킹 + 커서 전진 (핵심 불변식의 확장): cursor/link 모드는 이 둘을
+        # StateStore.mark_done_and_advance_cursor로 원자화해 한 커밋에 묶는다
+        # (M2 최종 리뷰 FIX 1). 예전엔 mark_done()과 set_cursor()가 별개
+        # 트랜잭션이라, 그 사이 크래시가 나면 unit은 done인데 커서는 그 unit을
+        # 만든 이전 값에 멈춰 재실행 시 같은(이미 done인) unit을 다시 seed →
+        # is_done skip → fetch() 미호출 → 커서 영원히 미전진(무한루프)이었다
+        # (cursor/link의 모든 중간 페이지에 영향 — 마지막 페이지의
+        # SOURCE_EXHAUSTED 센티널만 다뤘던 이전 수정으로는 부족했다).
+        #
+        # M2-B: cursor/link 모드가 next_cursor=None(=트래버설 완료)에 도달하면
+        # SOURCE_EXHAUSTED 센티널을 커서로 영속해 재실행이 clean no-op이 되게
+        # 한다 (완전 재수집은 P1, state를 지우면 됨).
+        if spec.source.type == "rest" and spec.source.pagination.mode in ("cursor", "link"):
+            cursor_value = (
+                result.next_cursor if result.next_cursor is not None else SOURCE_EXHAUSTED
+            )
+            store.mark_done_and_advance_cursor(
+                unit.unit_id,
+                pipeline=spec.name,
+                source=spec.source.url,
+                cursor=cursor_value,
+                row_count=row_count,
+                byte_count=byte_count,
+                duration_ms=duration_ms,
+            )
+        else:
+            store.mark_done(
+                unit.unit_id,
+                row_count=row_count,
+                byte_count=byte_count,
+                duration_ms=duration_ms,
+            )
+        done_count += 1
+        renew_lease()
+        if on_unit_complete is not None:
+            on_unit_complete(done_count)
+        if result.exhausted:
+            break
+    return RunReport(fetched=fetched, written=written, skipped=skipped, quarantined=quarantined)
