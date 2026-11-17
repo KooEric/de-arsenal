@@ -1,0 +1,197 @@
+{
+  "$defs": {
+    "ClusterProfile": {
+      "additionalProperties": false,
+      "properties": {
+        "context_env": {
+          "title": "Context Env",
+          "type": "string"
+        },
+        "namespace": {
+          "minLength": 1,
+          "title": "Namespace",
+          "type": "string"
+        },
+        "driver_image": {
+          "minLength": 1,
+          "title": "Driver Image",
+          "type": "string"
+        },
+        "service_account": {
+          "minLength": 1,
+          "title": "Service Account",
+          "type": "string"
+        },
+        "master": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Master"
+        },
+        "master_env": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Master Env"
+        }
+      },
+      "required": [
+        "context_env",
+        "namespace",
+        "driver_image",
+        "service_account"
+      ],
+      "title": "ClusterProfile",
+      "type": "object"
+    },
+    "IcebergCatalogProfile": {
+      "additionalProperties": false,
+      "properties": {
+        "type": {
+          "const": "rest",
+          "title": "Type",
+          "type": "string"
+        },
+        "uri_env": {
+          "title": "Uri Env",
+          "type": "string"
+        },
+        "token_env": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Token Env"
+        }
+      },
+      "required": [
+        "type",
+        "uri_env"
+      ],
+      "title": "IcebergCatalogProfile",
+      "type": "object"
+    },
+    "SparkSettings": {
+      "additionalProperties": false,
+      "properties": {
+        "executor_instances": {
+          "default": 1,
+          "minimum": 1,
+          "title": "Executor Instances",
+          "type": "integer"
+        },
+        "executor_cores": {
+          "default": 1,
+          "minimum": 1,
+          "title": "Executor Cores",
+          "type": "integer"
+        },
+        "executor_memory": {
+          "default": "2g",
+          "title": "Executor Memory",
+          "type": "string"
+        },
+        "conf": {
+          "additionalProperties": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "integer"
+              },
+              {
+                "type": "number"
+              },
+              {
+                "type": "boolean"
+              }
+            ]
+          },
+          "title": "Conf",
+          "type": "object"
+        }
+      },
+      "title": "SparkSettings",
+      "type": "object"
+    },
+    "StorageProfile": {
+      "additionalProperties": false,
+      "properties": {
+        "staging_uri": {
+          "minLength": 1,
+          "title": "Staging Uri",
+          "type": "string"
+        },
+        "iceberg_catalog": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/IcebergCatalogProfile"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        },
+        "transactional_database": {
+          "default": false,
+          "title": "Transactional Database",
+          "type": "boolean"
+        }
+      },
+      "required": [
+        "staging_uri"
+      ],
+      "title": "StorageProfile",
+      "type": "object"
+    }
+  },
+  "additionalProperties": false,
+  "properties": {
+    "backend": {
+      "const": "spark_kubernetes",
+      "title": "Backend",
+      "type": "string"
+    },
+    "cluster": {
+      "$ref": "#/$defs/ClusterProfile"
+    },
+    "storage": {
+      "$ref": "#/$defs/StorageProfile"
+    },
+    "spark": {
+      "$ref": "#/$defs/SparkSettings",
+      "default": {
+        "executor_instances": 1,
+        "executor_cores": 1,
+        "executor_memory": "2g",
+        "conf": {}
+      }
+    }
+  },
+  "required": [
+    "backend",
+    "cluster",
+    "storage"
+  ],
+  "title": "BallistaProfile",
+  "type": "object"
+}
