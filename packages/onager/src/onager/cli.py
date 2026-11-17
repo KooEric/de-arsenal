@@ -10,6 +10,11 @@ from onager.compact import compact_dataset
 app = typer.Typer(help="Onager — safe Parquet small-file compaction.")
 
 
+@app.callback()
+def main() -> None:
+    """Safely compact local Parquet datasets."""
+
+
 @app.command()
 def compact(
     dataset: Path,

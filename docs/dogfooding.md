@@ -95,3 +95,65 @@ arsenal collect status collect.yaml --cost --max-age-seconds 86400
 
 제품 변경은 이 회고에서 반복되는 마찰을 우선한다. 단발성 요청은 문서 보완으로
 충분한지 먼저 판단하고, 재현 가능한 운영 문제만 기능 로드맵에 반영한다.
+
+## 제품군 도그푸딩 런너
+
+`scripts/dogfood.py`는 DE Arsenal을 제품별로 따로 호출하면서도 하나의 데이터셋을
+끝까지 흘려보내는 수동 검증용 런너다. 단위 테스트만 통과하는지 보는 것이 아니라,
+수집 → 상태 저장 → 품질 계약 → freshness → small-file 정리 → 의존성 실행 → 변환 →
+쿼리까지 실제 사용 순서로 확인한다.
+
+### 오프라인 더미 API
+
+계정·Docker·네트워크 없이 실행한다.
+
+```bash
+./.venv/bin/python scripts/dogfood.py --mode dummy --workdir .dogfood
+```
+
+더미 API는 다음을 일부러 발생시킨다.
+
+- cursor pagination 3페이지
+- 두 번째 페이지의 일시적 `503` → Pugio retry
+- 첫 페이지 완료 직후의 결정적 crash → 같은 상태 DB로 resume
+- 완료 후 재실행 → 추가 HTTP 요청과 추가 파일이 없는 no-op
+- 중복 주문 1건 → Gladius `dedup`
+- 3개의 작은 Parquet 파일 → Onager dry-run 후 실제 compaction
+
+산출물은 `.dogfood/project` 아래에 남는다. 마지막에 출력되는 `arsenal query`,
+`pugio status`, `gladius compile` 명령을 그대로 다시 실행해 각 단계를 들여다볼 수
+있다.
+
+### 실시간 API
+
+외부 시스템에 쓰기를 하지 않는 GitHub Issues `GET`만 사용한다. 공유 IP의 익명
+rate limit을 소모하지 않도록 `GITHUB_TOKEN`을 요구하며, 최근 7일의 open 이슈만
+읽는다.
+
+```bash
+GITHUB_TOKEN=ghp_... \
+  ./.venv/bin/python scripts/dogfood.py \
+  --mode live \
+  --repo octocat/Hello-World \
+  --workdir .dogfood-live
+```
+
+토큰은 GitHub read-only 범위면 충분하다. 실제 운영 API를 연결할 때도 읽기 전용
+토큰과 작은 대상(기간·페이지 크기·저장 경로)을 먼저 사용한다. 실시간 모드는
+네트워크와 API 응답 스키마에 의존하므로 CI의 기본 테스트로 사용하지 않는다.
+
+### 제품별 확인 지점
+
+| 제품 | 런너에서 확인하는 것 |
+|---|---|
+| `arsenal-core` | SQLite 상태, metrics, lineage, 결정적 재개 상태 |
+| `Pugio` | REST 수집, retry, cursor resume, Parquet sink, status/cost |
+| `Scutum` | 정상 Arrow batch와 schema 위반 batch의 계약 판정 |
+| `Scorpio` | 마지막 완료 시각 기반 freshness |
+| `Onager` | compaction 계획 확인 후 안전한 디렉터리 교체 |
+| `Spatha` | `collect → compact → transform` 의존성 순서 |
+| `Gladius` | 선언을 SQL로 컴파일, 변환, Parquet 쿼리 |
+| `Arsenal` | recipe scaffold, umbrella run, umbrella query |
+
+기본 명령은 변경하지 않는 범위의 검증이다. 실시간 API 모드도 GitHub에 쓰지 않으며,
+생성되는 파일은 지정한 `--workdir` 아래에만 둔다.
