@@ -79,7 +79,10 @@ StateStore v2 마이그레이션은 breaking이므로 **P2는 `0.4.0`이어야 �
 
 각 단계는 원자적 PR 하나, 앞 단계가 green이 되기 전에는 다음을 시작하지 않는다.
 
-### Phase 0 — 구조(救助): 작업 보존 (반나절)
+### Phase 0 — 구조(救助): 작업 보존 (반나절) — ✅ 2026-11-17 완료
+
+> 결과: `feat/p2-hasta-ballista` 브랜치, `origin/main` 위로 리베이스, 위험 A·B 복구 확인,
+> 11개 패키지 0.4.0, ruff·format·pyright 0 error, `459 passed, 24 skipped`, coverage 85.47%.
 
 > 목표: 워킹트리 유일본을 없애고, 원격 수정을 되살린 상태로 CI를 green으로 만든다.
 
@@ -151,6 +154,8 @@ StateStore v2 마이그레이션은 breaking이므로 **P2는 `0.4.0`이어야 �
 ---
 
 ### Phase 5 (선택) — 아직 손대지 않은 무기
+
+> 상세 계획: [Pilum · Aquila 착수 계획](2026-11-17-pilum-aquila-plan.md) — Aquila 0.5.0, Pilum 0.6.0.
 
 | 무기 | 상태 | 비고 |
 |---|---|---|
