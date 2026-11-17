@@ -178,3 +178,24 @@ def test_raw_sql_and_python_udf_are_rejected_by_portable_preflight() -> None:
         preflight_portable(spec)
     assert "LIMIT 10" in compile_sql(spec)
     assert '"__gladius_python_udf_1"("title")' in compile_sql(spec)
+
+
+def test_concat_is_not_portable_and_points_to_the_concatenation_operator() -> None:
+    from gladius.plan import NonPortablePlanError, preflight_portable
+    from gladius.spec import TransformSpec
+
+    spec = TransformSpec.model_validate(
+        {
+            "name": "names",
+            "input": "s3://lake/in",
+            "steps": [{"derive": {"label": "concat(first, last)"}}],
+            "output": "iceberg://a.b",
+        }
+    )
+    with pytest.raises(NonPortablePlanError, match=r"\|\| operator"):
+        preflight_portable(spec)
+
+    piped = TransformSpec.model_validate(
+        {**spec.model_dump(), "steps": [{"derive": {"label": "first || last"}}]}
+    )
+    preflight_portable(piped)

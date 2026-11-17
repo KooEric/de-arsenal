@@ -14,7 +14,16 @@ from arsenal_core.errors import FatalError
 from arsenal_core.execution import ArtifactRef, OutputProof, SinkCapabilities
 from ballista.artifacts import RunManifest
 from ballista.plan import require_portable_mapping
-from gladius.plan import Cast, Deduplicate, Derive, Filter, Project, Rename, Select
+from gladius.plan import (
+    Cast,
+    ColumnRename,
+    Deduplicate,
+    Derive,
+    Filter,
+    Project,
+    Rename,
+    Select,
+)
 
 
 class SparkFunctions(Protocol):
@@ -55,13 +64,12 @@ def apply_spark_plan(frame: Any, plan_mapping: Any, functions: SparkFunctions) -
             case Filter(predicate=predicate):
                 current = current.filter(functions.expr(predicate.source))
             case Rename(columns=columns):
-                for item in columns:
-                    current = current.withColumnRenamed(item.source, item.target)
+                current = _rename_like_duckdb(current, columns)
             case Cast(columns=columns):
                 for item in columns:
                     current = current.withColumn(
                         item.column,
-                        functions.col(item.column).cast(_spark_type(item.data_type)),
+                        _cast_like_duckdb(current, item.column, item.data_type, functions),
                     )
             case Derive(expressions=expressions):
                 for item in expressions:
@@ -108,12 +116,53 @@ def execute_manifest(
     return proof
 
 
+_INTEGRAL_TARGETS = frozenset({"integer", "bigint"})
+
+
+def _rename_like_duckdb(frame: Any, columns: Sequence[ColumnRename]) -> Any:
+    """DuckDB renders rename as ``* EXCLUDE (old), old AS new``: renamed
+    columns move to the end in rename order. Spark keeps them in place, so
+    reorder explicitly to keep the output schema identical (invariant I7)."""
+
+    renamed = {item.source: item.target for item in columns}
+    for item in columns:
+        frame = frame.withColumnRenamed(item.source, item.target)
+    original = list(frame.columns)
+    kept = [name for name in original if name not in renamed.values()]
+    return frame.select(*kept, *(item.target for item in columns))
+
+
+def _cast_like_duckdb(frame: Any, column: str, data_type: str, functions: Any) -> Any:
+    """Spark truncates fractional values cast to integers; DuckDB rounds.
+
+    DuckDB rounds DOUBLE/FLOAT half-to-even and DECIMAL half-away-from-zero,
+    which are Spark's ``bround`` and ``round`` respectively.
+    """
+
+    target = _spark_type(data_type)
+    source = functions.col(column)
+    if data_type.lower() in _INTEGRAL_TARGETS:
+        kind = _column_type_name(frame, column)
+        if kind in {"double", "float"}:
+            source = functions.bround(source, 0)
+        elif kind == "decimal":
+            source = functions.round(source, 0)
+    return source.cast(target)
+
+
+def _column_type_name(frame: Any, column: str) -> str:
+    return str(frame.schema[column].dataType.typeName())
+
+
 def _spark_type(data_type: str) -> str:
     normalized = data_type.lower()
     return {
         "bigint": "long",
         "boolean": "boolean",
         "date": "date",
+        # Gladius renders portable DECIMAL as DECIMAL(38, 9); Spark's bare
+        # DECIMAL is DECIMAL(10,0) and would silently drop the fraction.
+        "decimal": "decimal(38,9)",
         "double": "double",
         "integer": "int",
         "timestamp": "timestamp",

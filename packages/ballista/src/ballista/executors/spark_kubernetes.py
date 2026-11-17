@@ -34,7 +34,11 @@ from ballista.preflight import (
     preflight_request,
 )
 
-_SUBMISSION_ID = re.compile(r"(?:submissionId|submission ID)\s*[:=]\s*([A-Za-z0-9_.:-]+)")
+# Spark 3.5 logs (to stderr): "Deployed Spark application <name> with
+# application ID <id> and submission ID <namespace>:<driver-pod> into Kubernetes".
+_SUBMISSION_ID = re.compile(
+    r"(?:submissionId|submission ID)\s*[:=]?\s*([A-Za-z0-9_.-]+:[A-Za-z0-9_.-]+)"
+)
 _SAFE_LABEL = re.compile(r"^[A-Za-z0-9](?:[A-Za-z0-9_.-]{0,61}[A-Za-z0-9])?$")
 
 
@@ -229,8 +233,14 @@ class SubprocessSparkKubernetesClient:
     def submit(self, application: SparkApplication) -> SparkSubmission:
         command = self._submit_command(application)
         completed = self._run(command, "Spark submission")
-        match = _SUBMISSION_ID.search(completed.stdout)
-        job_id = match.group(1) if match is not None else application.driver_pod
+        match = _SUBMISSION_ID.search(completed.stdout + "\n" + completed.stderr)
+        # `spark-submit --status/--kill` on Kubernetes need <namespace>:<pod>;
+        # the deterministic driver pod name lets us build it if the log moved.
+        job_id = (
+            match.group(1)
+            if match is not None
+            else f"{application.namespace}:{application.driver_pod}"
+        )
         return SparkSubmission(job_id=job_id, driver_pod=application.driver_pod)
 
     def status(self, job_id: str, driver_pod: str) -> JobStatus:
@@ -292,6 +302,10 @@ class SubprocessSparkKubernetesClient:
             application.application_name,
             "--conf",
             f"spark.kubernetes.namespace={application.namespace}",
+            # Return once the driver is created; reconcile tracks completion.
+            # The default (true) would block `ballista run` for the whole job.
+            "--conf",
+            "spark.kubernetes.submission.waitAppCompletion=false",
             "--conf",
             f"spark.kubernetes.container.image={application.driver_image}",
             "--conf",
