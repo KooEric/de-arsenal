@@ -105,12 +105,13 @@ Scutum 설계 원칙("끝점 능력별 멱등 전략을 명시", [roadmap.md](ro
 | CDC | Postgres outbox의 `I`/`U`/`D` envelope를 `sequence` 순으로 DuckDB/Postgres에 트랜잭션으로 적용, event-id ledger로 재생 안전 | Kafka, binlog/WAL 등 log 기반 CDC. table cursor 선언은 hard delete를 볼 수 없어 CDC로 취급하지 않는다 |
 | 동시성 | 스트림당 러너 하나(SQLite lease). Onager compaction은 lease를 잡고서만 실행되고 반쯤 커밋된 batch가 있으면 거부한다 | 여러 호스트에 걸친 lease, 데몬 감독·자동 재시작 |
 | 종료·재처리 | `SIGINT`/`SIGTERM`은 진행 중 batch를 커밋하고 멈춘다. `checkpoint reset --confirm`은 새 generation으로 재생하고 ledger를 감사용으로 남긴다 | Parquet sink는 append라 reset 재생분이 기존 파일 옆에 쌓인다 — 원치 않으면 출력부터 비운다 |
-| 끝없는 스트림 | — | cursor API가 null cursor를 돌려주면 스트림이 영구 종료(`_hasta_exhausted`)된다. 계속 받으려면 빈 페이지에서 마지막 cursor를 그대로 돌려줘야 한다 |
+| 끝없는 스트림 | `cursor.on_null: last_event_id`면 null cursor를 "따라잡음"으로 보고 마지막으로 커밋한 이벤트 id 다음부터 계속 폴링한다. 빈 폴링은 같은 ledger 행 하나로 합쳐진다 | 기본값(`end`)에서는 null cursor가 스트림을 영구 종료한다(`_hasta_exhausted`). `last_event_id`는 API가 이벤트 id를 cursor로 받아야 동작한다 |
 | 처리량 | 같은 머신 회귀 기준 ~334k events/s(in-process, 네트워크 제외, [`benchmarks/RESULTS.md`](../benchmarks/RESULTS.md)) | 실제 REST 소스 처리량 — 네트워크 지연이 지배한다 |
 
-**자격증명:** REST `headers`는 YAML에 그대로 적힌 값을 쓴다(환경변수 치환 없음).
-오류 메시지에는 URL의 비밀번호·쿼리 값이 마스킹되고 header 값은 나오지 않지만,
-YAML 파일 자체는 비밀로 취급해야 한다. URL 쿼리에 토큰을 넣으면 소스 식별자
+**자격증명:** REST `headers`의 토큰은 `${ENV_VAR}`로 넣는다 — 스펙을 읽을 때 치환되므로
+YAML에 비밀을 둘 필요가 없다. header *값*은 스트림 revision에 들어가지 않아 토큰을
+교체해도 batch identity가 바뀌지 않는다(커밋 전 batch가 다른 identity로 두 번 쓰이지 않는다).
+오류 메시지에는 URL의 비밀번호·쿼리 값이 마스킹되고 header 값은 나오지 않는다. URL 쿼리에 토큰을 넣으면 소스 식별자
 (`rest_poll:<url>`)로 상태 DB에 저장되므로 header로 보내라. Outbox는 `dsn_env`로
 DSN을 환경변수에서만 읽고, 오류 메시지에서 DSN을 마스킹한다.
 

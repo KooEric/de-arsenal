@@ -46,7 +46,12 @@ events through 12 crashing runners arrive exactly once
 
 ### Limits (v1)
 
-- A cursor API that returns a null cursor ends the stream permanently
-  (`_hasta_exhausted`). For a never-ending stream, the API must keep returning
-  the last cursor on empty pages, as `fake_orders_api.py` does.
+- By default a null cursor ends the stream permanently (`_hasta_exhausted`).
+  For a feed that answers `next: null` when it is caught up, set
+  `cursor.on_null: last_event_id`: the stream keeps polling, asking for events
+  after the last event id it committed (the API must accept that id as the
+  cursor). Empty caught-up polls share one ledger row.
+- Put tokens in `headers` through `${ENV_VAR}` (substituted when the spec loads).
+  Header *values* are not part of the stream revision, so rotating a token
+  never changes batch identities.
 - One runner per stream (single-host SQLite lease); no daemon supervision.
