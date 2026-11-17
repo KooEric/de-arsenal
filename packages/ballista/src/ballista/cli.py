@@ -5,6 +5,7 @@ from __future__ import annotations
 import json
 import uuid
 from collections.abc import Mapping
+from dataclasses import dataclass
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
 from typing import Annotated, Any, cast
@@ -21,14 +22,22 @@ from arsenal_core.execution import (
     spec_revision,
 )
 from arsenal_core.state import RunRecord, StateStore
+from ballista.artifacts import ArtifactRepository
 from ballista.config import BallistaProfile, load_profile
+from ballista.executors.spark_kubernetes import (
+    SparkKubernetesClient,
+    SparkKubernetesExecutor,
+    SubprocessSparkKubernetesClient,
+)
 from ballista.plan import plan_hash, plan_to_mapping
 from ballista.preflight import (
     EnvironmentCapabilities,
     preflight_request,
     report_to_mapping,
 )
+from ballista.probe import KubernetesEnvironmentProbe
 from ballista.runner import BallistaRunner
+from ballista.storage import ObjectStoreBlobStore, fingerprint_uri
 from gladius.loader import load_transform
 from gladius.plan import preflight_portable
 
@@ -42,11 +51,43 @@ def _state_path(state_dir: Path) -> Path:
     return state_dir / "ballista.sqlite"
 
 
+@dataclass(frozen=True)
+class Integration:
+    """Production collaborators for one profile; replaced wholesale in tests."""
+
+    artifacts: ArtifactRepository
+    probe: KubernetesEnvironmentProbe
+    client: SparkKubernetesClient
+
+
+def build_integration(profile: BallistaProfile) -> Integration:
+    """Object-store staging + live cluster probe + spark-submit/kubectl client.
+
+    Requires ``de-ballista[object-store]``; ``spark-submit`` and ``kubectl`` are
+    operator-provided binaries whose presence the probe verifies.
+    """
+
+    store = ObjectStoreBlobStore.from_staging_uri(profile.storage.staging_uri)
+    return Integration(
+        artifacts=ArtifactRepository(profile.storage.staging_uri, store),
+        probe=KubernetesEnvironmentProbe(blob_store=store),
+        client=SubprocessSparkKubernetesClient(profile),
+    )
+
+
 def _build_runner(profile: BallistaProfile, state_dir: Path) -> BallistaRunner:
-    del profile, state_dir
-    raise FatalError(
-        "remote execution is not wired in the base de-ballista install: configure a conditional "
-        "remote artifact store, a verified cluster EnvironmentProbe, and a SparkKubernetesClient"
+    integration = build_integration(profile)
+    executor = SparkKubernetesExecutor(
+        profile=profile,
+        artifacts=integration.artifacts,
+        client=integration.client,
+        environment_probe=integration.probe,
+    )
+    state_dir.mkdir(parents=True, exist_ok=True)
+    return BallistaRunner(
+        state=StateStore.open(_state_path(state_dir)),
+        executor=executor,
+        artifacts=integration.artifacts,
     )
 
 
@@ -75,7 +116,13 @@ def _request_parts(
             started_at=now,
         ),
         plan=serialized_plan,
-        inputs=(ArtifactRef(spec.input, _artifact_format(spec.input), version=input_version),),
+        inputs=(
+            ArtifactRef(
+                spec.input,
+                _artifact_format(spec.input),
+                version=_resolve_input_version(spec.input, input_version),
+            ),
+        ),
         output=ArtifactRef(spec.output, _artifact_format(spec.output)),
         guarantees=GuaranteeRequest(result_exactly_once=True, atomic_publish=True),
     )
@@ -87,6 +134,9 @@ def plan_cmd(
     transform: Path,
     profile_path: Annotated[Path, typer.Option("--profile")],
     input_version: Annotated[str | None, typer.Option("--input-version")] = None,
+    probe: Annotated[
+        bool, typer.Option("--probe", help="Check the live cluster and staging store.")
+    ] = False,
 ) -> None:
     """Render the portable request and report every unmet submission precondition."""
 
@@ -94,12 +144,17 @@ def plan_cmd(
         profile, request = _request_parts(
             transform, profile_path, input_version, run_id=str(uuid.uuid4())
         )
+        environment = EnvironmentCapabilities.unverified()
+        findings: tuple[str, ...] = ("live checks skipped; pass --probe to verify",)
+        if probe:
+            result = build_integration(profile).probe.probe(profile)
+            environment, findings = result.capabilities, result.findings
         report = preflight_request(
             request,
             profile=profile,
             executor_name="spark_kubernetes",
             executor_capabilities=_spark_capabilities(),
-            environment=EnvironmentCapabilities.unverified(),
+            environment=environment,
         )
         payload: dict[str, object] = {
             "pipeline": request.context.pipeline,
@@ -117,7 +172,7 @@ def plan_cmd(
                 "executor_cores": profile.spark.executor_cores,
                 "executor_memory": profile.spark.executor_memory,
             },
-            "preflight": dict(report_to_mapping(report)),
+            "preflight": {**report_to_mapping(report), "environment_findings": list(findings)},
         }
     except (ArsenalError, ValueError) as exc:
         typer.echo(f"error: {exc}", err=True)
@@ -131,7 +186,13 @@ def plan_cmd(
 def run_cmd(
     transform: Path,
     profile_path: Annotated[Path, typer.Option("--profile")],
-    input_version: Annotated[str, typer.Option("--input-version")],
+    input_version: Annotated[
+        str,
+        typer.Option(
+            "--input-version",
+            help="Iceberg snapshot id, Parquet listing fingerprint, or 'auto' for Parquet.",
+        ),
+    ],
     state_dir: Annotated[Path, typer.Option("--state-dir")] = Path(".arsenal"),
     run_id: Annotated[str | None, typer.Option("--run-id")] = None,
 ) -> None:
@@ -208,6 +269,16 @@ def cancel_cmd(
     typer.echo(json.dumps(_record_mapping(record), sort_keys=True))
 
 
+def _resolve_input_version(uri: str, value: str | None) -> str | None:
+    """``auto`` pins a Parquet prefix to its current listing fingerprint."""
+
+    if value != "auto":
+        return value
+    if _artifact_format(uri) != "parquet":
+        raise FatalError("--input-version auto is only supported for Parquet inputs")
+    return fingerprint_uri(uri)
+
+
 def _artifact_format(uri: str) -> Any:
     scheme = uri.partition("://")[0].lower() if "://" in uri else ""
     if scheme == "iceberg":
@@ -220,10 +291,6 @@ def _artifact_format(uri: str) -> Any:
 
 
 def _spark_capabilities() -> Any:
-    # Importing the adapter has no Kubernetes/Spark dependency; this keeps CLI
-    # planning aligned with the concrete executor declaration.
-    from ballista.executors.spark_kubernetes import SparkKubernetesExecutor
-
     return SparkKubernetesExecutor.capabilities
 
 

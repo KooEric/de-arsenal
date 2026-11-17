@@ -1,0 +1,138 @@
+# Throwaway kind fixtures for the Ballista E2E: S3-compatible staging/warehouse
+# (MinIO), an Iceberg REST catalog, and the driver service account.
+# Credentials here are test-only values for a cluster that lives for one CI run.
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: ballista-e2e
+---
+apiVersion: v1
+kind: Secret
+metadata:
+  name: ballista-e2e-s3
+  namespace: ballista-e2e
+stringData:
+  AWS_ACCESS_KEY_ID: ballista
+  AWS_SECRET_ACCESS_KEY: ballista-e2e-only
+  AWS_REGION: us-east-1
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: ballista-e2e-env
+  namespace: ballista-e2e
+data:
+  # obstore (staging manifests/proofs) inside the driver pod.
+  AWS_ENDPOINT: http://minio:9000
+  AWS_ALLOW_HTTP: "true"
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: minio
+  namespace: ballista-e2e
+spec:
+  replicas: 1
+  selector:
+    matchLabels: {app: minio}
+  template:
+    metadata:
+      labels: {app: minio}
+    spec:
+      containers:
+        - name: minio
+          image: bitnamilegacy/minio:2025.7.23-debian-12-r5
+          env:
+            - name: MINIO_ROOT_USER
+              valueFrom: {secretKeyRef: {name: ballista-e2e-s3, key: AWS_ACCESS_KEY_ID}}
+            - name: MINIO_ROOT_PASSWORD
+              valueFrom: {secretKeyRef: {name: ballista-e2e-s3, key: AWS_SECRET_ACCESS_KEY}}
+            - name: MINIO_DEFAULT_BUCKETS
+              value: staging,warehouse
+          ports:
+            - containerPort: 9000
+          readinessProbe:
+            httpGet: {path: /minio/health/ready, port: 9000}
+            periodSeconds: 3
+          volumeMounts:
+            - {name: data, mountPath: /bitnami/minio/data}
+      volumes:
+        - name: data
+          emptyDir: {}
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: minio
+  namespace: ballista-e2e
+spec:
+  selector: {app: minio}
+  ports:
+    - {port: 9000, targetPort: 9000}
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: iceberg-rest
+  namespace: ballista-e2e
+spec:
+  replicas: 1
+  selector:
+    matchLabels: {app: iceberg-rest}
+  template:
+    metadata:
+      labels: {app: iceberg-rest}
+    spec:
+      containers:
+        - name: iceberg-rest
+          image: tabulario/iceberg-rest:1.6.0
+          envFrom:
+            - secretRef: {name: ballista-e2e-s3}
+          env:
+            - {name: CATALOG_WAREHOUSE, value: "s3://warehouse/"}
+            - {name: CATALOG_IO__IMPL, value: org.apache.iceberg.aws.s3.S3FileIO}
+            - {name: CATALOG_S3_ENDPOINT, value: "http://minio:9000"}
+            - {name: CATALOG_S3_PATH__STYLE__ACCESS, value: "true"}
+          ports:
+            - containerPort: 8181
+          readinessProbe:
+            httpGet: {path: /v1/config, port: 8181}
+            periodSeconds: 3
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: iceberg-rest
+  namespace: ballista-e2e
+spec:
+  selector: {app: iceberg-rest}
+  ports:
+    - {port: 8181, targetPort: 8181}
+---
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: ballista
+  namespace: ballista-e2e
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: ballista-driver
+  namespace: ballista-e2e
+rules:
+  - apiGroups: [""]
+    resources: [pods, services, configmaps, persistentvolumeclaims]
+    verbs: [create, get, list, watch, delete, deletecollection, patch, update]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: ballista-driver
+  namespace: ballista-e2e
+subjects:
+  - {kind: ServiceAccount, name: ballista, namespace: ballista-e2e}
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: Role
+  name: ballista-driver

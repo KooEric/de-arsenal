@@ -21,6 +21,9 @@ ballista = "ballista.cli:app"
 # Operators provide a worker image and install the cluster integration they use.
 spark-kubernetes = ["kubernetes>=30"]
 iceberg = ["pyiceberg>=0.8"]
+object-store = [
+    "obstore>=0.7",
+]
 
 [build-system]
 requires = ["hatchling"]

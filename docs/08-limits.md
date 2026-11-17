@@ -97,6 +97,31 @@ Scutum 설계 원칙("끝점 능력별 멱등 전략을 명시", [roadmap.md](ro
   백오프가 소진될 때까지 불필요하게 재시도된다는 뜻이며, 결과가 틀리게
   나오지는 않는다.
 
+## Ballista 분산 실행의 보장과 한계 (0.4)
+
+Ballista는 **Iceberg 출력만** 원자적 production 결과로 인정한다. raw Parquet 출력은
+preflight에서 거부된다.
+
+| 항목 | 보장하는 것 | 보장하지 않는 것 |
+|---|---|---|
+| 결과 커밋 | 논리 run 하나당 run id로 태그된 Iceberg 스냅샷 하나. 재시도·다음 attempt는 기존 스냅샷을 재사용하고 다시 쓰지 않는다 | 전체 overwrite는 Iceberg 낙관적 동시성으로 충돌이 검출되지 않는다. "더 새로운 run이 이미 게시했는가" 검사와 커밋 사이의 짧은 창은 닫히지 않는다 |
+| 입력 버전 | Iceberg 입력은 기록된 snapshot id로 읽는다. Parquet 입력은 목록 fingerprint(경로·크기·ETag)를 worker가 재계산해 다르면 실행을 거부한다 | Parquet fingerprint 확인과 Spark의 실제 읽기 사이에 파일이 바뀌는 경우 |
+| staging | manifest/proof는 객체 스토리지 조건부 쓰기(S3 `If-None-Match`, GCS generation=0, Azure `If-None-Match`)로 한 번만 생성된다 | 조건부 쓰기를 지원하지 않는 S3 호환 스토리지 — probe가 "새 키가 이미 존재" 응답을 감지하면 거부하지만 모든 오동작을 잡지는 못한다 |
+| 환경 검증 | `ballista plan --probe`가 spark-submit, API `/readyz`, 드라이버 SA RBAC, staging 쓰기·읽기, Iceberg 카탈로그, digest 고정 이미지를 실제로 확인한다 | 이미지 내부 내용 검증 — digest 고정만 확인한다. `allow_mutable_image: true`는 로컬·E2E 전용 |
+
+### DuckDB ↔ Spark 동치성 (LogicalPlan v1)
+
+같은 portable plan이 두 엔진에서 같은 결과를 내도록 Spark 렌더러를 DuckDB 의미에 맞췄고,
+골든 corpus(`packages/ballista/tests/portable_corpus.py`)로 고정한다.
+
+- rename된 컬럼은 두 엔진 모두 **맨 뒤로** 이동한다 (DuckDB `* EXCLUDE` 의미).
+- `cast` 단계의 실수→정수는 반올림한다: DOUBLE은 half-to-even, DECIMAL은 half-away-from-zero.
+- `decimal`은 `DECIMAL(38, 9)`이다.
+- `concat()`은 portable이 아니다 — NULL 처리가 엔진마다 다르다. `||`를 쓴다.
+- **맞추지 못한 것:** `derive`/`filter` 표현식 **안의** `CAST(... AS INTEGER)`는 문자열 그대로
+  각 엔진에 전달되므로 Spark에서는 절사된다. 실수→정수 변환은 `cast` 단계로 하라.
+- `dedup`은 두 엔진 모두 키당 **임의의** 행을 남긴다. 키 외 컬럼이 다른 중복은 결과가 엔진마다 다를 수 있다.
+
 ## 변환 스펙의 신뢰 경계
 
 **`transform.yaml`을 작성할 수 있는 사람은 그 프로세스에서 SQL을 실행할 수 있는

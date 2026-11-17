@@ -1,0 +1,99 @@
+name: ballista-e2e
+# Real Spark-on-Kubernetes run: kind + MinIO + Iceberg REST + the worker image.
+# Too slow for every push, so it runs nightly, on demand, and on PRs that
+# touch Ballista or this workflow.
+on:
+  workflow_dispatch:
+  schedule:
+    - cron: "17 18 * * *"
+  pull_request:
+    paths:
+      - "packages/ballista/**"
+      - "packages/gladius/src/gladius/plan.py"
+      - ".github/workflows/ballista-e2e.yml"
+
+concurrency:
+  group: ballista-e2e-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  SPARK_VERSION: "3.5.3"
+  IMAGE: ballista-worker:e2e
+
+jobs:
+  e2e:
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    env:
+      # Test-only credentials for the throwaway cluster (see e2e/cluster.yaml).
+      AWS_ACCESS_KEY_ID: ballista
+      AWS_SECRET_ACCESS_KEY: ballista-e2e-only
+      AWS_REGION: us-east-1
+      AWS_ENDPOINT: http://minio:9000
+      AWS_ALLOW_HTTP: "true"
+      ICEBERG_REST_URI: http://iceberg-rest:8181
+      BALLISTA_E2E_IMAGE: ballista-worker:e2e
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "17"
+      - uses: astral-sh/setup-uv@v3
+      - run: uv python install 3.11
+      - run: uv sync
+
+      - name: Install Spark client (spark-submit)
+        run: |
+          base="https://archive.apache.org/dist/spark/spark-${SPARK_VERSION}"
+          name="spark-${SPARK_VERSION}-bin-hadoop3"
+          curl -fsSLo "$RUNNER_TEMP/$name.tgz" "$base/$name.tgz"
+          curl -fsSLo "$RUNNER_TEMP/$name.tgz.sha512" "$base/$name.tgz.sha512"
+          (cd "$RUNNER_TEMP" && sha512sum -c "$name.tgz.sha512")
+          tar -xzf "$RUNNER_TEMP/$name.tgz" -C "$RUNNER_TEMP"
+          echo "$RUNNER_TEMP/$name/bin" >> "$GITHUB_PATH"
+
+      - name: Build worker image
+        run: |
+          for package in arsenal-core de-gladius de-ballista; do
+            uv build --package "$package" --wheel --out-dir packages/ballista/docker/wheels
+          done
+          docker build --build-arg SPARK_VERSION="$SPARK_VERSION" -t "$IMAGE" packages/ballista/docker
+
+      - uses: helm/kind-action@v1
+        with:
+          cluster_name: ballista
+
+      - name: Deploy fixtures
+        run: |
+          kind load docker-image "$IMAGE" --name ballista
+          kubectl apply -f packages/ballista/e2e/cluster.yaml
+          kubectl -n ballista-e2e rollout status deploy/minio --timeout=300s
+          kubectl -n ballista-e2e rollout status deploy/iceberg-rest --timeout=300s
+
+      - name: Expose MinIO and the catalog under their in-cluster names
+        run: |
+          echo "127.0.0.1 minio iceberg-rest" | sudo tee -a /etc/hosts
+          nohup kubectl -n ballista-e2e port-forward svc/minio 9000:9000 > "$RUNNER_TEMP/pf-minio.log" 2>&1 &
+          nohup kubectl -n ballista-e2e port-forward svc/iceberg-rest 8181:8181 > "$RUNNER_TEMP/pf-rest.log" 2>&1 &
+          for _ in $(seq 60); do
+            curl -fs http://minio:9000/minio/health/ready && curl -fs http://iceberg-rest:8181/v1/config && break
+            sleep 2
+          done
+          curl -fs http://iceberg-rest:8181/v1/config
+
+      - name: Run Ballista end to end
+        run: |
+          export KUBECONFIG="$HOME/.kube/config"
+          export K8S_MASTER="k8s://$(kubectl config view --minify -o jsonpath='{.clusters[0].cluster.server}')"
+          uv run --with "pyiceberg[pyarrow]==0.9.1" python packages/ballista/e2e/run_e2e.py
+
+      - name: Diagnostics
+        if: failure()
+        run: |
+          kubectl get pods -A -o wide || true
+          kubectl -n ballista-e2e describe pods -l spark-role=driver || true
+          kubectl -n ballista-e2e logs -l spark-role=driver --tail=300 || true
+          kubectl -n ballista-e2e logs -l spark-role=executor --tail=100 || true
+          kubectl -n ballista-e2e logs deploy/iceberg-rest --tail=100 || true
+          cat "$RUNNER_TEMP"/pf-*.log || true

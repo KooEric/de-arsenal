@@ -22,6 +22,7 @@ A Ballista profile keeps cluster and storage configuration separate from a Gladi
 | `namespace` | string | Yes |  |  |
 | `driver_image` | string | Yes |  |  |
 | `service_account` | string | Yes |  |  |
+| `allow_mutable_image` | boolean | No | `false` |  |
 | `master` | string \| null | No | `null` |  |
 | `master_env` | string \| null | No | `null` |  |
 

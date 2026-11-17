@@ -387,7 +387,8 @@ _ANSI_FUNCTIONS = frozenset(
         "ceiling",
         "char_length",
         "coalesce",
-        "concat",
+        # concat() is not here: DuckDB skips NULL arguments, ANSI/Spark return
+        # NULL. Portable plans use the `||` operator, which agrees on NULL.
         "current_date",
         "current_time",
         "current_timestamp",
@@ -407,6 +408,9 @@ _ANSI_FUNCTIONS = frozenset(
         "upper",
     }
 )
+_FUNCTION_HINTS = {
+    "concat": " (NULL handling differs between engines; use the || operator)",
+}
 _PORTABLE_CAST_TYPES = frozenset(
     {
         "bigint",
@@ -465,7 +469,8 @@ def _expression_issues(expression: SqlExpression, location: str) -> list[Portabi
             PortabilityIssue(
                 Portability.DUCKDB_ONLY,
                 location,
-                f"function {function!r} is not in LogicalPlan v1's ANSI subset",
+                f"function {function!r} is not in LogicalPlan v1's ANSI subset"
+                + _FUNCTION_HINTS.get(function, ""),
             )
         )
     return issues
