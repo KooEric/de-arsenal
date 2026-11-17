@@ -45,8 +45,9 @@ minor.
 
 ### Changed
 
-- CI actions moved to their Node 24 majors (checkout v7, setup-uv v10,
-  setup-java v6, upload-artifact v7, download-artifact v8).
+- CI actions moved to their Node 24 majors (checkout v7, setup-java v6,
+  upload-artifact v7, download-artifact v8); setup-uv, which no longer
+  publishes moving major tags, is pinned to the v10.3.3 commit.
 
 ## [0.5.1] - 2026-11-17
 
