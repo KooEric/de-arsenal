@@ -30,6 +30,7 @@ import pyarrow as pa
 from arsenal_core.errors import FatalError, RetryableError
 from arsenal_core.spec.models import DuckDBSinkSpec
 from arsenal_core.state import UnitSpec
+from pugio.sinks.contracts import DUCKDB_CAPABILITIES
 
 _SEQ_COL = "__arsenal_seq"
 
@@ -39,6 +40,8 @@ def _quote_ident(name: str) -> str:
 
 
 class DuckDBSink:
+    capabilities = DUCKDB_CAPABILITIES
+
     def __init__(self, spec: DuckDBSinkSpec) -> None:
         self._spec = spec
 

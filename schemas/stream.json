@@ -1,0 +1,652 @@
+{
+  "$defs": {
+    "BatchSpec": {
+      "additionalProperties": false,
+      "properties": {
+        "max_records": {
+          "default": 10000,
+          "exclusiveMinimum": 0,
+          "title": "Max Records",
+          "type": "integer"
+        },
+        "max_bytes": {
+          "default": 67108864,
+          "exclusiveMinimum": 0,
+          "title": "Max Bytes",
+          "type": "integer"
+        },
+        "max_wait_seconds": {
+          "default": 20,
+          "exclusiveMinimum": 0,
+          "title": "Max Wait Seconds",
+          "type": "number"
+        }
+      },
+      "title": "BatchSpec",
+      "type": "object"
+    },
+    "CheckpointSpec": {
+      "additionalProperties": false,
+      "properties": {
+        "lease_ttl_seconds": {
+          "default": 60,
+          "exclusiveMinimum": 0,
+          "title": "Lease Ttl Seconds",
+          "type": "number"
+        }
+      },
+      "title": "CheckpointSpec",
+      "type": "object"
+    },
+    "ContractColumnSpec": {
+      "additionalProperties": false,
+      "properties": {
+        "name": {
+          "title": "Name",
+          "type": "string"
+        },
+        "type": {
+          "description": "Arrow type string, for example int64 or string",
+          "title": "Type",
+          "type": "string"
+        },
+        "nullable": {
+          "default": true,
+          "title": "Nullable",
+          "type": "boolean"
+        }
+      },
+      "required": [
+        "name",
+        "type"
+      ],
+      "title": "ContractColumnSpec",
+      "type": "object"
+    },
+    "ContractSpec": {
+      "additionalProperties": false,
+      "properties": {
+        "columns": {
+          "items": {
+            "$ref": "#/$defs/ContractColumnSpec"
+          },
+          "minItems": 1,
+          "title": "Columns",
+          "type": "array"
+        },
+        "allow_extra": {
+          "default": false,
+          "title": "Allow Extra",
+          "type": "boolean"
+        },
+        "on_violation": {
+          "default": "block",
+          "enum": [
+            "block",
+            "quarantine",
+            "warn"
+          ],
+          "title": "On Violation",
+          "type": "string"
+        }
+      },
+      "required": [
+        "columns"
+      ],
+      "title": "ContractSpec",
+      "type": "object"
+    },
+    "DatabaseOutboxSourceSpec": {
+      "additionalProperties": false,
+      "description": "Postgres append-only outbox declaration for CDC current-state apply.",
+      "properties": {
+        "type": {
+          "const": "database_outbox",
+          "title": "Type",
+          "type": "string"
+        },
+        "dialect": {
+          "const": "postgres",
+          "title": "Dialect",
+          "type": "string"
+        },
+        "dsn_env": {
+          "title": "Dsn Env",
+          "type": "string"
+        },
+        "table": {
+          "title": "Table",
+          "type": "string"
+        },
+        "sequence_column": {
+          "default": "sequence",
+          "title": "Sequence Column",
+          "type": "string"
+        },
+        "event_id_column": {
+          "default": "event_id",
+          "title": "Event Id Column",
+          "type": "string"
+        },
+        "operation_column": {
+          "default": "op",
+          "title": "Operation Column",
+          "type": "string"
+        },
+        "key_column": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Key Column"
+        },
+        "key_columns": {
+          "items": {
+            "type": "string"
+          },
+          "title": "Key Columns",
+          "type": "array"
+        },
+        "payload_column": {
+          "default": "payload",
+          "title": "Payload Column",
+          "type": "string"
+        },
+        "occurred_at_column": {
+          "default": "occurred_at",
+          "title": "Occurred At Column",
+          "type": "string"
+        },
+        "schema_version_column": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": "schema_version",
+          "title": "Schema Version Column"
+        }
+      },
+      "required": [
+        "type",
+        "dialect",
+        "dsn_env",
+        "table"
+      ],
+      "title": "DatabaseOutboxSourceSpec",
+      "type": "object"
+    },
+    "DuckDBSinkSpec": {
+      "additionalProperties": false,
+      "description": "DuckDB \ud30c\uc77c \uc2f1\ud06c (M2) \u2014 temp \ud14c\uc774\ube14 \u2192 MERGE\ub85c \uba71\ub4f1 upsert.",
+      "properties": {
+        "type": {
+          "const": "duckdb",
+          "title": "Type",
+          "type": "string"
+        },
+        "path": {
+          "title": "Path",
+          "type": "string"
+        },
+        "table": {
+          "title": "Table",
+          "type": "string"
+        },
+        "merge_key": {
+          "items": {
+            "type": "string"
+          },
+          "title": "Merge Key",
+          "type": "array"
+        }
+      },
+      "required": [
+        "type",
+        "path",
+        "table",
+        "merge_key"
+      ],
+      "title": "DuckDBSinkSpec",
+      "type": "object"
+    },
+    "EventTimeSpec": {
+      "additionalProperties": false,
+      "properties": {
+        "field": {
+          "title": "Field",
+          "type": "string"
+        },
+        "allowed_lateness": {
+          "default": "PT0S",
+          "title": "Allowed Lateness",
+          "type": "string"
+        },
+        "on_late": {
+          "default": "quarantine",
+          "enum": [
+            "drop",
+            "quarantine",
+            "append"
+          ],
+          "title": "On Late",
+          "type": "string"
+        }
+      },
+      "required": [
+        "field"
+      ],
+      "title": "EventTimeSpec",
+      "type": "object"
+    },
+    "ParquetSinkSpec": {
+      "additionalProperties": false,
+      "properties": {
+        "type": {
+          "const": "parquet",
+          "title": "Type",
+          "type": "string"
+        },
+        "path": {
+          "title": "Path",
+          "type": "string"
+        }
+      },
+      "required": [
+        "type",
+        "path"
+      ],
+      "title": "ParquetSinkSpec",
+      "type": "object"
+    },
+    "PostgresSinkSpec": {
+      "additionalProperties": false,
+      "description": "Postgres \uc2f1\ud06c (M2) \u2014 merge_key \uae30\uc900 upsert.",
+      "properties": {
+        "type": {
+          "const": "postgres",
+          "title": "Type",
+          "type": "string"
+        },
+        "dsn_env": {
+          "title": "Dsn Env",
+          "type": "string"
+        },
+        "table": {
+          "title": "Table",
+          "type": "string"
+        },
+        "merge_key": {
+          "items": {
+            "type": "string"
+          },
+          "title": "Merge Key",
+          "type": "array"
+        }
+      },
+      "required": [
+        "type",
+        "dsn_env",
+        "table",
+        "merge_key"
+      ],
+      "title": "PostgresSinkSpec",
+      "type": "object"
+    },
+    "RestPollCursorSpec": {
+      "additionalProperties": false,
+      "properties": {
+        "request_param": {
+          "title": "Request Param",
+          "type": "string"
+        },
+        "response_path": {
+          "title": "Response Path",
+          "type": "string"
+        },
+        "event_id_path": {
+          "title": "Event Id Path",
+          "type": "string"
+        }
+      },
+      "required": [
+        "request_param",
+        "response_path",
+        "event_id_path"
+      ],
+      "title": "RestPollCursorSpec",
+      "type": "object"
+    },
+    "RestPollSourceSpec": {
+      "additionalProperties": false,
+      "properties": {
+        "type": {
+          "const": "rest_poll",
+          "title": "Type",
+          "type": "string"
+        },
+        "url": {
+          "title": "Url",
+          "type": "string"
+        },
+        "headers": {
+          "additionalProperties": {
+            "type": "string"
+          },
+          "title": "Headers",
+          "type": "object"
+        },
+        "cursor": {
+          "$ref": "#/$defs/RestPollCursorSpec"
+        },
+        "record_path": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": "data",
+          "title": "Record Path"
+        },
+        "limit_param": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Limit Param"
+        }
+      },
+      "required": [
+        "type",
+        "url",
+        "cursor"
+      ],
+      "title": "RestPollSourceSpec",
+      "type": "object"
+    },
+    "StreamSettings": {
+      "additionalProperties": false,
+      "properties": {
+        "name": {
+          "title": "Name",
+          "type": "string"
+        },
+        "poll_interval_seconds": {
+          "default": 15,
+          "exclusiveMinimum": 0,
+          "title": "Poll Interval Seconds",
+          "type": "number"
+        },
+        "batch": {
+          "$ref": "#/$defs/BatchSpec"
+        },
+        "event_time": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/EventTimeSpec"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        },
+        "checkpoint": {
+          "$ref": "#/$defs/CheckpointSpec"
+        }
+      },
+      "required": [
+        "name"
+      ],
+      "title": "StreamSettings",
+      "type": "object"
+    },
+    "TableCursorSourceSpec": {
+      "additionalProperties": false,
+      "description": "Validated declaration of a deliberately limited table-cursor snapshot.\n\nThe v1 runner does not treat a table cursor as CDC: it has no way to\nobserve hard deletes.  Keeping this model strict prevents a future source\nimplementation from silently accepting unsafe timestamp scans.",
+      "properties": {
+        "type": {
+          "const": "database_table_cursor",
+          "title": "Type",
+          "type": "string"
+        },
+        "dialect": {
+          "const": "postgres",
+          "title": "Dialect",
+          "type": "string"
+        },
+        "dsn_env": {
+          "title": "Dsn Env",
+          "type": "string"
+        },
+        "table": {
+          "title": "Table",
+          "type": "string"
+        },
+        "cursor_column": {
+          "title": "Cursor Column",
+          "type": "string"
+        },
+        "primary_key": {
+          "items": {
+            "type": "string"
+          },
+          "minItems": 1,
+          "title": "Primary Key",
+          "type": "array"
+        },
+        "cursor_timezone": {
+          "title": "Cursor Timezone",
+          "type": "string"
+        },
+        "cursor_immutable_or_monotonic": {
+          "title": "Cursor Immutable Or Monotonic",
+          "type": "boolean"
+        }
+      },
+      "required": [
+        "type",
+        "dialect",
+        "dsn_env",
+        "table",
+        "cursor_column",
+        "primary_key",
+        "cursor_timezone",
+        "cursor_immutable_or_monotonic"
+      ],
+      "title": "TableCursorSourceSpec",
+      "type": "object"
+    },
+    "ValidateRule": {
+      "additionalProperties": false,
+      "properties": {
+        "field": {
+          "title": "Field",
+          "type": "string"
+        },
+        "not_null": {
+          "default": false,
+          "title": "Not Null",
+          "type": "boolean"
+        },
+        "unique": {
+          "default": false,
+          "title": "Unique",
+          "type": "boolean"
+        },
+        "min": {
+          "anyOf": [
+            {
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Min"
+        },
+        "max": {
+          "anyOf": [
+            {
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Max"
+        }
+      },
+      "required": [
+        "field"
+      ],
+      "title": "ValidateRule",
+      "type": "object"
+    },
+    "ValidateSpec": {
+      "additionalProperties": false,
+      "properties": {
+        "rules": {
+          "items": {
+            "$ref": "#/$defs/ValidateRule"
+          },
+          "title": "Rules",
+          "type": "array"
+        },
+        "on_violation": {
+          "default": "quarantine",
+          "enum": [
+            "block",
+            "quarantine",
+            "warn"
+          ],
+          "title": "On Violation",
+          "type": "string"
+        }
+      },
+      "required": [
+        "rules"
+      ],
+      "title": "ValidateSpec",
+      "type": "object"
+    }
+  },
+  "additionalProperties": false,
+  "description": "Top-level Hasta YAML model, deliberately separate from batch PipelineSpec.",
+  "properties": {
+    "name": {
+      "title": "Name",
+      "type": "string"
+    },
+    "source": {
+      "discriminator": {
+        "mapping": {
+          "database_outbox": "#/$defs/DatabaseOutboxSourceSpec",
+          "database_table_cursor": "#/$defs/TableCursorSourceSpec",
+          "rest_poll": "#/$defs/RestPollSourceSpec"
+        },
+        "propertyName": "type"
+      },
+      "oneOf": [
+        {
+          "$ref": "#/$defs/RestPollSourceSpec"
+        },
+        {
+          "$ref": "#/$defs/DatabaseOutboxSourceSpec"
+        },
+        {
+          "$ref": "#/$defs/TableCursorSourceSpec"
+        }
+      ],
+      "title": "Source"
+    },
+    "sink": {
+      "discriminator": {
+        "mapping": {
+          "duckdb": "#/$defs/DuckDBSinkSpec",
+          "parquet": "#/$defs/ParquetSinkSpec",
+          "postgres": "#/$defs/PostgresSinkSpec"
+        },
+        "propertyName": "type"
+      },
+      "oneOf": [
+        {
+          "$ref": "#/$defs/ParquetSinkSpec"
+        },
+        {
+          "$ref": "#/$defs/DuckDBSinkSpec"
+        },
+        {
+          "$ref": "#/$defs/PostgresSinkSpec"
+        }
+      ],
+      "title": "Sink"
+    },
+    "stream": {
+      "$ref": "#/$defs/StreamSettings"
+    },
+    "state_dir": {
+      "default": ".arsenal",
+      "title": "State Dir",
+      "type": "string"
+    },
+    "validate": {
+      "anyOf": [
+        {
+          "$ref": "#/$defs/ValidateSpec"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null
+    },
+    "contract": {
+      "anyOf": [
+        {
+          "$ref": "#/$defs/ContractSpec"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null
+    },
+    "schema_drift": {
+      "default": "allow",
+      "enum": [
+        "allow",
+        "warn",
+        "block"
+      ],
+      "title": "Schema Drift",
+      "type": "string"
+    }
+  },
+  "required": [
+    "name",
+    "source",
+    "sink",
+    "stream"
+  ],
+  "title": "StreamSpec",
+  "type": "object"
+}

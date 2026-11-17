@@ -5,6 +5,7 @@ import pyarrow as pa
 
 from arsenal_core.errors import FatalError, RetryableError
 from arsenal_core.state import UnitSpec
+from pugio.sinks.contracts import OBJECT_STORAGE_PARQUET_CAPABILITIES
 
 OBJECT_STORE_SCHEMES = frozenset({"s3", "gcs", "gs"})
 
@@ -25,6 +26,8 @@ class ObjectStorageParquetSink:
     object key provides idempotency; remote object replacement is not claimed to
     be a cross-provider atomic transaction.
     """
+
+    capabilities = OBJECT_STORAGE_PARQUET_CAPABILITIES
 
     def __init__(self, path: str) -> None:
         if not is_object_store_path(path):

@@ -7,6 +7,8 @@ dependencies = [
     "arsenal-core",
     "pugio[postgres]",
     "de-gladius",
+    "de-hasta",
+    "de-ballista",
     "de-arsenal",
     "de-onager",
     "de-scutum",
@@ -22,6 +24,8 @@ members = ["packages/*"]
 arsenal-core = { workspace = true }
 pugio = { workspace = true }
 de-gladius = { workspace = true }
+de-hasta = { workspace = true }
+de-ballista = { workspace = true }
 de-arsenal = { workspace = true }
 de-onager = { workspace = true }
 de-scutum = { workspace = true }
@@ -39,6 +43,10 @@ dev = [
     "pyright>=1.1",
     "testcontainers[postgres]>=4.7",
 ]
+
+[project.optional-dependencies]
+streaming = ["de-hasta"]
+distributed = ["de-ballista"]
 
 [tool.ruff]
 line-length = 100

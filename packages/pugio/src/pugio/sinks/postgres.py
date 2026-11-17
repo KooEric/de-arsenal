@@ -35,6 +35,7 @@ from psycopg import sql
 from arsenal_core.errors import FatalError, RetryableError
 from arsenal_core.spec.models import PostgresSinkSpec
 from arsenal_core.state import UnitSpec
+from pugio.sinks.contracts import POSTGRES_CAPABILITIES
 
 _FATAL_OPERATIONAL_SQLSTATE_PREFIXES = ("28",)  # invalid_authorization_specification 계열
 _FATAL_OPERATIONAL_SQLSTATES = frozenset({"3D000", "3F000"})  # invalid catalog/schema name
@@ -102,6 +103,8 @@ def _pg_type(field: pa.Field) -> sql.SQL:
 
 
 class PostgresSink:
+    capabilities = POSTGRES_CAPABILITIES
+
     def __init__(self, spec: PostgresSinkSpec) -> None:
         self._spec = spec
 

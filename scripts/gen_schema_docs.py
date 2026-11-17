@@ -1,5 +1,5 @@
-"""Generate `schemas/*.json` and `docs/reference/*-schema.md` from the Pydantic
-spec models (`PipelineSpec`, `TransformSpec`).
+"""Generate `schemas/*.json` and `docs/reference/*-schema.md` from Pydantic
+spec models.
 
 Principle: docs generated FROM code — doc drift is a bug. Never hand-edit the
 generated artifacts; edit the source models and re-run this script instead:
@@ -26,6 +26,10 @@ _PIPELINE_JSON: Final = Path("schemas/pipeline.json")
 _PIPELINE_MD: Final = Path("docs/reference/pipeline-schema.md")
 _TRANSFORM_JSON: Final = Path("schemas/transform.json")
 _TRANSFORM_MD: Final = Path("docs/reference/transform-schema.md")
+_STREAM_JSON: Final = Path("schemas/stream.json")
+_STREAM_MD: Final = Path("docs/reference/stream-schema.md")
+_BALLISTA_JSON: Final = Path("schemas/ballista-profile.json")
+_BALLISTA_MD: Final = Path("docs/reference/ballista-profile-schema.md")
 
 
 def _import_pipeline_spec() -> type[Any]:
@@ -38,6 +42,18 @@ def _import_transform_spec() -> type[Any]:
     from gladius.spec import TransformSpec
 
     return TransformSpec
+
+
+def _import_stream_spec() -> type[Any]:
+    from hasta.spec import StreamSpec
+
+    return StreamSpec
+
+
+def _import_ballista_profile() -> type[Any]:
+    from ballista.config import BallistaProfile
+
+    return BallistaProfile
 
 
 def _ref_name(ref: str) -> str:
@@ -162,16 +178,22 @@ def _render_json_schema(model: type[Any]) -> str:
 
 
 def generate_artifacts() -> dict[Path, str]:
-    """Build the full content of all 4 generated artifacts, keyed by the
+    """Build the full content of all 8 generated artifacts, keyed by the
     (CWD-relative) path they should be written to."""
     pipeline_spec = _import_pipeline_spec()
     transform_spec = _import_transform_spec()
+    stream_spec = _import_stream_spec()
+    ballista_profile = _import_ballista_profile()
 
     pipeline_schema = pipeline_spec.model_json_schema()
     transform_schema = transform_spec.model_json_schema()
+    stream_schema = stream_spec.model_json_schema()
+    ballista_schema = ballista_profile.model_json_schema()
 
     pipeline_source = "packages/arsenal-core/src/arsenal_core/spec/models.py"
     transform_source = "packages/gladius/src/gladius/spec.py"
+    stream_source = "packages/hasta/src/hasta/spec.py"
+    ballista_source = "packages/ballista/src/ballista/config.py"
 
     pipeline_md = render_markdown(
         pipeline_schema,
@@ -198,12 +220,37 @@ def generate_artifacts() -> dict[Path, str]:
         ),
         source_path=transform_source,
     )
+    stream_md = render_markdown(
+        stream_schema,
+        title="Hasta Stream YAML Reference",
+        intro=(
+            "A Hasta stream YAML file declares a leased microbatch source, stream batch and "
+            "checkpoint settings, an existing Pugio sink, and optional contract/validation "
+            "policies. Supported source types are `rest_poll`, `database_outbox`, and the "
+            "validated-but-not-yet-runnable `database_table_cursor`."
+        ),
+        source_path=stream_source,
+    )
+    ballista_md = render_markdown(
+        ballista_schema,
+        title="Ballista Executor Profile Reference",
+        intro=(
+            "A Ballista profile keeps cluster and storage configuration separate from a "
+            "Gladius transform. Secret values are never placed in the profile: fields ending "
+            "in `_env` name environment variables that the operator supplies at runtime."
+        ),
+        source_path=ballista_source,
+    )
 
     return {
         _PIPELINE_JSON: _render_json_schema(pipeline_spec),
         _PIPELINE_MD: pipeline_md,
         _TRANSFORM_JSON: _render_json_schema(transform_spec),
         _TRANSFORM_MD: transform_md,
+        _STREAM_JSON: _render_json_schema(stream_spec),
+        _STREAM_MD: stream_md,
+        _BALLISTA_JSON: _render_json_schema(ballista_profile),
+        _BALLISTA_MD: ballista_md,
     }
 
 
