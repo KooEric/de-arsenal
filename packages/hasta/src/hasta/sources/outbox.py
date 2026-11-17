@@ -13,6 +13,7 @@ import pyarrow as pa
 from arsenal_core.errors import FatalError, RetryableError
 from arsenal_core.execution import canonical_json
 from hasta.model import BatchLimits, CdcEvent, MicroBatch, StreamPosition, cdc_event_hash
+from hasta.redact import redact
 from hasta.spec import DatabaseOutboxSourceSpec
 
 
@@ -105,17 +106,18 @@ class PostgresOutboxSource:
             table=sql.Identifier(*self._table),
             sequence=sql.Identifier(self._spec.sequence_column),
         )
+        dsn = self._dsn()
         try:
             with (
-                psycopg.connect(self._dsn(), row_factory=psycopg.rows.dict_row) as con,
+                psycopg.connect(dsn, row_factory=psycopg.rows.dict_row) as con,
                 con.cursor() as cur,
             ):
                 cur.execute(query, (sequence, limits.max_records))
                 rows: list[Mapping[str, object]] = list(cur.fetchall())
         except psycopg.OperationalError as exc:
-            raise RetryableError(f"outbox poll failed: {exc}") from exc
+            raise RetryableError(f"outbox poll failed: {redact(str(exc), [dsn])}") from exc
         except psycopg.Error as exc:
-            raise FatalError(f"outbox poll failed: {exc}") from exc
+            raise FatalError(f"outbox poll failed: {redact(str(exc), [dsn])}") from exc
 
         events = tuple(self.event(row) for row in rows)
         previous = sequence
