@@ -5,6 +5,7 @@ description = "Hasta — leased REST and Postgres outbox microbatch streaming"
 readme = "README.md"
 requires-python = ">=3.11"
 license = "Apache-2.0"
+license-files = ["LICENSE"]
 dependencies = [
     "arsenal-core>=0.4,<0.5",
     "pugio>=0.4,<0.5",

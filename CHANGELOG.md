@@ -12,7 +12,7 @@ minor.
 
 ## [Unreleased]
 
-## [0.4.0] - TBD
+## [0.4.0] - 2026-11-17
 
 P2 release: two new execution tools (Hasta streaming/CDC, Ballista
 distributed transforms) on a shared, engine-neutral execution contract, plus

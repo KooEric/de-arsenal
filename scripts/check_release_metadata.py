@@ -33,6 +33,17 @@ def main() -> int:
     if not any(name == "de-gladius" for name, _, _ in metadata):
         errors.append("the transform package must use the de-gladius distribution name")
 
+    for name, _, path in metadata:
+        with path.open("rb") as file:
+            project = tomllib.load(file)["project"]
+        if project.get("license") != "Apache-2.0":
+            errors.append(f"{name} must declare Apache-2.0")
+        license_path = path.parent / "LICENSE"
+        if project.get("license-files") != ["LICENSE"] or not license_path.is_file():
+            errors.append(f"{name} must include LICENSE in its distributions")
+        elif license_path.read_bytes() != (REPOSITORY_ROOT / "LICENSE").read_bytes():
+            errors.append(f"{name} LICENSE must match the repository license")
+
     if args.tag:
         tag_version = args.tag.removeprefix("refs/tags/").removeprefix("v")
         if versions != {tag_version}:

@@ -25,12 +25,12 @@ P2 릴리스다. 새 실행 도구 두 개(**Hasta** 스트리밍·CDC, **Ballis
 
 ## 머지 순서
 
-P2 작업은 쌓인 PR 네 개다. 각각 CI green 확인 후 순서대로 머지한다.
+P2 작업은 쌓인 PR 다섯 개다. 각각 CI green 확인 후 순서대로 머지한다.
 
 1. #14 `feat/p2-hasta-ballista` → `main` (Phase 0: P2 골격, 0.4.0 버전)
-2. #15 `feat/p2-phase1-ballista` → #14 브랜치 (Ballista 실클러스터 연동, Spark corpus, kind E2E)
-3. #16 `feat/p2-phase2-hasta` → #14 브랜치 (Hasta 운영 명령, 10만 이벤트 재개 증명)
-4. #17 `feat/p2-phase3-integration` → #16 브랜치 (Scorpio·Onager·Spatha·Arsenal 통합)
+2. #15 `feat/p2-phase1-ballista` → `main` (Ballista 실클러스터 연동, Spark corpus, kind E2E)
+3. #16 `feat/p2-phase2-hasta` → `main` (Hasta 운영 명령, 10만 이벤트 재개 증명)
+4. #17 `feat/p2-phase3-integration` → `main` (Scorpio·Onager·Spatha·Arsenal 통합)
 5. 릴리스 PR (이 문서, CHANGELOG, README) → 위 전부가 합쳐진 `main`
 
 \#15와 #16은 서로 독립이다. 쌓인 PR의 base 브랜치가 먼저 머지되면 GitHub가 다음 PR의
@@ -62,12 +62,15 @@ ls dist/ | wc -l                                  # sdist + wheel × 11 = 22
       (`packages/arsenal/tests/test_base_install.py`가 workspace에서 같은 것을 확인).
 - [ ] 0.3.0으로 만든 상태 DB를 0.4로 열면 `backups/`에 백업이 생기고 `schema_version == 3`.
 - [ ] `examples/hasta` quickstart가 README대로 돈다(`tests/e2e/test_hasta_quickstart.py`).
-- [ ] CHANGELOG의 `## [0.4.0] - TBD`를 실제 날짜로 바꾼다.
+- [ ] CHANGELOG의 `## [0.4.0] - 2026-11-17` 날짜가 실제 릴리스 날짜와 맞는지 확인한다.
 
 ## PyPI 준비 — 신규 배포명 3개 (계정 소유자)
 
-`de-augur`, `de-hasta`, `de-ballista`는 PyPI에 아직 없다. Trusted Publishing으로 처음
-만들려면 PyPI 계정의 **Publishing → Pending publishers**에 셋을 각각 등록한다.
+`de-augur`, `de-hasta`, `de-ballista`는 PyPI 첫 게시 대상이다. Trusted Publishing으로
+처음 만들려면 PyPI 계정의 **Publishing → Pending publishers**에 등록한다.
+동일한 저장소·workflow·환경 조합은 여러 신규 프로젝트에 동시에 등록할 수 없다.
+따라서 아래 표의 값으로 **하나씩 등록 → 해당 패키지만 수동 최초 게시 → 성공 확인**한 뒤
+다음 패키지를 등록한다. 첫 게시 후 pending publisher는 일반 publisher로 전환된다.
 
 | 필드 | 값 |
 |---|---|
@@ -88,25 +91,26 @@ gh workflow run release.yml -f version=0.4.0 -f publish_package=none
 gh run list --workflow release.yml --limit 1
 ```
 
-`verify-and-build`가 성공하면 태그를 만든다.
-
-```bash
-git tag v0.4.0
-git push origin v0.4.0
-```
-
 `v*` 태그 push에서 [release workflow](../.github/workflows/release.yml)가 전체 게이트와
 테스트 → `uv build --all-packages` → 산출물 보관 → PyPI Trusted Publishing 순으로 실행한다.
-pending publisher 셋이 등록돼 있으면 태그 실행 한 번으로 11개가 모두 게시되고,
-신규 셋은 이때 PyPI 프로젝트가 생성된다. 이미 게시된 파일은 `skip-existing`으로 건너뛴다.
+신규 셋의 최초 게시를 아래 순서로 마친 뒤 태그를 push한다. 태그 실행은 11개를
+모두 게시하며, 먼저 게시된 파일은 `skip-existing`으로 건너뛴다.
 
-**대안 — 하나씩 부트스트랩:** 태그 실행에서 신규 패키지만 실패하면(pending publisher
-누락 등) 등록을 고친 뒤 패키지 하나씩 수동 게시한다.
+**태그 전 — 하나씩 부트스트랩:** `de-augur` 등록 후 첫 명령을 실행하고 성공을 확인한다.
+그 다음 `de-hasta` 등록·게시, 마지막으로 `de-ballista` 등록·게시한다. 세 명령을
+동시에 실행하지 않는다. 모두 동일한 검증된 `main` 커밋을 사용한다.
 
 ```bash
 gh workflow run release.yml -f version=0.4.0 -f publish_package=de-augur
 gh workflow run release.yml -f version=0.4.0 -f publish_package=de-hasta
 gh workflow run release.yml -f version=0.4.0 -f publish_package=de-ballista
+```
+
+세 신규 패키지의 부트스트랩이 모두 성공하면 태그를 만든다.
+
+```bash
+git tag v0.4.0
+git push origin v0.4.0
 ```
 
 ## 게시 후 확인
