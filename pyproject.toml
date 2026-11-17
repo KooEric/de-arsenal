@@ -42,6 +42,9 @@ dev = [
     "ruff>=0.6",
     "pyright>=1.1",
     "testcontainers[postgres]>=4.7",
+    # de-ballista[object-store] runtime, so CI type-checks and tests the real
+    # conditional-write staging store instead of skipping it.
+    "obstore>=0.7",
 ]
 
 [project.optional-dependencies]
