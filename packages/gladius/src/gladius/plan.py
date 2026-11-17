@@ -208,9 +208,7 @@ def _step_to_node(step: Step, step_index: int) -> Operation:
         case FilterStep(filter=predicate):
             return Filter(SqlExpression(predicate))
         case RenameStep(rename=columns):
-            return Rename(
-                tuple(ColumnRename(source, target) for source, target in columns.items())
-            )
+            return Rename(tuple(ColumnRename(source, target) for source, target in columns.items()))
         case CastStep(cast=columns):
             return Cast(
                 tuple(ColumnCast(column, data_type) for column, data_type in columns.items())
@@ -295,9 +293,7 @@ class NonPortablePlanError(ValueError):
 
     def __init__(self, report: PortabilityReport) -> None:
         self.report = report
-        details = "\n".join(
-            f"- {issue.location}: {issue.message}" for issue in report.issues
-        )
+        details = "\n".join(f"- {issue.location}: {issue.message}" for issue in report.issues)
         super().__init__("transform is not portable:\n" + details)
 
 

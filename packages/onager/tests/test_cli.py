@@ -1,6 +1,4 @@
-from collections.abc import Callable
 from pathlib import Path
-from typing import cast
 
 import pyarrow as pa
 import pyarrow.parquet as pq
@@ -9,8 +7,7 @@ from typer.testing import CliRunner
 
 
 def write_part(path: Path, value: int) -> None:
-    write_table = cast(Callable[..., None], getattr(pq, "write_table"))
-    write_table(pa.table({"id": [value]}), path)
+    pq.write_table(pa.table({"id": [value]}), path)  # pyright: ignore[reportUnknownMemberType]
 
 
 def test_compact_subcommand_is_exposed(tmp_path: Path) -> None:

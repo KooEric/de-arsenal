@@ -5,7 +5,7 @@ from __future__ import annotations
 import dataclasses
 import hashlib
 import json
-from collections.abc import Mapping
+from collections.abc import Mapping, Sequence
 from datetime import date, datetime
 from enum import Enum
 from typing import Any, cast
@@ -36,7 +36,8 @@ def canonical_value(value: Any) -> Any:
             for key, item in sorted(mapping.items(), key=lambda pair: str(pair[0]))
         }
     if isinstance(value, (list, tuple)):
-        return [canonical_value(item) for item in value]
+        items = cast(Sequence[object], value)
+        return [canonical_value(item) for item in items]
     raise TypeError(f"cannot canonicalize {type(value).__name__}")
 
 
