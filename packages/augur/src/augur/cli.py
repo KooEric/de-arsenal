@@ -11,7 +11,8 @@ import duckdb
 import typer
 import yaml
 
-from arsenal_core.errors import ArsenalError
+from arsenal_core.errors import ArsenalError, FatalError
+from augur.aquila_source import tables_from_aquila
 from augur.catalog import Catalog, build_catalog
 from augur.evaluate import load_cases, run_eval, summarize
 from augur.generate import append_trace, ask
@@ -31,6 +32,7 @@ app.add_typer(auth_app, name="auth")
 DEFAULT_CATALOG = Path("./data/augur/catalog.json")
 DEFAULT_TRACES = Path("./data/augur/traces.jsonl")
 DEFAULT_EVAL_OUT = Path("./data/augur/eval")
+DEFAULT_AQUILA = Path("./.arsenal/aquila.db")
 
 
 def _fail(e: Exception) -> t.NoReturn:
@@ -40,13 +42,27 @@ def _fail(e: Exception) -> t.NoReturn:
 
 @app.command()
 def index(
-    sources: Annotated[Path, typer.Argument(help="YAML: {tables: {name: './data/x/*.parquet'}}")],
+    sources: Annotated[
+        Path | None,
+        typer.Argument(help="YAML: {tables: {name: './data/x/*.parquet'}} (or use --aquila)"),
+    ] = None,
     catalog: Annotated[Path, typer.Option("--catalog")] = DEFAULT_CATALOG,
+    aquila: Annotated[
+        Path | None,
+        typer.Option("--aquila", help="Read tables from an Aquila catalog (aquila.db)"),
+    ] = None,
 ) -> None:
     """Parquet 소스를 스캔해 스키마 카탈로그를 만든다."""
     try:
-        data = t.cast(dict[str, t.Any], yaml.safe_load(sources.read_text(encoding="utf-8")))
-        cat = build_catalog({str(k): str(v) for k, v in data["tables"].items()})
+        if sources is not None:
+            data = t.cast(dict[str, t.Any], yaml.safe_load(sources.read_text(encoding="utf-8")))
+            tables = {str(k): str(v) for k, v in data["tables"].items()}
+        else:
+            db = aquila or DEFAULT_AQUILA
+            if aquila is None and not db.exists():
+                raise FatalError("give a SOURCES yaml, or --aquila PATH to an Aquila catalog")
+            tables = tables_from_aquila(db)
+        cat = build_catalog(tables)
         cat.save(catalog)
     except (ArsenalError, OSError, KeyError) as e:
         _fail(e)

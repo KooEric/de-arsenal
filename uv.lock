@@ -13,6 +13,7 @@ resolution-markers = [
 [manifest]
 members = [
     "arsenal-core",
+    "de-aquila",
     "de-arsenal",
     "de-arsenal-workspace",
     "de-augur",
@@ -259,7 +260,7 @@ wheels = [
 
 [[package]]
 name = "arsenal-core"
-version = "0.4.0"
+version = "0.5.0"
 source = { editable = "packages/arsenal-core" }
 dependencies = [
     { name = "pydantic" },
@@ -637,8 +638,29 @@ wheels = [
 ]
 
 [[package]]
+name = "de-aquila"
+version = "0.5.0"
+source = { editable = "packages/aquila" }
+dependencies = [
+    { name = "arsenal-core" },
+    { name = "de-scorpio" },
+    { name = "pyarrow" },
+    { name = "pyyaml" },
+    { name = "typer" },
+]
+
+[package.metadata]
+requires-dist = [
+    { name = "arsenal-core", editable = "packages/arsenal-core" },
+    { name = "de-scorpio", editable = "packages/scorpio" },
+    { name = "pyarrow", specifier = ">=17" },
+    { name = "pyyaml", specifier = ">=6" },
+    { name = "typer", specifier = ">=0.12" },
+]
+
+[[package]]
 name = "de-arsenal"
-version = "0.4.0"
+version = "0.5.0"
 source = { editable = "packages/arsenal" }
 dependencies = [
     { name = "arsenal-core" },
@@ -649,6 +671,9 @@ dependencies = [
 ]
 
 [package.optional-dependencies]
+catalog = [
+    { name = "de-aquila" },
+]
 dbt = [
     { name = "dbt-duckdb" },
 ]
@@ -669,6 +694,7 @@ streaming = [
 requires-dist = [
     { name = "arsenal-core", editable = "packages/arsenal-core" },
     { name = "dbt-duckdb", marker = "extra == 'dbt'", specifier = ">=1.8,<2" },
+    { name = "de-aquila", marker = "extra == 'catalog'", editable = "packages/aquila" },
     { name = "de-ballista", marker = "extra == 'distributed'", editable = "packages/ballista" },
     { name = "de-gladius", editable = "packages/gladius" },
     { name = "de-hasta", marker = "extra == 'streaming'", editable = "packages/hasta" },
@@ -678,7 +704,7 @@ requires-dist = [
     { name = "pugio", extras = ["postgres"], marker = "extra == 'postgres'", editable = "packages/pugio" },
     { name = "typer", specifier = ">=0.12" },
 ]
-provides-extras = ["postgres", "dlt", "dbt", "streaming", "distributed"]
+provides-extras = ["postgres", "dlt", "dbt", "streaming", "distributed", "catalog"]
 
 [[package]]
 name = "de-arsenal-workspace"
@@ -686,6 +712,7 @@ version = "0.0.0"
 source = { virtual = "." }
 dependencies = [
     { name = "arsenal-core" },
+    { name = "de-aquila" },
     { name = "de-arsenal" },
     { name = "de-augur" },
     { name = "de-ballista" },
@@ -721,6 +748,7 @@ dev = [
 [package.metadata]
 requires-dist = [
     { name = "arsenal-core", editable = "packages/arsenal-core" },
+    { name = "de-aquila", editable = "packages/aquila" },
     { name = "de-arsenal", editable = "packages/arsenal" },
     { name = "de-augur", editable = "packages/augur" },
     { name = "de-ballista", editable = "packages/ballista" },
@@ -750,7 +778,7 @@ dev = [
 
 [[package]]
 name = "de-augur"
-version = "0.4.0"
+version = "0.5.0"
 source = { editable = "packages/augur" }
 dependencies = [
     { name = "arsenal-core" },
@@ -775,7 +803,7 @@ requires-dist = [
 
 [[package]]
 name = "de-ballista"
-version = "0.4.0"
+version = "0.5.0"
 source = { editable = "packages/ballista" }
 dependencies = [
     { name = "arsenal-core" },
@@ -811,7 +839,7 @@ provides-extras = ["spark-kubernetes", "iceberg", "object-store"]
 
 [[package]]
 name = "de-gladius"
-version = "0.4.0"
+version = "0.5.0"
 source = { editable = "packages/gladius" }
 dependencies = [
     { name = "arsenal-core" },
@@ -838,7 +866,7 @@ provides-extras = ["python"]
 
 [[package]]
 name = "de-hasta"
-version = "0.4.0"
+version = "0.5.0"
 source = { editable = "packages/hasta" }
 dependencies = [
     { name = "arsenal-core" },
@@ -874,7 +902,7 @@ provides-extras = ["postgres"]
 
 [[package]]
 name = "de-onager"
-version = "0.4.0"
+version = "0.5.0"
 source = { editable = "packages/onager" }
 dependencies = [
     { name = "arsenal-core" },
@@ -893,12 +921,12 @@ requires-dist = [
 
 [[package]]
 name = "de-scorpio"
-version = "0.4.0"
+version = "0.5.0"
 source = { editable = "packages/scorpio" }
 
 [[package]]
 name = "de-scutum"
-version = "0.4.0"
+version = "0.5.0"
 source = { editable = "packages/scutum" }
 dependencies = [
     { name = "arsenal-core" },
@@ -2566,7 +2594,7 @@ wheels = [
 
 [[package]]
 name = "pugio"
-version = "0.4.0"
+version = "0.5.0"
 source = { editable = "packages/pugio" }
 dependencies = [
     { name = "arsenal-core" },
@@ -3553,7 +3581,7 @@ wheels = [
 
 [[package]]
 name = "spatha"
-version = "0.4.0"
+version = "0.5.0"
 source = { editable = "packages/spatha" }
 dependencies = [
     { name = "de-scutum" },

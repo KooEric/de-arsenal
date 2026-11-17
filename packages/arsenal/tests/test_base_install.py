@@ -24,6 +24,7 @@ HEAVY = {
     "dbt-duckdb",
     "de-hasta",
     "de-ballista",
+    "de-aquila",
 }
 
 _NAME = re.compile(r"^\s*([A-Za-z0-9][A-Za-z0-9._-]*)")

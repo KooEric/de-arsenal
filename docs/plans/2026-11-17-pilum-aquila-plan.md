@@ -225,3 +225,15 @@ pilum reset churn.yaml --confirm  # 원장 초기화 (다음 run이 전량 재�
 | 4 | Pilum v1 끝점 | **generic HTTP · webhook · Slack** 세 가지로 한정. SaaS 템플릿(HubSpot/Salesforce)은 PL-5(0.7) |
 
 착수 시점: 0.4.0 태그 이후 AQ-0부터. 위 결정은 AQ-0/PL-0에서 ADR 문서로 옮겨 고정한다.
+
+## 5. 진행 상황
+
+| 단계 | 상태 | 증거 |
+|---|---|---|
+| AQ-0 | ✅ | `packages/aquila` 골격, `test_install.py`(다른 무기 미의존, 역방향 의존 없음), release workflow 등록 |
+| AQ-1 | ✅ | `aquila.db` v1 스키마, URI 정규화 property test, 재스캔 행 수 불변, `history` diff |
+| AQ-2 | ✅ | 3단 fixture(pugio→gladius→ballista) 상·하류 그래프, SCC 순환 감지, mermaid |
+| AQ-3 | ✅ | 계약 해시 변경·스키마 불일치, 태그·FTS5 검색, deprecated 하류 경고 |
+| AQ-4 | ✅ | Augur `--aquila`(34 case eval 결과 동일), `arsenal status` catalog 블록, Scorpio freshness, Hasta/Ballista 스캐너 |
+| 0.5.0 릴리스 | 준비 완료 | 12개 패키지 0.5.0·핀 `>=0.5,<0.6`, CHANGELOG·[upgrade-0.5](../upgrade-0.5.md)·[release](../release.md) 갱신. 남은 것: `de-aquila` pending publisher 등록 → 최초 게시 → `v0.5.0` 태그 |
+| Pilum PL-0~ | 대기 | Aquila 0.5.0 출시 후 |

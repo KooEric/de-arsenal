@@ -169,9 +169,9 @@ StateStore v2 마이그레이션은 breaking이므로 **P2는 `0.4.0`이어야 �
 - [x] base install이 Spark/K8s/Iceberg/Kafka 의존성을 끌어오지 않음을 테스트로 확인
 - [x] 모든 명령이 secret·DSN·token을 로그/오류에 출력하지 않음을 확인
 - [x] 11개 패키지 README·`py.typed`·license·PyPI metadata 정합
-- [ ] (계정 소유자) PyPI Pending publisher 3개 등록 → PR 머지 → `v0.4.0` 태그 — 절차: [release.md](../release.md)
+- [x] (계정 소유자) PyPI Pending publisher 3개 등록 → PR 머지 → `v0.4.0` 태그 — 2026-11-17 게시 완료, 11개 패키지 PyPI 0.4.0 확인
 
-> 진행 (2026-11-17): 문서·검증 항목 완료(`feat/p2-phase4-release`). 시크릿 점검에서 Hasta REST 오류의 URL 노출과 outbox DSN 에코를 발견해 마스킹으로 고쳤다(`hasta/redact.py`). 남은 것은 PyPI 등록과 머지·태그뿐이다.
+> 진행 (2026-11-17): 문서·검증 항목 완료(`feat/p2-phase4-release`). 시크릿 점검에서 Hasta REST 오류의 URL 노출과 outbox DSN 에코를 발견해 마스킹으로 고쳤다(`hasta/redact.py`). 이후 PyPI 등록·머지·태그까지 끝나 0.4.0이 출시됐다(2026-11-17).
 
 ---
 

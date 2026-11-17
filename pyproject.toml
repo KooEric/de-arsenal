@@ -15,6 +15,7 @@ dependencies = [
     "spatha",
     "de-scorpio",
     "de-augur",
+    "de-aquila",
 ]
 
 [tool.uv.workspace]
@@ -32,6 +33,7 @@ de-scutum = { workspace = true }
 spatha = { workspace = true }
 de-scorpio = { workspace = true }
 de-augur = { workspace = true }
+de-aquila = { workspace = true }
 
 [dependency-groups]
 dev = [
@@ -59,7 +61,7 @@ target-version = "py311"
 select = ["E", "F", "I", "UP", "B", "SIM"]
 
 [tool.ruff.lint.isort]
-known-first-party = ["arsenal_core", "pugio", "gladius", "augur"]
+known-first-party = ["arsenal_core", "pugio", "gladius", "augur", "aquila"]
 
 [tool.pyright]
 include = ["packages", "benchmarks", "scripts"]
