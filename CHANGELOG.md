@@ -12,7 +12,7 @@ minor.
 
 ## [Unreleased]
 
-## [0.5.0] - TBD
+## [0.5.0] - 2026-11-17
 
 Catalog release: a 12th package, **Aquila**, records what data exists, where it
 came from and whether it still matches its contract — without any other tool

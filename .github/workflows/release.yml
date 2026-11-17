@@ -95,6 +95,7 @@ jobs:
             de-augur) package_prefix="de_augur" ;;
             de-hasta) package_prefix="de_hasta" ;;
             de-ballista) package_prefix="de_ballista" ;;
+            de-aquila) package_prefix="de_aquila" ;;
             pugio|spatha) package_prefix="$PUBLISH_PACKAGE" ;;
             *) echo "Unsupported package: $PUBLISH_PACKAGE" >&2; exit 1 ;;
           esac
