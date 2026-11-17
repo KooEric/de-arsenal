@@ -12,7 +12,7 @@ minor.
 
 ## [Unreleased]
 
-## [0.5.1] - TBD
+## [0.5.1] - 2026-11-17
 
 Patch release: one data-correctness fix. All 12 packages move to `0.5.1`
 together; internal pins stay `>=0.5,<0.6`, so `0.5.0` installs pick it up on

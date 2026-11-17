@@ -3,7 +3,7 @@
 데이터 정확성 수정 하나를 담은 패치다. `arsenal.yaml`의 `distributed:` 단계에서
 `input_version: auto`가 run id를 리터럴 `"auto"`로 만들어, 입력이 바뀌어도 이미 성공한
 첫 Ballista run만 reconcile하고 새 데이터를 처리하지 않던 문제를 고친다(#20).
-내역은 [CHANGELOG](../CHANGELOG.md#051---tbd).
+내역은 [CHANGELOG](../CHANGELOG.md#051---2026-11-17).
 
 **patch인 이유**: 공개 API·스펙 필드·상태 DB가 그대로이고 동작 변경은 버그 수정뿐이다.
 12개 패키지를 0.5.1로 함께 올리고 교차 핀은 `>=0.5,<0.6`을 유지한다 — 0.5.0 사용자는
