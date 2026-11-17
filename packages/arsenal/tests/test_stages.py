@@ -323,3 +323,129 @@ def test_status_without_a_catalog_has_no_catalog_block(tmp_path: Path) -> None:
     payload = json.loads(runner.invoke(app, ["status", "--project", str(project)]).stdout)
 
     assert "catalog" not in payload
+
+
+# --- input_version: auto --------------------------------------------------------------
+
+
+def auto_ref(tmp_path: Path) -> DistributedRef:
+    write(
+        tmp_path / "big.yaml",
+        "name: big\ninput: s3://lake/orders\nsteps: [{select: [id]}]\noutput: iceberg://a.big\n",
+    )
+    return DistributedRef(
+        transform=tmp_path / "big.yaml",
+        profile=tmp_path / "p.yaml",
+        input_version="auto",
+        state_dir=tmp_path / ".arsenal",
+    )
+
+
+class RecordingBallista:
+    """Knows the runs it has seen; `status` fails for unknown ids, like the real CLI."""
+
+    def __init__(self) -> None:
+        self.known: set[str] = set()
+        self.commands: list[list[str]] = []
+
+    def __call__(self, argv: list[str], **_: Any) -> subprocess.CompletedProcess[str]:
+        command = argv[3:]
+        self.commands.append(command)
+        if command[0] == "status":
+            if command[1] not in self.known:
+                return subprocess.CompletedProcess(argv, 1, "", "error: unknown Ballista run")
+            return subprocess.CompletedProcess(argv, 0, json.dumps({"status": "succeeded"}), "")
+        if command[0] == "run":
+            run_id = command[command.index("--run-id") + 1]
+            self.known.add(run_id)
+            return subprocess.CompletedProcess(
+                argv, 0, json.dumps({"run_id": run_id, "status": "submitted"}), ""
+            )
+        return subprocess.CompletedProcess(argv, 0, json.dumps({"status": "succeeded"}), "")
+
+
+def test_auto_input_submits_a_new_run_when_the_input_changes(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.chdir(tmp_path)
+    monkeypatch.setattr(stages, "require_tool", _tool_present)
+    listing = iter(["listing:aaa", "listing:aaa", "listing:bbb"])
+    seen_uris: list[str] = []
+
+    def fingerprint(uri: str) -> str:
+        seen_uris.append(uri)
+        return next(listing)
+
+    monkeypatch.setattr(stages, "_fingerprint", fingerprint)
+    ballista = RecordingBallista()
+    monkeypatch.setattr(subprocess, "run", ballista)
+    ref = auto_ref(tmp_path)
+
+    first = stages.submit_or_reconcile("lakehouse", ref)
+    same = stages.submit_or_reconcile("lakehouse", ref)
+    changed = stages.submit_or_reconcile("lakehouse", ref)
+
+    assert seen_uris == ["s3://lake/orders"] * 3
+    assert first["status"] == "submitted" and same["status"] == "succeeded"
+    assert changed["status"] == "submitted" and changed["run_id"] != first["run_id"]
+    runs = [c for c in ballista.commands if c[0] == "run"]
+    assert [c[c.index("--input-version") + 1] for c in runs] == ["listing:aaa", "listing:bbb"]
+
+
+def test_auto_input_that_cannot_be_resolved_fails_before_submitting(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setattr(stages, "require_tool", _tool_present)
+
+    def unreachable(uri: str) -> str:
+        raise FatalError("list input objects: access denied (PermissionError)")
+
+    monkeypatch.setattr(stages, "_fingerprint", unreachable)
+    ballista = RecordingBallista()
+    monkeypatch.setattr(subprocess, "run", ballista)
+
+    with pytest.raises(FatalError, match="input_version: auto.*big.yaml.*access denied"):
+        stages.submit_or_reconcile("lakehouse", auto_ref(tmp_path))
+    assert ballista.commands == []
+
+
+def test_status_with_auto_input_reports_an_unresolved_input_instead_of_crashing(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.chdir(tmp_path)
+
+    def unreachable(uri: str) -> str:
+        raise FatalError("list input objects: access denied (PermissionError)")
+
+    monkeypatch.setattr(stages, "_fingerprint", unreachable)
+    (tmp_path / ".arsenal").mkdir()
+    StateStore(tmp_path / ".arsenal" / "ballista.sqlite").close()
+
+    status = stages.distributed_status("lakehouse", auto_ref(tmp_path))
+
+    assert status["status"] == "input-unresolved" and "access denied" in status["error"]
+
+
+def test_auto_resolution_uses_ballistas_listing_fingerprint(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    obstore = pytest.importorskip("obstore")
+    from ballista import storage
+    from obstore.store import MemoryStore
+
+    lake = MemoryStore()
+    obstore.put(lake, "a.parquet", b"1")
+
+    def build(_uri: str) -> Any:
+        return lake
+
+    monkeypatch.setattr(storage, "_default_factory", lambda: build)
+    ref = auto_ref(tmp_path)
+
+    before = stages.resolve_input_version(ref)
+    obstore.put(lake, "b.parquet", b"22")
+    after = stages.resolve_input_version(ref)
+
+    assert before.startswith("listing:") and after.startswith("listing:")
+    assert before != after
+    assert stages.distributed_run_id("p", ref, before) != stages.distributed_run_id("p", ref, after)

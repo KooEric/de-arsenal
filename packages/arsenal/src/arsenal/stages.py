@@ -16,7 +16,7 @@ from pathlib import Path
 from typing import Any, cast
 
 from arsenal.project import DistributedRef, StreamRef
-from arsenal_core.errors import FatalError
+from arsenal_core.errors import ArsenalError, FatalError
 from arsenal_core.execution import canonical_hash
 
 _EXTRAS = {
@@ -48,18 +48,47 @@ def run_stream(ref: StreamRef) -> dict[str, Any]:
     return dict(report.__dict__)
 
 
-def distributed_run_id(project: str, ref: DistributedRef) -> str:
+def _fingerprint(uri: str) -> str:
+    """Current listing fingerprint of a Parquet input prefix (seam for tests)."""
+
+    storage: Any = importlib.import_module("ballista.storage")
+    return str(storage.fingerprint_uri(uri))
+
+
+def resolve_input_version(ref: DistributedRef) -> str:
+    """The concrete input version a run is keyed by.
+
+    ``auto`` is not a version: it means "whatever the input is now". It is
+    resolved to the input's listing fingerprint *before* the run id is derived,
+    so new input data gets a new run instead of reconciling the last one.
+    """
+
+    if ref.input_version != "auto":
+        return ref.input_version
+    loader: Any = importlib.import_module("gladius.loader")
+    uri = str(loader.load_transform(ref.transform).input)
+    try:
+        return _fingerprint(uri)
+    except ArsenalError as exc:
+        raise FatalError(
+            f"cannot resolve input_version: auto for {ref.transform.name}: {exc}"
+        ) from exc
+
+
+def distributed_run_id(project: str, ref: DistributedRef, input_version: str | None = None) -> str:
     """Same project + transform + input version → same run, so re-running resumes.
 
     Call with the project directory as the working directory (``arsenal run``
-    and ``arsenal status`` do), so the id survives moving the project.
+    and ``arsenal status`` do), so the id survives moving the project. Pass the
+    resolved ``input_version`` when the manifest says ``auto``.
     """
 
     try:
         transform = ref.transform.relative_to(Path.cwd()).as_posix()
     except ValueError:
         transform = ref.transform.as_posix()
-    payload = {"project": project, "transform": transform, "input": ref.input_version}
+    version = input_version if input_version is not None else ref.input_version
+    payload = {"project": project, "transform": transform, "input": version}
     return f"arsenal-{canonical_hash(payload)[:16]}"
 
 
@@ -67,7 +96,8 @@ def submit_or_reconcile(project: str, ref: DistributedRef) -> dict[str, Any]:
     """Submit a new Ballista run, or reconcile the one this input already started."""
 
     require_tool("ballista")
-    run_id = distributed_run_id(project, ref)
+    version = resolve_input_version(ref)
+    run_id = distributed_run_id(project, ref, version)
     status = _ballista("status", run_id, "--state-dir", str(ref.state_dir), check=False)
     if status is None:
         return _ballista(
@@ -76,7 +106,7 @@ def submit_or_reconcile(project: str, ref: DistributedRef) -> dict[str, Any]:
             "--profile",
             str(ref.profile),
             "--input-version",
-            ref.input_version,
+            version,
             "--state-dir",
             str(ref.state_dir),
             "--run-id",
@@ -129,13 +159,21 @@ def stream_status(ref: StreamRef) -> dict[str, Any]:
 
 
 def distributed_status(project: str, ref: DistributedRef) -> dict[str, Any]:
-    """Durable view only — never contacts the cluster (use reconcile for that)."""
+    """Durable view only — never contacts the cluster (use reconcile for that).
+
+    With ``input_version: auto`` it lists the input prefix to find the current
+    run; when that listing is impossible it reports ``input-unresolved``.
+    """
 
     from scorpio import RunObservation, summarize_runs
 
     from arsenal_core.state import StateStore
 
-    run_id = distributed_run_id(project, ref)
+    try:
+        version = resolve_input_version(ref)
+    except FatalError as exc:  # e.g. no storage credentials where `status` runs
+        return {"run_id": None, "status": "input-unresolved", "error": str(exc), "history": None}
+    run_id = distributed_run_id(project, ref, version)
     db = Path(ref.state_dir) / "ballista.sqlite"
     if not db.exists():
         return {"run_id": run_id, "status": "not-submitted", "history": None}
