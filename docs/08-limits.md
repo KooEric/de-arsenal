@@ -126,6 +126,11 @@ preflight에서 거부된다.
 | staging | manifest/proof는 객체 스토리지 조건부 쓰기(S3 `If-None-Match`, GCS generation=0, Azure `If-None-Match`)로 한 번만 생성된다 | 조건부 쓰기를 지원하지 않는 S3 호환 스토리지 — probe가 "새 키가 이미 존재" 응답을 감지하면 거부하지만 모든 오동작을 잡지는 못한다 |
 | 환경 검증 | `ballista plan --probe`가 spark-submit, API `/readyz`, 드라이버 SA RBAC, staging 쓰기·읽기, Iceberg 카탈로그, digest 고정 이미지를 실제로 확인한다 | 이미지 내부 내용 검증 — digest 고정만 확인한다. `allow_mutable_image: true`는 로컬·E2E 전용 |
 
+`arsenal.yaml`의 `distributed:` 단계에서 `input_version: auto`는 실행할 때마다 입력 prefix의
+목록 fingerprint로 바뀌고, run id도 그 값으로 정해진다 — 입력이 그대로면 같은 run을 reconcile하고,
+바뀌었으면 새 run을 제출한다. `auto`는 Parquet 입력만 지원하며, 목록을 읽을 수 없으면 `arsenal run`은
+제출 전에 실패하고 `arsenal status`는 `input-unresolved`를 보고한다.
+
 ### DuckDB ↔ Spark 동치성 (LogicalPlan v1)
 
 같은 portable plan이 두 엔진에서 같은 결과를 내도록 Spark 렌더러를 DuckDB 의미에 맞췄고,

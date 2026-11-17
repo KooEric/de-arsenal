@@ -12,6 +12,17 @@ minor.
 
 ## [Unreleased]
 
+### Fixed
+
+- **`arsenal run` never reprocessed new data for `distributed:` stages with
+  `input_version: auto`.** The run id was derived from the literal string
+  `auto`, so every later run found the first (already succeeded) Ballista run
+  and only reconciled it — silently leaving the output stale. Arsenal now
+  resolves `auto` to the input's listing fingerprint first, keys the run by it
+  and passes that fingerprint to `ballista run`: unchanged input reconciles the
+  same run, changed input submits a new one. `arsenal status` resolves the same
+  way and reports `input-unresolved` when the input cannot be listed.
+
 ## [0.5.0] - 2026-11-17
 
 Catalog release: a 12th package, **Aquila**, records what data exists, where it
