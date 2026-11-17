@@ -1,0 +1,31 @@
+# Hasta quickstart — stream orders from the local fake API into Parquet.
+# Start the API first:  python examples/hasta/fake_orders_api.py
+name: orders
+state_dir: .arsenal/hasta
+source:
+  type: rest_poll
+  url: http://127.0.0.1:8765/orders
+  limit_param: limit
+  record_path: data
+  cursor:
+    request_param: after
+    response_path: next_cursor
+    event_id_path: id          # stable per-event identity; required
+stream:
+  name: orders
+  poll_interval_seconds: 2
+  batch:
+    max_records: 50
+    max_bytes: 1000000
+    max_wait_seconds: 5
+  checkpoint:
+    lease_ttl_seconds: 30
+contract:
+  on_violation: quarantine     # bad batches go to the DLQ, never to the sink
+  allow_extra: true            # customer/created_at are allowed but not checked
+  columns:
+    - {name: id, type: int64, nullable: false}
+    - {name: amount, type: double, nullable: false}
+sink:
+  type: parquet
+  path: data/orders

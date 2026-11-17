@@ -83,20 +83,27 @@ def batch_identity(
     start: StreamPosition,
     end: StreamPosition,
     event_hash: str,
+    generation: int = 0,
 ) -> str:
-    """Return the stable SHA-256 identity required for retry-safe sink writes."""
+    """Return the stable SHA-256 identity required for retry-safe sink writes.
 
-    return canonical_hash(
-        {
-            "pipeline": pipeline,
-            "stream_name": stream_name,
-            "revision": revision,
-            "source_id": source_id,
-            "start_position": start.canonical(),
-            "end_position": end.canonical(),
-            "event_hash": event_hash,
-        }
-    )
+    ``generation`` changes only on an explicit checkpoint reset, so a replay
+    produces new batches instead of being skipped as already committed.
+    Generation 0 is left out of the hash to keep pre-reset identities stable.
+    """
+
+    payload: dict[str, object] = {
+        "pipeline": pipeline,
+        "stream_name": stream_name,
+        "revision": revision,
+        "source_id": source_id,
+        "start_position": start.canonical(),
+        "end_position": end.canonical(),
+        "event_hash": event_hash,
+    }
+    if generation:
+        payload["generation"] = generation
+    return canonical_hash(payload)
 
 
 @dataclass(frozen=True)

@@ -25,7 +25,7 @@
 3. Pilum이 "무엇을 보낼지" 고를 때 Aquila 조회(데이터셋·계약·소유자)를 그대로 쓴다.
 
 둘은 코드상 독립이므로 인력이 있으면 병렬도 가능하다. 단, 같은 StateStore migration 번호를
-쓰지 않도록 Aquila는 **별도 DB 파일**(`aquila.db`)을 쓰고, Pilum만 StateStore v3 migration을 가진다.
+쓰지 않도록 Aquila는 **별도 DB 파일**(`aquila.db`)을 쓰고, Pilum만 StateStore v4 migration을 가진다.
 
 ---
 
@@ -145,7 +145,7 @@ aquila deprecate orders --reason "replaced by orders_v2"
 |---|---|---|
 | PL-ADR-1 | **dispatch_id = hash(pipeline, destination, record_key, content_hash)** | 같은 내용의 같은 레코드는 몇 번 재실행해도 같은 ID → 원장에서 skip, 끝점엔 같은 멱등 키 |
 | PL-ADR-2 | **원장 기록은 끝점 성공 응답 후에만** (I2 불변식과 동일) | 발사 전 기록하면 실패 시 영구 누락. 발사 후 기록이라 크래시 시 재발사 → 멱등 키가 흡수 |
-| PL-ADR-3 | 원장은 StateStore **v3 migration**(`dispatch_ledger`, `dispatch_dlq`) | 0.4의 forward migration·backup 프레임워크 재사용, 별도 저장소 발명 안 함 |
+| PL-ADR-3 | 원장은 StateStore **v4 migration**(`dispatch_ledger`, `dispatch_dlq`) | 0.4의 forward migration·backup 프레임워크 재사용, 별도 저장소 발명 안 함 |
 | PL-ADR-4 | 기본 모드는 `upsert`, `mirror`(delete)는 명시 opt-in + 확인 | delete 발사는 되돌릴 수 없다 |
 | PL-ADR-5 | 최초 실행 안전장치: 원장이 비어 있고 대상 건수가 `max_first_dispatch`(기본 1,000) 초과면 거부 | 실수로 전 고객에게 발사하는 사고 방지. `--confirm-initial-load`로 해제 |
 
@@ -188,7 +188,7 @@ pilum reset churn.yaml --confirm  # 원장 초기화 (다음 run이 전량 재�
 | 단계 | 내용 | DoD |
 |---|---|---|
 | **PL-0** 설계 고정 (0.5일) | 이 문서 승인, ADR 5건, `de-pilum` 골격 | CI green, 독립 설치 |
-| **PL-1** 원장·diff 코어 (2~3일) | StateStore v3 migration, `DispatchSpec`, key/content hash, insert/upsert/mirror diff, `pilum plan` | v0.4 state DB가 v3로 무손실 migration, diff property test(재실행 시 발사 0건) |
+| **PL-1** 원장·diff 코어 (2~3일) | StateStore v4 migration, `DispatchSpec`, key/content hash, insert/upsert/mirror diff, `pilum plan` | v0.4 state DB(v3)가 v4로 무손실 migration, diff property test(재실행 시 발사 0건) |
 | **PL-2** HTTP 끝점 (2~3일) | generic HTTP·webhook·Slack, 멱등 헤더, batch, rate limit, retry, auth refresh | fake HTTP 서버로 크래시 매트릭스: 발사 후·원장 기록 전 크래시 → 재실행 시 같은 멱등 키로 1회만 반영 |
 | **PL-3** 안전장치·DLQ (1.5~2일) | DLQ, `replay`, `max_first_dispatch`, mirror 확인, secret 마스킹 | 4xx(영구)·5xx/429(재시도) 분류 테스트, 로그·오류에 토큰 미노출 테스트 |
 | **PL-4** 통합 (1.5~2일) | `arsenal run` dispatch, Scorpio 메트릭(발사 수·실패율·지연), Spatha 태스크, Aquila에 하류 끝점 등록 | gladius → pilum 레시피 E2E, Scorpio에서 DLQ 건수 확인 |

@@ -122,7 +122,12 @@ StateStore v2 마이그레이션은 breaking이므로 **P2는 `0.4.0`이어야 �
 
 ---
 
-### Phase 2 — P2-1B 운영 UX (2~3일)
+### Phase 2 — P2-1B 운영 UX (2~3일) — ✅ 2026-11-17 구현
+
+> 결과 (`feat/p2-phase2-hasta`): `hasta checkpoint show/reset`(dry-run 기본, `--confirm`, 실행 중이면 거부),
+> SIGINT/SIGTERM graceful stop(실제 프로세스로 확인), lease 보유자·만료 노출, StateStore v3(ledger에 generation),
+> 10만 이벤트·12회 크래시 재시작에서 중복·누락 0, `examples/hasta` quickstart.
+> 남은 한계: null cursor를 반환하는 API는 스트림을 영구 종료시킨다(문서화).
 
 | # | 작업 | 현재 상태 | 완료 기준 |
 |---|---|---|---|

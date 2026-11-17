@@ -5,7 +5,7 @@ from __future__ import annotations
 import json
 import logging
 import re
-import time
+import threading
 import uuid
 from collections.abc import Callable, Sequence
 from dataclasses import dataclass
@@ -27,7 +27,7 @@ from arsenal_core.execution import (
     spec_revision,
 )
 from arsenal_core.schema import compare_schema_snapshots
-from arsenal_core.state import LeaseLostError, StateStore, UnitSpec
+from arsenal_core.state import LeaseLostError, StateStore, StreamCheckpoint, UnitSpec
 from hasta.model import (
     BatchLimits,
     CdcEvent,
@@ -77,6 +77,7 @@ class StreamReport:
     skipped: int = 0
     quarantined: int = 0
     exhausted: bool = False
+    stopped: bool = False
 
 
 def _schema_json(table: pa.Table) -> str:
@@ -94,6 +95,14 @@ def _record_batch(table: pa.Table) -> pa.RecordBatch:
     if not batches:
         return pa.RecordBatch.from_arrays([], schema=table.schema)
     return batches[0]
+
+
+def _resume_position(checkpoint: StreamCheckpoint | None) -> StreamPosition | None:
+    """An absent or reset (empty) checkpoint means "from the source's beginning"."""
+
+    if checkpoint is None or not checkpoint.position:
+        return None
+    return StreamPosition(checkpoint.position)
 
 
 def _build_contract(spec: StreamSpec) -> DataContract | None:
@@ -163,15 +172,19 @@ class StreamRunner:
         sink: StreamingSink | CdcApplySink | None = None,
         store: StateStore | None = None,
         owner_id: str | None = None,
-        sleep: Callable[[float], None] = time.sleep,
+        sleep: Callable[[float], None] | None = None,
+        stop: threading.Event | None = None,
     ) -> None:
         self.spec = spec
+        # ``stop`` lets a signal handler end the loop between batches: the
+        # in-flight batch always finishes its fenced commit first.
+        self._stop = stop or threading.Event()
+        self._sleep: Callable[[float], None] = sleep or self._wait_for_stop
         self._source = source or self._build_source(spec)
         self._sink = sink or self._build_sink(spec)
         self._store = store or StateStore(Path(spec.state_dir) / f"{spec.name}.db")
         self._owns_store = store is None
         self._owner_id = owner_id or f"hasta-{uuid.uuid4()}"
-        self._sleep = sleep
         self._revision = spec_revision(spec.revision_payload())
         self._contract = _build_contract(spec)
         self._validate_sink_capabilities()
@@ -232,12 +245,16 @@ class StreamRunner:
         )
         if lease is None:
             raise LeaseUnavailableError(f"stream lease is held: {self.resource}")
+        logger.info("acquired lease %s (fence %s)", self.resource, lease.fence)
         polls = committed = skipped = quarantined = 0
-        exhausted = False
+        exhausted = stopped = False
         try:
             while max_batches is None or polls < max_batches:
+                if self._stop.is_set():
+                    stopped = True
+                    break
                 checkpoint = self._store.checkpoint(self.spec.name, self.spec.stream.name)
-                after = StreamPosition(checkpoint.position) if checkpoint is not None else None
+                after = _resume_position(checkpoint)
                 if after is not None and after.value.get("_hasta_exhausted") is True:
                     exhausted = True
                     break
@@ -263,9 +280,26 @@ class StreamRunner:
                     break
                 if wait_between_polls and (max_batches is None or polls < max_batches):
                     self._sleep(self.spec.stream.poll_interval_seconds)
-            return StreamReport(polls, committed, skipped, quarantined, exhausted)
+            stopped = stopped or self._stop.is_set()
+            return StreamReport(polls, committed, skipped, quarantined, exhausted, stopped)
         finally:
-            self._store.release_lease(lease)
+            released = self._store.release_lease(lease)
+            logger.info(
+                "released lease %s (fence %s)%s",
+                self.resource,
+                lease.fence,
+                "" if released else " — already expired or taken over",
+            )
+
+    def stop(self) -> None:
+        """Request a graceful stop after the in-flight batch commits."""
+
+        self._stop.set()
+
+    def _wait_for_stop(self, seconds: float) -> None:
+        """Poll interval that ends early when a stop is requested."""
+
+        self._stop.wait(seconds)
 
     def _process_batch(
         self,
@@ -273,6 +307,7 @@ class StreamRunner:
         lease: LeaseToken,
         existing_watermark: str | None,
     ) -> StreamReport:
+        generation = self._checkpoint_generation()
         batch_id = batch_identity(
             pipeline=self.spec.name,
             stream_name=self.spec.stream.name,
@@ -281,6 +316,7 @@ class StreamRunner:
             start=microbatch.start,
             end=microbatch.end,
             event_hash=microbatch.event_hash,
+            generation=generation,
         )
         batch = CommittedBatch(
             batch_id=batch_id,
@@ -300,6 +336,7 @@ class StreamRunner:
             start_position=batch.start.canonical(),
             end_position=batch.end.canonical(),
             event_hash=batch.event_hash,
+            generation=generation,
         )
         if ledger.status == "committed":
             return StreamReport(skipped=1, exhausted=microbatch.source_exhausted)
@@ -552,7 +589,7 @@ class CdcRunner:
             raise LeaseUnavailableError(f"stream lease is held: {self.resource}")
         try:
             checkpoint = self._state.checkpoint(self._pipeline, self._stream_name)
-            after = StreamPosition(checkpoint.position) if checkpoint is not None else None
+            after = _resume_position(checkpoint)
             microbatch = self._source.poll(after, limits)
             changes = microbatch.changes
             if changes is None:
@@ -566,6 +603,7 @@ class CdcRunner:
                 start=microbatch.start,
                 end=microbatch.end,
                 event_hash=microbatch.event_hash,
+                generation=checkpoint.generation if checkpoint is not None else 0,
             )
             batch = CommittedBatch(
                 batch_id=batch_id,
@@ -585,6 +623,7 @@ class CdcRunner:
                 start_position=batch.start.canonical(),
                 end_position=batch.end.canonical(),
                 event_hash=batch.event_hash,
+                generation=checkpoint.generation if checkpoint is not None else 0,
             )
             if ledger.status == "committed":
                 return False
