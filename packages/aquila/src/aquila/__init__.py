@@ -6,6 +6,13 @@ schema versions, lineage edges and contracts in a separate ``aquila.db``
 (AQ-ADR-2). Nothing else depends on Aquila; removing it breaks nothing.
 """
 
+from importlib.metadata import PackageNotFoundError, version
+
+try:
+    __version__ = version("de-aquila")
+except PackageNotFoundError:
+    __version__ = "0.5.0"
+
 from aquila.uri import dataset_id, normalize_uri
 
-__all__ = ["dataset_id", "normalize_uri"]
+__all__ = ["__version__", "dataset_id", "normalize_uri"]
