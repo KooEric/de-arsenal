@@ -1,0 +1,30 @@
+[project]
+name = "de-hasta"
+version = "0.3.0"
+description = "Hasta — leased REST and Postgres outbox microbatch streaming"
+readme = "README.md"
+requires-python = ">=3.11"
+license = "Apache-2.0"
+dependencies = [
+    "arsenal-core>=0.3,<0.4",
+    "pugio>=0.3,<0.4",
+    "de-scutum>=0.3,<0.4",
+    "httpx>=0.27",
+    "pyarrow>=17",
+    "pydantic>=2.7",
+    "pyyaml>=6",
+    "typer>=0.12",
+]
+
+[project.optional-dependencies]
+postgres = ["psycopg[binary]>=3.1"]
+
+[project.scripts]
+hasta = "hasta.cli:app"
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/hasta"]
