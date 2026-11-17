@@ -22,6 +22,11 @@
           "title": "Service Account",
           "type": "string"
         },
+        "allow_mutable_image": {
+          "default": false,
+          "title": "Allow Mutable Image",
+          "type": "boolean"
+        },
         "master": {
           "anyOf": [
             {

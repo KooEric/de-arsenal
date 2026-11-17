@@ -48,6 +48,9 @@ class ClusterProfile(_FrozenModel):
     namespace: str = Field(min_length=1)
     driver_image: str = Field(min_length=1)
     service_account: str = Field(min_length=1)
+    # Production requires a digest-pinned image so every attempt runs the same
+    # worker. Local/E2E clusters loading unpushed images may opt out explicitly.
+    allow_mutable_image: bool = False
     master: str | None = None
     master_env: str | None = None
 
