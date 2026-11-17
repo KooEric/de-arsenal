@@ -44,12 +44,14 @@ def test_aquila_tables_match_the_hand_written_sources(tmp_path: Path, data_dir: 
     assert tables == {n: f"{data_dir.as_posix()}/{n}/*.parquet" for n in TABLE_NAMES}
 
 
-def test_eval_results_are_identical_with_and_without_aquila(
-    tmp_path: Path, data_dir: Path, catalog: Catalog
-) -> None:
+def test_eval_results_are_identical_with_and_without_aquila(tmp_path: Path, data_dir: Path) -> None:
+    # One path spelling for both runs: Augur matches table paths in SQL against the
+    # catalog, so a Windows-native baseline vs POSIX Aquila paths would differ by spelling.
+    root = data_dir.as_posix()
     from_aquila = build_catalog(tables_from_aquila(aquila_db(tmp_path, data_dir)))
+    catalog = build_catalog({n: f"{root}/{n}/*.parquet" for n in TABLE_NAMES})
     cases = tuple(
-        c.model_copy(update={"golden_sql": c.golden_sql.replace("./data", str(data_dir))})
+        c.model_copy(update={"golden_sql": c.golden_sql.replace("./data", root)})
         for c in load_cases(CASES)
     )
     assert len(cases) == 34
