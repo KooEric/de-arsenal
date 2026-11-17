@@ -7,57 +7,22 @@
 
 import json
 import sqlite3
+from collections.abc import Callable, Mapping
 from dataclasses import dataclass
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
 from pathlib import Path
 from typing import Any
 
+from arsenal_core.execution import LeaseToken, OutputProof, canonical_json
 from arsenal_core.identity import unit_id as make_unit_id
+from arsenal_core.state.migrations import CURRENT_SCHEMA_VERSION, apply_migrations
 
 # cursor/link 트래버설이 next_cursor=None에 도달해 "완료"됐음을 나타내는 예약 센티널.
-# cursors 테이블(schema 불변)에 실제 커서/URL 값처럼 저장된다 — NUL 바이트 프리픽스라
-# 실제 커서 값이나 URL과 절대 충돌하지 않는다. M2-B: 재실행 무한루프 수정.
 SOURCE_EXHAUSTED = "\x00__ARSENAL_SOURCE_EXHAUSTED__"
 
-_SCHEMA = """
-CREATE TABLE IF NOT EXISTS units (
-    unit_id    TEXT PRIMARY KEY,
-    pipeline   TEXT NOT NULL,
-    unit_key   TEXT NOT NULL,
-    payload    TEXT NOT NULL,
-    status     TEXT NOT NULL,          -- pending | running | done | failed | quarantined
-    attempts   INTEGER NOT NULL DEFAULT 0,
-    last_error TEXT,
-    row_count   INTEGER,
-    byte_count  INTEGER,
-    duration_ms INTEGER,
-    created_at TEXT NOT NULL,          -- ISO8601 UTC
-    updated_at TEXT NOT NULL
-);
-CREATE INDEX IF NOT EXISTS idx_units_pipeline_status ON units(pipeline, status);
-CREATE TABLE IF NOT EXISTS cursors (
-    pipeline TEXT NOT NULL, source TEXT NOT NULL,
-    cursor TEXT NOT NULL, updated_at TEXT NOT NULL,
-    PRIMARY KEY (pipeline, source)
-);
-CREATE TABLE IF NOT EXISTS schema_snapshots (
-    pipeline    TEXT NOT NULL,
-    captured_at TEXT NOT NULL,
-    schema_json TEXT NOT NULL
-);
-CREATE TABLE IF NOT EXISTS lineage (
-    pipeline    TEXT PRIMARY KEY,
-    source_type TEXT NOT NULL,
-    source_ref  TEXT NOT NULL,
-    sink_type   TEXT NOT NULL,
-    sink_ref    TEXT NOT NULL,
-    updated_at  TEXT NOT NULL
-);
-"""
 
-
-def _now() -> str:
-    return datetime.now(UTC).isoformat()
+def _utcnow() -> datetime:
+    return datetime.now(UTC)
 
 
 @dataclass(frozen=True)
@@ -118,6 +83,50 @@ class LineageRecord:
     updated_at: str
 
 
+@dataclass(frozen=True)
+class RunRecord:
+    run_id: str
+    pipeline: str
+    revision: str
+    mode: str
+    executor: str
+    status: str
+    attempt: int
+    external_job: Mapping[str, Any] | None
+    error: str | None
+
+
+@dataclass(frozen=True)
+class StreamCheckpoint:
+    pipeline: str
+    stream_name: str
+    generation: int
+    position: Mapping[str, Any]
+    watermark: str | None
+    last_batch_id: str | None
+
+
+@dataclass(frozen=True)
+class StreamBatch:
+    batch_id: str
+    pipeline: str
+    stream_name: str
+    revision: str
+    start_position: Mapping[str, Any]
+    end_position: Mapping[str, Any]
+    event_hash: str
+    status: str
+    output_proof: Mapping[str, Any] | None
+    rows: int | None
+    bytes: int | None
+    late_rows: int
+    error: str | None
+
+
+class LeaseLostError(RuntimeError):
+    """Raised when a stale or expired lease tries to mutate durable state."""
+
+
 class StateStore:
     """unit 상태·커서·스키마 스냅샷의 영속 저장소.
 
@@ -126,11 +135,73 @@ class StateStore:
     running → pending으로 되돌리는 전이를 갖지 않는다.)
     """
 
-    def __init__(self, db_path: Path) -> None:
+    def __init__(
+        self,
+        db_path: Path,
+        *,
+        backup_dir: Path | None = None,
+        clock: Callable[[], datetime] = _utcnow,
+    ) -> None:
+        self._db_path = Path(db_path)
+        self._clock = clock
+        self._backup_dir = backup_dir
+        existed = self._db_path.exists() and self._db_path.stat().st_size > 0
         db_path.parent.mkdir(parents=True, exist_ok=True)
         self._conn = sqlite3.connect(db_path)
         self._conn.execute("PRAGMA journal_mode=WAL")
-        self._conn.executescript(_SCHEMA)
+        self._conn.execute("PRAGMA foreign_keys=ON")
+        backed_up = False
+
+        def backup(version: int) -> None:
+            nonlocal backed_up
+            if existed and not backed_up:
+                self._backup_database(version)
+                backed_up = True
+
+        apply_migrations(self._conn, before_migration=backup)
+
+    @classmethod
+    def open(cls, db_path: Path, **kwargs: Any) -> "StateStore":
+        """Explicit constructor alias for callers that want a named open operation."""
+        return cls(db_path, **kwargs)
+
+    @property
+    def schema_version(self) -> int:
+        return int(self._conn.execute("PRAGMA user_version").fetchone()[0])
+
+    def _backup_database(self, version: int) -> Path:
+        backup_dir = self._backup_dir or self._db_path.parent / "backups"
+        backup_dir.mkdir(parents=True, exist_ok=True)
+        stamp = self._clock().astimezone(UTC).strftime("%Y%m%dT%H%M%S%fZ")
+        target = backup_dir / f"{self._db_path.stem}-v{version}-{stamp}.sqlite"
+        with sqlite3.connect(target) as destination:
+            self._conn.backup(destination)
+        return target
+
+    def migrate(self, *, dry_run: bool = False, backup_dir: Path | None = None) -> int:
+        """Apply pending migrations; ``dry_run`` reports the target without writing."""
+        version = self.schema_version
+        if version > CURRENT_SCHEMA_VERSION:
+            raise RuntimeError("state database is newer than this arsenal-core version")
+        if dry_run:
+            return CURRENT_SCHEMA_VERSION
+        previous_backup_dir = self._backup_dir
+        if backup_dir is not None:
+            self._backup_dir = backup_dir
+        try:
+            apply_migrations(self._conn, before_migration=self._backup_before_migration)
+        finally:
+            self._backup_dir = previous_backup_dir
+        return self.schema_version
+
+    def _backup_before_migration(self, version: int) -> None:
+        self._backup_database(version)
+
+    def _now(self) -> str:
+        value = self._clock()
+        if value.tzinfo is None:
+            raise ValueError("StateStore clock must return a timezone-aware datetime")
+        return value.astimezone(UTC).isoformat()
 
     def register(self, unit: UnitSpec) -> None:
         """INSERT OR IGNORE — 두 번 등록해도 안전 (멱등)."""
@@ -138,7 +209,14 @@ class StateStore:
             "INSERT OR IGNORE INTO units "
             "(unit_id, pipeline, unit_key, payload, status, created_at, updated_at) "
             "VALUES (?, ?, ?, ?, 'pending', ?, ?)",
-            (unit.unit_id, unit.pipeline, unit.unit_key, json.dumps(unit.payload), _now(), _now()),
+            (
+                unit.unit_id,
+                unit.pipeline,
+                unit.unit_key,
+                json.dumps(unit.payload),
+                self._now(),
+                self._now(),
+            ),
         )
         self._conn.commit()
 
@@ -147,7 +225,7 @@ class StateStore:
         self._conn.execute(
             "UPDATE units SET status=?, last_error=?, attempts=attempts+?, updated_at=? "
             "WHERE unit_id=?",
-            (status, error, bump, _now(), uid),
+            (status, error, bump, self._now(), uid),
         )
         self._conn.commit()
 
@@ -165,7 +243,7 @@ class StateStore:
         self._conn.execute(
             "UPDATE units SET status='done', row_count=?, byte_count=?, duration_ms=?, "
             "updated_at=? WHERE unit_id=?",
-            (row_count, byte_count, duration_ms, _now(), uid),
+            (row_count, byte_count, duration_ms, self._now(), uid),
         )
         self._conn.commit()
 
@@ -195,13 +273,13 @@ class StateStore:
         self._conn.execute(
             "UPDATE units SET status='done', row_count=?, byte_count=?, duration_ms=?, "
             "updated_at=? WHERE unit_id=?",
-            (row_count, byte_count, duration_ms, _now(), uid),
+            (row_count, byte_count, duration_ms, self._now(), uid),
         )
         self._conn.execute(
             "INSERT INTO cursors (pipeline, source, cursor, updated_at) VALUES (?,?,?,?) "
             "ON CONFLICT(pipeline, source) DO UPDATE SET cursor=excluded.cursor, "
             "updated_at=excluded.updated_at",
-            (pipeline, source, cursor, _now()),
+            (pipeline, source, cursor, self._now()),
         )
         self._conn.commit()
 
@@ -214,7 +292,7 @@ class StateStore:
         재시도 실패가 아니라서 attempts를 올리면 안 된다 (M2-E)."""
         self._conn.execute(
             "UPDATE units SET status='quarantined', last_error=?, updated_at=? WHERE unit_id=?",
-            (reason, _now(), uid),
+            (reason, self._now(), uid),
         )
         self._conn.commit()
 
@@ -236,7 +314,7 @@ class StateStore:
         """
         cur = self._conn.execute(
             "UPDATE units SET status='pending', last_error=NULL, updated_at=? WHERE unit_id=?",
-            (_now(), uid),
+            (self._now(), uid),
         )
         self._conn.commit()
         return cur.rowcount
@@ -277,7 +355,7 @@ class StateStore:
             "INSERT INTO cursors (pipeline, source, cursor, updated_at) VALUES (?,?,?,?) "
             "ON CONFLICT(pipeline, source) DO UPDATE SET cursor=excluded.cursor, "
             "updated_at=excluded.updated_at",
-            (pipeline, source, cursor, _now()),
+            (pipeline, source, cursor, self._now()),
         )
         self._conn.commit()
 
@@ -300,7 +378,7 @@ class StateStore:
             return
         self._conn.execute(
             "INSERT INTO schema_snapshots (pipeline, captured_at, schema_json) VALUES (?, ?, ?)",
-            (pipeline, _now(), schema_json),
+            (pipeline, self._now(), schema_json),
         )
         self._conn.commit()
 
@@ -346,7 +424,7 @@ class StateStore:
             "ON CONFLICT(pipeline) DO UPDATE SET source_type=excluded.source_type, "
             "source_ref=excluded.source_ref, sink_type=excluded.sink_type, "
             "sink_ref=excluded.sink_ref, updated_at=excluded.updated_at",
-            (pipeline, source_type, source_ref, sink_type, sink_ref, _now()),
+            (pipeline, source_type, source_ref, sink_type, sink_ref, self._now()),
         )
         self._conn.commit()
 
@@ -357,6 +435,323 @@ class StateStore:
             (pipeline,),
         ).fetchone()
         return LineageRecord(*row) if row else None
+
+    # P2 state APIs.  They are deliberately separate from the v0.2 unit APIs
+    # above so existing collection callers retain their established semantics.
+    def acquire_lease(self, resource: str, owner_id: str, ttl_seconds: float) -> LeaseToken | None:
+        """Atomically acquire an expired resource lease and advance its fence.
+
+        ``None`` means another owner still holds an unexpired lease. A caller
+        that already owns it may reacquire it, refreshing expiry but preserving
+        its fencing value.
+        """
+        if ttl_seconds <= 0:
+            raise ValueError("ttl_seconds must be positive")
+        now = self._clock().astimezone(UTC)
+        expires = now + timedelta(seconds=ttl_seconds)
+        self._conn.execute("BEGIN IMMEDIATE")
+        try:
+            row = self._conn.execute(
+                "SELECT owner_id, fence, expires_at FROM leases WHERE resource=?", (resource,)
+            ).fetchone()
+            if row is not None and row[0] != owner_id and row[2] > now.isoformat():
+                self._conn.rollback()
+                return None
+            if row is None:
+                fence = 1
+            elif row[0] == owner_id:
+                fence = int(row[1])
+            else:
+                fence = int(row[1]) + 1
+            self._conn.execute(
+                "INSERT INTO leases(resource, owner_id, fence, expires_at, updated_at) "
+                "VALUES (?, ?, ?, ?, ?) "
+                "ON CONFLICT(resource) DO UPDATE SET owner_id=excluded.owner_id, "
+                "fence=excluded.fence, "
+                "expires_at=excluded.expires_at, updated_at=excluded.updated_at",
+                (resource, owner_id, fence, expires.isoformat(), now.isoformat()),
+            )
+            self._conn.commit()
+        except BaseException:
+            if self._conn.in_transaction:
+                self._conn.rollback()
+            raise
+        return LeaseToken(resource=resource, owner_id=owner_id, fence=fence, expires_at=expires)
+
+    def renew_lease(self, token: LeaseToken, ttl_seconds: float) -> LeaseToken | None:
+        """Refresh an active lease, returning ``None`` if it was fenced out."""
+        if ttl_seconds <= 0:
+            raise ValueError("ttl_seconds must be positive")
+        now = self._clock().astimezone(UTC)
+        expires = now + timedelta(seconds=ttl_seconds)
+        cur = self._conn.execute(
+            "UPDATE leases SET expires_at=?, updated_at=? WHERE resource=? "
+            "AND owner_id=? AND fence=? "
+            "AND expires_at > ?",
+            (
+                expires.isoformat(),
+                now.isoformat(),
+                token.resource,
+                token.owner_id,
+                token.fence,
+                now.isoformat(),
+            ),
+        )
+        self._conn.commit()
+        if cur.rowcount != 1:
+            return None
+        return LeaseToken(token.resource, token.owner_id, token.fence, expires)
+
+    def release_lease(self, token: LeaseToken) -> bool:
+        """Release only the exact active ownership generation."""
+        cur = self._conn.execute(
+            "DELETE FROM leases WHERE resource=? AND owner_id=? AND fence=?",
+            (token.resource, token.owner_id, token.fence),
+        )
+        self._conn.commit()
+        return cur.rowcount == 1
+
+    def _assert_active_lease(self, token: LeaseToken) -> None:
+        now = self._now()
+        row = self._conn.execute(
+            "SELECT 1 FROM leases WHERE resource=? AND owner_id=? AND fence=? AND expires_at > ?",
+            (token.resource, token.owner_id, token.fence, now),
+        ).fetchone()
+        if row is None:
+            raise LeaseLostError(f"lease lost for {token.resource!r} (fence {token.fence})")
+
+    def create_run(
+        self,
+        *,
+        run_id: str,
+        pipeline: str,
+        revision: str,
+        mode: str,
+        executor: str,
+        guarantees: Mapping[str, Any],
+    ) -> None:
+        """Insert a planned run idempotently before submitting work externally."""
+        now = self._now()
+        self._conn.execute(
+            "INSERT OR IGNORE INTO runs(run_id, pipeline, revision, mode, executor, status, "
+            "guarantee_json, "
+            "created_at, updated_at) VALUES (?, ?, ?, ?, ?, 'planned', ?, ?, ?)",
+            (run_id, pipeline, revision, mode, executor, canonical_json(guarantees), now, now),
+        )
+        self._conn.commit()
+
+    def run(self, run_id: str) -> RunRecord | None:
+        row = self._conn.execute(
+            "SELECT run_id, pipeline, revision, mode, executor, status, attempt, "
+            "external_job_json, error "
+            "FROM runs WHERE run_id=?",
+            (run_id,),
+        ).fetchone()
+        if row is None:
+            return None
+        return RunRecord(
+            run_id=row[0],
+            pipeline=row[1],
+            revision=row[2],
+            mode=row[3],
+            executor=row[4],
+            status=row[5],
+            attempt=row[6],
+            external_job=json.loads(row[7]) if row[7] else None,
+            error=row[8],
+        )
+
+    def update_run(
+        self,
+        run_id: str,
+        *,
+        status: str,
+        lease: LeaseToken,
+        external_job: Mapping[str, Any] | None = None,
+        error: str | None = None,
+        increment_attempt: bool = False,
+    ) -> None:
+        """Fenced run state update; stale coordinators cannot report success."""
+        self._conn.execute("BEGIN IMMEDIATE")
+        try:
+            self._assert_active_lease(lease)
+            cur = self._conn.execute(
+                "UPDATE runs SET status=?, external_job_json=?, error=?, attempt=attempt+?, "
+                "updated_at=? "
+                "WHERE run_id=?",
+                (
+                    status,
+                    canonical_json(external_job) if external_job is not None else None,
+                    error,
+                    1 if increment_attempt else 0,
+                    self._now(),
+                    run_id,
+                ),
+            )
+            if cur.rowcount != 1:
+                raise KeyError(run_id)
+            self._conn.commit()
+        except BaseException:
+            if self._conn.in_transaction:
+                self._conn.rollback()
+            raise
+
+    def checkpoint(self, pipeline: str, stream_name: str) -> StreamCheckpoint | None:
+        row = self._conn.execute(
+            "SELECT pipeline, stream_name, generation, position_json, watermark, last_batch_id "
+            "FROM stream_checkpoints WHERE pipeline=? AND stream_name=?",
+            (pipeline, stream_name),
+        ).fetchone()
+        if row is None:
+            return None
+        return StreamCheckpoint(
+            pipeline=row[0],
+            stream_name=row[1],
+            generation=row[2],
+            position=json.loads(row[3]),
+            watermark=row[4],
+            last_batch_id=row[5],
+        )
+
+    def plan_stream_batch(
+        self,
+        *,
+        batch_id: str,
+        pipeline: str,
+        stream_name: str,
+        revision: str,
+        start_position: Mapping[str, Any],
+        end_position: Mapping[str, Any],
+        event_hash: str,
+    ) -> StreamBatch:
+        """Record a deterministic batch identity without changing its checkpoint."""
+        start_json, end_json = canonical_json(start_position), canonical_json(end_position)
+        now = self._now()
+        self._conn.execute(
+            "INSERT OR IGNORE INTO stream_batches(batch_id, pipeline, stream_name, revision, "
+            "start_position_json, end_position_json, event_hash, status, created_at, updated_at) "
+            "VALUES (?, ?, ?, ?, ?, ?, ?, 'planned', ?, ?)",
+            (batch_id, pipeline, stream_name, revision, start_json, end_json, event_hash, now, now),
+        )
+        self._conn.commit()
+        batch = self.stream_batch(batch_id)
+        if batch is None:  # pragma: no cover - database corruption guard
+            raise RuntimeError(f"failed to register stream batch {batch_id}")
+        identity = (
+            batch.pipeline,
+            batch.stream_name,
+            batch.revision,
+            batch.start_position,
+            batch.end_position,
+        )
+        expected_identity = (
+            pipeline,
+            stream_name,
+            revision,
+            json.loads(start_json),
+            json.loads(end_json),
+        )
+        if identity != expected_identity:
+            raise ValueError(f"batch_id {batch_id!r} was reused for a different batch")
+        return batch
+
+    def stream_batch(self, batch_id: str) -> StreamBatch | None:
+        row = self._conn.execute(
+            "SELECT batch_id, pipeline, stream_name, revision, start_position_json, "
+            "end_position_json, event_hash, status, output_ref_json, rows, bytes, late_rows, "
+            "error FROM stream_batches "
+            "WHERE batch_id=?",
+            (batch_id,),
+        ).fetchone()
+        if row is None:
+            return None
+        return StreamBatch(
+            batch_id=row[0],
+            pipeline=row[1],
+            stream_name=row[2],
+            revision=row[3],
+            start_position=json.loads(row[4]),
+            end_position=json.loads(row[5]),
+            event_hash=row[6],
+            status=row[7],
+            output_proof=json.loads(row[8]) if row[8] else None,
+            rows=row[9],
+            bytes=row[10],
+            late_rows=row[11],
+            error=row[12],
+        )
+
+    def commit_stream_batch(
+        self,
+        batch_id: str,
+        *,
+        lease: LeaseToken,
+        checkpoint_position: Mapping[str, Any],
+        generation: int = 0,
+        watermark: str | None = None,
+        output_proof: OutputProof | Mapping[str, Any],
+        rows: int | None = None,
+        bytes: int | None = None,
+        late_rows: int = 0,
+    ) -> None:
+        """Atomically commit output proof, batch ledger, and checkpoint under a fence."""
+        self._conn.execute("BEGIN IMMEDIATE")
+        try:
+            self._assert_active_lease(lease)
+            batch = self.stream_batch(batch_id)
+            if batch is None:
+                raise KeyError(batch_id)
+            if batch.status == "committed":
+                self._conn.commit()
+                return
+            if batch.status not in {"planned", "claimed", "running"}:
+                raise ValueError(f"cannot commit stream batch in {batch.status!r} state")
+            now = self._now()
+            self._conn.execute(
+                "UPDATE stream_batches SET status='committed', output_ref_json=?, rows=?, bytes=?, "
+                "late_rows=?, error=NULL, updated_at=? WHERE batch_id=?",
+                (canonical_json(output_proof), rows, bytes, late_rows, now, batch_id),
+            )
+            self._conn.execute(
+                "INSERT INTO stream_checkpoints(pipeline, stream_name, generation, position_json, "
+                "watermark, "
+                "last_batch_id, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?) "
+                "ON CONFLICT(pipeline, stream_name) DO UPDATE SET generation=excluded.generation, "
+                "position_json=excluded.position_json, watermark=excluded.watermark, "
+                "last_batch_id=excluded.last_batch_id, updated_at=excluded.updated_at",
+                (
+                    batch.pipeline,
+                    batch.stream_name,
+                    generation,
+                    canonical_json(checkpoint_position),
+                    watermark,
+                    batch_id,
+                    now,
+                ),
+            )
+            self._conn.commit()
+        except BaseException:
+            if self._conn.in_transaction:
+                self._conn.rollback()
+            raise
+
+    def fail_stream_batch(self, batch_id: str, *, lease: LeaseToken, error: str) -> None:
+        """Fenced failure recording that leaves the checkpoint unchanged."""
+        self._conn.execute("BEGIN IMMEDIATE")
+        try:
+            self._assert_active_lease(lease)
+            cur = self._conn.execute(
+                "UPDATE stream_batches SET status='failed', error=?, updated_at=? WHERE batch_id=? "
+                "AND status != 'committed'",
+                (error, self._now(), batch_id),
+            )
+            if cur.rowcount != 1:
+                raise KeyError(batch_id)
+            self._conn.commit()
+        except BaseException:
+            if self._conn.in_transaction:
+                self._conn.rollback()
+            raise
 
     def close(self) -> None:
         self._conn.close()
