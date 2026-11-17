@@ -28,6 +28,7 @@ dlt = ["pugio[dlt]"]
 dbt = ["dbt-duckdb>=1.8,<2"]
 streaming = ["de-hasta>=0.4,<0.5"]
 distributed = ["de-ballista>=0.4,<0.5"]
+catalog = ["de-aquila>=0.4,<0.5"]
 
 [project.urls]
 Homepage = "https://github.com/KooEric/de-arsenal"

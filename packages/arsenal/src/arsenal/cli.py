@@ -198,6 +198,7 @@ def status(project: Path = Path(".")) -> None:
         with _chdir(proj_dir):
             streams = [stages.stream_status(ref) for ref in proj.streams]
             distributed = [stages.distributed_status(proj.name, ref) for ref in proj.distributed]
+        catalog = stages.catalog_status(proj_dir)
     except ArsenalError as e:
         raise _fatal(e) from e
     alerts = [s for s in streams if stages.needs_attention(s)] + [
@@ -207,10 +208,12 @@ def status(project: Path = Path(".")) -> None:
         "project": proj.name,
         "streams": streams,
         "distributed": distributed,
-        "alert": bool(alerts),
+        "alert": bool(alerts) or bool(catalog and catalog["alert"]),
     }
+    if catalog is not None:
+        payload["catalog"] = catalog
     typer.echo(json.dumps(payload, sort_keys=True, default=str))
-    if alerts:
+    if payload["alert"]:
         raise typer.Exit(1)
 
 

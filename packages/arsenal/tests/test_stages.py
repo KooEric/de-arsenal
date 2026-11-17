@@ -282,3 +282,44 @@ def test_status_summarizes_recorded_ballista_runs(
 
     assert status["status"] == "planned"
     assert status["history"]["total"] == 1
+
+
+# --- catalog summary (Aquila) ---------------------------------------------------------
+
+
+def test_status_includes_the_catalog_and_alerts_on_contract_findings(tmp_path: Path) -> None:
+    from aquila import service
+    from aquila.store import CatalogStore
+
+    project = stream_project(tmp_path)
+    commit_one_batch(tmp_path)
+    write(
+        tmp_path / "collect.yaml",
+        yaml.safe_dump(
+            {
+                "name": "orders",
+                "source": {"type": "file", "path": "./raw/*.csv"},
+                "sink": {"type": "parquet", "path": str(tmp_path / "out")},
+                "contract": {"columns": [{"name": "total", "type": "double"}]},
+            }
+        ),
+    )
+    store = CatalogStore(tmp_path / ".arsenal" / "aquila.db")
+    service.scan(store, [tmp_path], root=tmp_path)
+    store.close()
+
+    result = runner.invoke(app, ["status", "--project", str(project)])
+
+    payload = json.loads(result.stdout)
+    assert result.exit_code == 1 and payload["alert"] is True
+    assert payload["catalog"]["totals"]["datasets"] >= 2
+    assert payload["catalog"]["contract_findings"][0].startswith("orders: total: missing")
+
+
+def test_status_without_a_catalog_has_no_catalog_block(tmp_path: Path) -> None:
+    project = stream_project(tmp_path)
+    commit_one_batch(tmp_path)
+
+    payload = json.loads(runner.invoke(app, ["status", "--project", str(project)]).stdout)
+
+    assert "catalog" not in payload

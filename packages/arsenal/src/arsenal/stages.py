@@ -162,3 +162,32 @@ def distributed_status(project: str, ref: DistributedRef) -> dict[str, Any]:
             "reasons": list(summary.reasons),
         },
     }
+
+
+def catalog_status(project_dir: Path) -> dict[str, Any] | None:
+    """Aquila summary when ``de-aquila`` is installed and ``.arsenal/aquila.db`` exists.
+
+    Read-only: run ``aquila scan`` to refresh it. Contract findings raise the alert.
+    """
+
+    db = project_dir / ".arsenal" / "aquila.db"
+    if importlib.util.find_spec("aquila") is None or not db.is_file():
+        return None
+    store_module: Any = importlib.import_module("aquila.store")
+    service: Any = importlib.import_module("aquila.service")
+    store = store_module.CatalogStore(db)
+    try:
+        findings = [
+            f"{dataset.name}: {finding}"
+            for dataset in store.datasets()
+            for finding in service.contract_findings(store, dataset)
+        ]
+        return {
+            "db": str(db),
+            "totals": dict(store.counts()),
+            "contract_findings": findings,
+            "warnings": list(service.deprecation_warnings(store)),
+            "alert": bool(findings),
+        }
+    finally:
+        store.close()
