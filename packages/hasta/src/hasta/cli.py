@@ -200,7 +200,7 @@ def checkpoint_reset(
                 "after": after,
                 "warning": (
                     f"the next run re-reads the source from the beginning and writes every "
-                    f"batch again to {before['sink']['type']} {before['sink']['target']!r}; "
+                    f"batch again to {before['sink']['type']} '{before['sink']['target']}'; "
                     "clear that output first if the sink does not replace existing data"
                 ),
             }
