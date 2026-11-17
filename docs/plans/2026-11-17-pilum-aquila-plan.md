@@ -215,9 +215,13 @@ pilum reset churn.yaml --confirm  # 원장 초기화 (다음 run이 전량 재�
 0.6.0  Pilum   PL-0 → PL-1 → PL-2 → PL-3 → PL-4   8~12일
 ```
 
-## 4. 착수 전 결정이 필요한 것
+## 4. 착수 전 결정 — ✅ 2026-11-17 승인 (권장안 그대로)
 
-1. **Aquila 먼저, Pilum 다음** 순서 승인 (또는 병렬)
-2. **AQ-ADR-4** — Augur가 Aquila를 선택적으로 읽는 경계 승인
-3. **PL-ADR-5** — 최초 발사 상한 기본값 1,000건이 적절한지
-4. Pilum v1 끝점 범위를 generic HTTP·webhook·Slack 셋으로 한정하는 것 승인
+| # | 결정 | 확정 내용 |
+|---|---|---|
+| 1 | 순서 | **Aquila(0.5.0) 먼저, Pilum(0.6.0) 다음.** 병렬은 하지 않는다. PL-0~PL-1을 Aquila 기간에 당겨 시작하지 않는다 |
+| 2 | AQ-ADR-4 | Aquila가 system of record다. Augur는 `aquila.db`가 있으면 읽기만 하고, 없으면 기존 `build_catalog()`를 그대로 쓴다. Augur는 Aquila에 의존성을 갖지 않는다(선택적 import) |
+| 3 | PL-ADR-5 | 원장이 비어 있고 대상이 `max_first_dispatch` 기본 **1,000건** 초과면 거부. `--confirm-initial-load`로만 해제 |
+| 4 | Pilum v1 끝점 | **generic HTTP · webhook · Slack** 세 가지로 한정. SaaS 템플릿(HubSpot/Salesforce)은 PL-5(0.7) |
+
+착수 시점: 0.4.0 태그 이후 AQ-0부터. 위 결정은 AQ-0/PL-0에서 ADR 문서로 옮겨 고정한다.
