@@ -25,6 +25,8 @@ classifiers = [
 postgres = ["pugio[postgres]"]
 dlt = ["pugio[dlt]"]
 dbt = ["dbt-duckdb>=1.8,<2"]
+streaming = ["de-hasta>=0.3,<0.4"]
+distributed = ["de-ballista>=0.3,<0.4"]
 
 [project.urls]
 Homepage = "https://github.com/KooEric/de-arsenal"

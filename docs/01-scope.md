@@ -125,6 +125,9 @@
 - **Aquila(신규 제안, 카탈로그·거버넌스)**: Unity Catalog의 미니 대응. 파일 기반(SQLite) 경량 카탈로그 — 데이터셋 등록·검색, 스키마 버전 레지스트리, Scorpio가 수집한 lineage와 Scutum data contract의 저장·조회 계층. 서버 없이 저장소 파일 하나로 시작
 - 오픈 테이블 포맷 sink: Iceberg(우선)·Delta Lake — plain Parquet에서 자연 상향 경로, DuckDB 확장 활용. 락인 없는 lakehouse 완성
 
+P2의 Hasta/Ballista 구현 순서, 공통 실행 계약, 상태 전이, 호환성·복구·테스트·벤치마크
+DoD는 [상세 설계 및 계획](plans/2026-08-22-p2-hasta-ballista-design.md)에 고정한다.
+
 ## Out of Scope (명시적 제외)
 
 - **웹 UI / 서버 데몬** — CLI+YAML이 P0의 유일한 인터페이스. UI는 제품군 성숙 후 별도 판단
