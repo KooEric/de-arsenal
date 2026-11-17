@@ -20,44 +20,50 @@ from collections.abc import Sequence
 from pathlib import Path
 
 from gladius.compile.ident import normalize_type, quote_ident, quote_str_literal
-from gladius.spec import (
-    CastStep,
-    DedupStep,
-    DeriveStep,
-    FilterStep,
-    PythonUdfStep,
-    RenameStep,
-    SelectStep,
-    SqlStep,
-    Step,
-    TransformSpec,
+from gladius.plan import (
+    Cast,
+    Deduplicate,
+    Derive,
+    Filter,
+    LogicalPlan,
+    Operation,
+    Project,
+    PythonUdf,
+    RawSql,
+    Rename,
+    Select,
+    build_logical_plan,
 )
+from gladius.spec import TransformSpec
 from gladius.udf import udf_name
 
 
 def compile_sql(spec: TransformSpec, input_files: Sequence[Path] | None = None) -> str:
-    """TransformSpec을 실행 가능한 DuckDB SQL 문자열로 컴파일한다."""
-    source = _input_source(spec, input_files)
+    """Compatibility wrapper that renders a TransformSpec through LogicalPlan v1."""
+
+    return render_duckdb(build_logical_plan(spec), input_files)
+
+
+def render_duckdb(plan: LogicalPlan, input_files: Sequence[Path] | None = None) -> str:
+    """Render a LogicalPlan with the established DuckDB SQL semantics."""
+
+    source = _input_source(plan.read.source, input_files)
     ctes = [f"s0 AS (SELECT * FROM read_parquet({source}, union_by_name=true))"]
     idx = 0
-    if spec.map:
-        idx += 1
-        cols = ", ".join(f"({expr}) AS {quote_ident(new)}" for new, expr in spec.map.items())
-        ctes.append(f"s{idx} AS (SELECT {cols} FROM s{idx - 1})")
-    steps = spec.steps
-    for i, step in enumerate(steps):
-        is_last = i == len(steps) - 1
-        if isinstance(step, SelectStep) and is_last:
+    operations = plan.operations
+    for i, operation in enumerate(operations):
+        is_last = i == len(operations) - 1
+        if isinstance(operation, Select) and is_last:
             continue  # 마지막 select는 CTE가 아니라 최종 SELECT에서 처리
         idx += 1
-        ctes.append(f"s{idx} AS ({_compile_step(step, f's{idx - 1}', i)})")
-    final = _final_select(steps, f"s{idx}")
+        ctes.append(f"s{idx} AS ({_compile_operation(operation, f's{idx - 1}')})")
+    final = _final_select(operations, f"s{idx}")
     return "WITH " + ",\n".join(ctes) + "\n" + final
 
 
-def _input_source(spec: TransformSpec, input_files: Sequence[Path] | None) -> str:
+def _input_source(input_source: str, input_files: Sequence[Path] | None) -> str:
     if input_files is None:
-        src = str(spec.input).rstrip("/")
+        src = input_source.rstrip("/")
         return quote_str_literal(f"{src}/**/*.parquet")
     if len(input_files) == 1:
         return quote_str_literal(str(input_files[0]))
@@ -65,45 +71,59 @@ def _input_source(spec: TransformSpec, input_files: Sequence[Path] | None) -> st
     return "[" + values + "]"
 
 
-def _compile_step(step: Step, prev: str, step_index: int) -> str:
-    match step:
-        case FilterStep(filter=cond):
+def _compile_operation(operation: Operation, prev: str) -> str:
+    match operation:
+        case Project(expressions=expressions):
+            cols = ", ".join(
+                f"({expression.expression.source}) AS {quote_ident(expression.name)}"
+                for expression in expressions
+            )
+            return f"SELECT {cols} FROM {prev}"
+        case Filter(predicate=predicate):
             # 괄호 필수 — 여분의 ')'가 COPY 래퍼를 닫고 나가는 대신 파싱 에러가 된다
-            return f"SELECT * FROM {prev} WHERE ({cond})"
-        case RenameStep(rename=m):
-            ex = ", ".join(quote_ident(o) for o in m)
-            al = ", ".join(f"{quote_ident(o)} AS {quote_ident(n)}" for o, n in m.items())
+            return f"SELECT * FROM {prev} WHERE ({predicate.source})"
+        case Rename(columns=columns):
+            ex = ", ".join(quote_ident(column.source) for column in columns)
+            al = ", ".join(
+                f"{quote_ident(column.source)} AS {quote_ident(column.target)}"
+                for column in columns
+            )
             return f"SELECT * EXCLUDE ({ex}), {al} FROM {prev}"
-        case CastStep(cast=m):
+        case Cast(columns=columns):
             rep = ", ".join(
-                f"CAST({quote_ident(c)} AS {normalize_type(t)}) AS {quote_ident(c)}"
-                for c, t in m.items()
+                f"CAST({quote_ident(column.column)} AS {normalize_type(column.data_type)}) "
+                f"AS {quote_ident(column.column)}"
+                for column in columns
             )
             return f"SELECT * REPLACE ({rep}) FROM {prev}"
-        case DedupStep(dedup=keys):
+        case Deduplicate(keys=keys):
             part = ", ".join(quote_ident(k) for k in keys)
             return (
                 f"SELECT * FROM {prev} QUALIFY row_number() "
                 f"OVER (PARTITION BY {part} ORDER BY {part}) = 1"
             )
-        case DeriveStep(derive=m):
-            dv = ", ".join(f"({expr}) AS {quote_ident(n)}" for n, expr in m.items())
+        case Derive(expressions=expressions):
+            dv = ", ".join(
+                f"({expression.expression.source}) AS {quote_ident(expression.name)}"
+                for expression in expressions
+            )
             return f"SELECT *, {dv} FROM {prev}"
-        case SelectStep(select=cols):
+        case Select(columns=cols):
             projected = ", ".join(quote_ident(c) for c in cols)
             return f"SELECT {projected} FROM {prev}"
-        case SqlStep(sql=expression):
+        case RawSql(expression=expression):
             return expression.replace("{input}", prev)
-        case PythonUdfStep(args=args, output=output):
+        case PythonUdf(args=args, output=output, step_index=step_index):
             arguments = ", ".join(quote_ident(argument) for argument in args)
             return (
                 f"SELECT *, {quote_ident(udf_name(step_index))}({arguments}) "
                 f"AS {quote_ident(output)} FROM {prev}"
             )
+    raise AssertionError(f"unsupported logical operation: {operation!r}")  # pragma: no cover
 
 
-def _final_select(steps: list[Step], last: str) -> str:
-    if steps and isinstance(steps[-1], SelectStep):
-        cols = ", ".join(quote_ident(c) for c in steps[-1].select)
+def _final_select(operations: tuple[Operation, ...], last: str) -> str:
+    if operations and isinstance(operations[-1], Select):
+        cols = ", ".join(quote_ident(c) for c in operations[-1].columns)
         return f"SELECT {cols} FROM {last}"
     return f"SELECT * FROM {last}"

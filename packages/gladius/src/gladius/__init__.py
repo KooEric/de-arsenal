@@ -6,7 +6,30 @@ map/steps 선언 → SQL 컴파일 → DuckDB 벡터화 실행. 단일 노드 �
 
 from importlib.metadata import PackageNotFoundError, version
 
+from gladius.compile.transpiler import compile_sql
+from gladius.plan import (
+    LogicalPlan,
+    NonPortablePlanError,
+    Portability,
+    PortabilityReport,
+    build_logical_plan,
+    portability_report,
+    preflight_portable,
+)
+
 try:
     __version__ = version("de-gladius")
 except PackageNotFoundError:
     __version__ = "0.3.0"
+
+
+__all__ = [
+    "LogicalPlan",
+    "NonPortablePlanError",
+    "Portability",
+    "PortabilityReport",
+    "build_logical_plan",
+    "compile_sql",
+    "portability_report",
+    "preflight_portable",
+]

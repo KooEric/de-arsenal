@@ -1,3 +1,3 @@
-from gladius.compile.transpiler import compile_sql
+from gladius.compile.transpiler import compile_sql, render_duckdb
 
-__all__ = ["compile_sql"]
+__all__ = ["compile_sql", "render_duckdb"]
