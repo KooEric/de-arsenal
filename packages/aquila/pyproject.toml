@@ -23,6 +23,10 @@ classifiers = [
     "Topic :: Database",
 ]
 
+[project.optional-dependencies]
+# Only needed for `aquila scan --iceberg-uri`; remote Parquet uses pyarrow's own filesystems.
+iceberg = ["pyiceberg>=0.8"]
+
 [project.urls]
 Homepage = "https://github.com/KooEric/de-arsenal"
 Repository = "https://github.com/KooEric/de-arsenal"

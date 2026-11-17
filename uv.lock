@@ -649,14 +649,21 @@ dependencies = [
     { name = "typer" },
 ]
 
+[package.optional-dependencies]
+iceberg = [
+    { name = "pyiceberg" },
+]
+
 [package.metadata]
 requires-dist = [
     { name = "arsenal-core", editable = "packages/arsenal-core" },
     { name = "de-scorpio", editable = "packages/scorpio" },
     { name = "pyarrow", specifier = ">=17" },
+    { name = "pyiceberg", marker = "extra == 'iceberg'", specifier = ">=0.8" },
     { name = "pyyaml", specifier = ">=6" },
     { name = "typer", specifier = ">=0.12" },
 ]
+provides-extras = ["iceberg"]
 
 [[package]]
 name = "de-arsenal"

@@ -10,6 +10,7 @@ import typer
 
 from aquila import service
 from aquila.lineage import Direction, to_mermaid, walk
+from aquila.remote import iceberg_loader
 from aquila.store import CatalogStore, Dataset
 
 app = typer.Typer(
@@ -21,6 +22,15 @@ DbOption = typer.Option(
 )
 PathsArgument = typer.Argument(None, help="Spec files or directories (default: .)")
 RootOption = typer.Option(Path("."), help="Directory relative spec paths resolve against")
+RemoteOption = typer.Option(
+    False, "--remote", help="Also read remote Parquet footers (S3/GCS/Azure, ambient credentials)"
+)
+IcebergOption = typer.Option(
+    None, "--iceberg-uri", help="Iceberg REST catalog URI: record every schema of iceberg:// tables"
+)
+IcebergTokenOption = typer.Option(
+    None, "--iceberg-token-env", help="Environment variable holding the catalog token"
+)
 
 
 def _emit(payload: Any) -> None:
@@ -48,13 +58,21 @@ def scan(
     db: Path = DbOption,
     root: Path = RootOption,
     dry_run: bool = typer.Option(False, "--dry-run", help="Report what would be recorded"),
+    remote: bool = RemoteOption,
+    iceberg_uri: str | None = IcebergOption,
+    iceberg_token_env: str | None = IcebergTokenOption,
 ) -> None:
     """Record datasets, schema versions, lineage and contracts. Idempotent."""
 
     targets = paths or [Path(".")]
     base = root.resolve()
+    try:
+        iceberg = iceberg_loader(iceberg_uri, token_env=iceberg_token_env) if iceberg_uri else None
+    except RuntimeError as exc:
+        typer.echo(f"error: {exc}", err=True)
+        raise typer.Exit(1) from exc
     if dry_run:
-        result = service.collect(targets, root=base)
+        result = service.collect(targets, root=base, remote=remote, iceberg=iceberg)
         _emit(
             {
                 "dry_run": True,
@@ -68,7 +86,7 @@ def scan(
         return
     store = _open(db, must_exist=False)
     try:
-        report = service.scan(store, targets, root=base)
+        report = service.scan(store, targets, root=base, remote=remote, iceberg=iceberg)
         _emit(
             {
                 "datasets": report.datasets,
@@ -76,8 +94,10 @@ def scan(
                 "new_schema_versions": report.new_schema_versions,
                 "contract_changes": report.contract_changes,
                 "removed_edges": report.removed_edges,
+                "removed_contracts": report.removed_contracts,
                 "cycles": service.cycle_names(store),
-                "warnings": service.deprecation_warnings(store),
+                "warnings": service.deprecation_warnings(store)
+                + service.multiple_writer_warnings(store),
                 "skipped": report.skipped,
                 "totals": store.counts(),
             }
