@@ -1,5 +1,17 @@
 name: ci
-on: [push, pull_request]
+# One run per change: PRs (any base, including stacked PRs) run via
+# pull_request; pushes only run on main, where merges land. Previously
+# `on: [push, pull_request]` ran every PR commit twice.
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+concurrency:
+  # A newer commit on the same PR supersedes the older run.
+  group: ci-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 jobs:
   test:
     strategy:
