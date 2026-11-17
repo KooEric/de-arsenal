@@ -14,6 +14,7 @@ import pyarrow.parquet as pq
 
 from arsenal_core.errors import RetryableError
 from arsenal_core.state import UnitSpec
+from pugio.sinks.contracts import LOCAL_PARQUET_CAPABILITIES
 
 # Windows는 다른 핸들이 열고 있는 대상으로 rename을 허용하지 않는다(POSIX는 허용).
 # 같은 unit을 동시에 쓰는 writer들이 순간적으로 겹칠 때만 나므로 짧게 재시도한다.
@@ -22,6 +23,8 @@ _REPLACE_BACKOFF_S = 0.05
 
 
 class ParquetSink:
+    capabilities = LOCAL_PARQUET_CAPABILITIES
+
     def __init__(self, path: Path) -> None:
         self._dir = path
 

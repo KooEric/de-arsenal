@@ -17,8 +17,20 @@ from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
 from arsenal_core.errors import FatalError
+from arsenal_core.execution import SinkCapabilities
 from arsenal_core.spec.models import SinkSpec
-from pugio.sinks.base import Sink
+from pugio.sinks.base import CapableSink, Sink
+from pugio.sinks.cdc import DuckDBChangeSink, PostgresChangeSink
+from pugio.sinks.contracts import (
+    DUCKDB_CAPABILITIES,
+    LOCAL_PARQUET_CAPABILITIES,
+    OBJECT_STORAGE_PARQUET_CAPABILITIES,
+    POSTGRES_CAPABILITIES,
+    OutputProofContext,
+    SinkContractAdapter,
+    adapt_sink,
+    capabilities_for_spec,
+)
 from pugio.sinks.duckdb import DuckDBSink
 from pugio.sinks.object_storage import ObjectStorageParquetSink, is_object_store_path
 from pugio.sinks.parquet import ParquetSink
@@ -47,6 +59,11 @@ def build_sink(spec: SinkSpec) -> Sink:
     raise FatalError(f"unknown sink type: {spec.type}")  # pragma: no cover
 
 
+def build_sink_adapter(spec: SinkSpec, *, sink: Sink | None = None) -> SinkContractAdapter:
+    """Build the capability/proof adapter while retaining ``Sink.write``."""
+    return adapt_sink(spec, sink if sink is not None else build_sink(spec))
+
+
 def __getattr__(name: str) -> Any:  # noqa: ANN401 - PEP 562 lazy re-export
     """`from pugio.sinks import PostgresSink`를 psycopg 설치 시에만 지연 해결한다."""
     if name == "PostgresSink":
@@ -62,10 +79,22 @@ def __getattr__(name: str) -> Any:  # noqa: ANN401 - PEP 562 lazy re-export
 
 
 __all__ = [
+    "DUCKDB_CAPABILITIES",
+    "LOCAL_PARQUET_CAPABILITIES",
+    "OBJECT_STORAGE_PARQUET_CAPABILITIES",
+    "POSTGRES_CAPABILITIES",
+    "CapableSink",
+    "DuckDBChangeSink",
     "DuckDBSink",
     "ObjectStorageParquetSink",
+    "OutputProofContext",
     "ParquetSink",
+    "PostgresChangeSink",
     "PostgresSink",
     "Sink",
+    "SinkCapabilities",
+    "SinkContractAdapter",
     "build_sink",
+    "build_sink_adapter",
+    "capabilities_for_spec",
 ]
