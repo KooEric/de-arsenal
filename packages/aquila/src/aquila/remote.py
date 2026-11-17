@@ -87,7 +87,9 @@ def iceberg_loader(catalog_uri: str, *, token_env: str | None = None) -> TableLo
     try:
         catalogs: Any = importlib.import_module("pyiceberg.catalog")
     except ImportError as exc:
-        raise RuntimeError("--iceberg-uri needs pyiceberg: pip install 'de-aquila[iceberg]'") from exc
+        raise RuntimeError(
+            "--iceberg-uri needs pyiceberg: pip install 'de-aquila[iceberg]'"
+        ) from exc
     properties: dict[str, str] = {"type": "rest", "uri": catalog_uri}
     if token_env:
         token = os.environ.get(token_env)

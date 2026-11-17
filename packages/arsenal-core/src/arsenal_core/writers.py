@@ -1,8 +1,8 @@
 """Who writes into a dataset, and how maintenance takes it over safely.
 
 A writer (a Hasta stream, or a Pugio run with a local Parquet sink) registers
-itself next to the dataset it writes. Maintenance that rewrites the directory (Onager compaction) must then
-take each writer's *stream lease* for the duration:
+itself next to the dataset it writes. Maintenance that rewrites the directory
+(Onager compaction) must then take each writer's lease for the duration:
 
 * a live runner holds the lease → maintenance refuses instead of racing it
   (a batch landing mid-swap would be deleted with the backup);

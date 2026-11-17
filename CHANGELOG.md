@@ -12,6 +12,42 @@ minor.
 
 ## [Unreleased]
 
+### ⚠️ Upgrade notes
+
+- **Hasta streams with `headers` get a new revision once.** Header values (tokens)
+  are no longer part of the revision, so the first run after upgrading plans
+  batches under new identities. Let each such stream commit its in-flight batch
+  first (`hasta checkpoint show` reports no `planned` batches), then upgrade.
+- **A Pugio run now refuses to start while another run of the same pipeline, or
+  an Onager compaction of its Parquet output, holds the pipeline lease.** A
+  hard-killed run's lease expires within 60 seconds.
+
+### Added
+
+- Hasta `cursor.on_null: last_event_id`: a feed that answers `next: null` when
+  caught up is polled continuously from the last committed event id instead of
+  ending for good. Empty caught-up polls share one ledger row.
+- Aquila warns when two specs write the same location; drops the edges and
+  contracts of spec files deleted from a scanned directory (`aquila.db` v2,
+  migrated in place); and, opt-in, records remote Parquet footers (`--remote`)
+  and every schema of Iceberg tables (`--iceberg-uri`, `de-aquila[iceberg]`).
+- `docs/adr/` with AQ-ADR-1..4.
+
+### Fixed
+
+- **Onager could compact a Pugio Parquet sink mid-run** (Hasta streams were
+  already fenced). Pugio runs now hold a heartbeat-renewed pipeline lease and
+  register as writers of their local Parquet sink.
+- **Rotating a Hasta API token could duplicate a batch.** The revision included
+  substituted header values, so a written-but-uncommitted batch replayed under a
+  new identity after a rotation. (`${ENV_VAR}` in headers already worked; the
+  limits doc wrongly said otherwise.)
+
+### Changed
+
+- CI actions moved to their Node 24 majors (checkout v7, setup-uv v10,
+  setup-java v6, upload-artifact v7, download-artifact v8).
+
 ## [0.5.1] - 2026-11-17
 
 Patch release: one data-correctness fix. All 12 packages move to `0.5.1`

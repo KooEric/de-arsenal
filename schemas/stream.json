@@ -315,6 +315,16 @@
         "event_id_path": {
           "title": "Event Id Path",
           "type": "string"
+        },
+        "on_null": {
+          "default": "end",
+          "description": "What a null/empty next cursor means. `end`: the stream is finished for good. `last_event_id`: caught up \u2014 keep polling, asking for events after the last event id seen (the API must accept that id as the cursor).",
+          "enum": [
+            "end",
+            "last_event_id"
+          ],
+          "title": "On Null",
+          "type": "string"
         }
       },
       "required": [
