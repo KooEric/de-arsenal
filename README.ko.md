@@ -51,7 +51,7 @@ sink별·도구별로 무엇을 보장하고 무엇을 보장하지 않는지는
 | 도구 | 하는 일 | 패키지 | 상태 |
 |---|---|---|---|
 | **Arsenal** | 프로젝트 CLI: `init`, `run`, `status`, `query`, 시작용 레시피 3종 | `de-arsenal` | stable |
-| **Pugio** | 수집: REST, CSV/JSONL/Excel, DB, dlt 소스 → Parquet, DuckDB, Postgres, S3/GCS, Redshift(experimental) | `pugio` | stable |
+| **Pugio** | 수집: REST, CSV/JSONL/Excel, DB, dlt 소스 → Parquet, DuckDB, Postgres, S3/GCS, Redshift·Iceberg(둘 다 experimental) | `pugio` | stable |
 | **Gladius** | YAML 변환을 DuckDB SQL로 컴파일. 증분 실행, Python UDF, 즉석 쿼리 | `de-gladius` | stable |
 | **Onager** | 로컬 Parquet의 small-file compaction과 격리 백필 | `de-onager` | beta |
 | **Scutum** | 라이브러리: Arrow 데이터 계약과 파일 잠금 (Pugio가 사용) | `de-scutum` | beta |
@@ -75,6 +75,7 @@ sink별·도구별로 무엇을 보장하고 무엇을 보장하지 않는지는
 | 수집·변환·쿼리·레시피 | `uv tool install de-arsenal` |
 | …+ Postgres sink | `uv tool install "de-arsenal[postgres]"` |
 | …+ Redshift sink | `uv tool install "de-arsenal[redshift]"` |
+| …+ Iceberg sink (Trino에서 조회) | `uv tool install "de-arsenal[iceberg]"` |
 | …+ 스트리밍·CDC (Hasta) | `uv tool install "de-arsenal[streaming]"` |
 | …+ Spark on Kubernetes 실행 (Ballista) | `uv tool install "de-arsenal[distributed]"` |
 | …+ 카탈로그 (Aquila) | `uv tool install "de-arsenal[catalog]"` |

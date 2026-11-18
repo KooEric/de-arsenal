@@ -49,6 +49,9 @@ dev = [
     # de-ballista[object-store] runtime, so CI type-checks and tests the real
     # conditional-write staging store instead of skipping it.
     "obstore>=0.7",
+    # pugio[iceberg] runtime plus a local SQLite catalog, so the Iceberg sink is tested
+    # against real Iceberg tables on the local filesystem.
+    "pyiceberg[sql-sqlite]>=0.9",
 ]
 
 [project.optional-dependencies]

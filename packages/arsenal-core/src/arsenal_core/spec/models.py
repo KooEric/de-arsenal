@@ -289,6 +289,38 @@ class RedshiftSinkSpec(_Frozen):
         return self
 
 
+class IcebergSinkSpec(_Frozen):
+    """Apache Iceberg sink (experimental), written with pyiceberg.
+
+    Trino, Spark, Athena and Snowflake read the same table through the catalog.
+    """
+
+    type: Literal["iceberg"]
+    catalog: dict[str, str] = Field(
+        description=(
+            "pyiceberg catalog properties, e.g. `{type: rest, uri: https://..., warehouse: "
+            "s3://bucket/wh}` or `{type: glue}`. Put secrets in `${ENV_VAR}`. An optional "
+            "`name` sets the catalog name (default `arsenal`), which a SQL catalog records."
+        )
+    )
+    table: str = Field(description="`namespace.table`.")
+    merge_key: list[str] = Field(
+        default_factory=list,
+        description=(
+            "With keys: rows are upserted on them. Without: batches are appended, and a "
+            "batch that was already committed (same unit) is not appended again."
+        ),
+    )
+
+    @field_validator("table")
+    @classmethod
+    def _table_has_a_namespace(cls, v: str) -> str:
+        parts = v.split(".")
+        if len(parts) < 2 or not all(parts):
+            raise ValueError("iceberg table must be `namespace.table`")
+        return v
+
+
 # Sinks every tool can write to (Pugio pipelines and Hasta streams).
 SinkSpec = Annotated[
     ParquetSinkSpec | DuckDBSinkSpec | PostgresSinkSpec,
@@ -297,7 +329,7 @@ SinkSpec = Annotated[
 
 # Sinks a Pugio pipeline can write to. Redshift is batch-only for now.
 PipelineSinkSpec = Annotated[
-    ParquetSinkSpec | DuckDBSinkSpec | PostgresSinkSpec | RedshiftSinkSpec,
+    ParquetSinkSpec | DuckDBSinkSpec | PostgresSinkSpec | RedshiftSinkSpec | IcebergSinkSpec,
     Field(discriminator="type"),
 ]
 
@@ -365,12 +397,15 @@ class PipelineSpec(_Frozen):
         if (
             self.source.type == "file"
             and self.source.detect_changes
-            and self.sink.type == "parquet"
+            and (
+                self.sink.type == "parquet"
+                or (self.sink.type == "iceberg" and not self.sink.merge_key)
+            )
         ):
             raise ValueError(
                 "source.detect_changes re-ingests a changed file as a new unit; a parquet "
-                "sink would then hold the old and the new rows. Use a duckdb or postgres "
-                "sink (merge_key upsert), or leave detect_changes off"
+                "sink (or an iceberg sink without merge_key) would then hold the old and the "
+                "new rows. Use a sink that upserts on merge_key, or leave detect_changes off"
             )
         return self
 

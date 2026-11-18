@@ -9,9 +9,10 @@ from pathlib import Path
 import typer
 from scorpio import assess_freshness
 
-from arsenal_core.errors import ArsenalError
+from arsenal_core.errors import ArsenalError, FatalError
 from arsenal_core.spec import load_pipeline
 from arsenal_core.state import StateStore
+from pugio.ddl import trino_hive_external_table
 from pugio.dlq import dlq_dir, read_reason, remove_dlq
 from pugio.runner import run_pipeline
 
@@ -86,6 +87,54 @@ def status(
         )
         if freshness.alert:
             typer.echo(f"alert: freshness {freshness.message}", err=True)
+
+
+@app.command()
+def ddl(
+    spec_path: Path,
+    table: str | None = typer.Option(None, "--table", help="Table name (default: pipeline name)."),
+    schema: str = typer.Option("default", "--schema", help="Trino schema."),
+    catalog: str = typer.Option("hive", "--catalog", help="Trino catalog (Hive connector)."),
+) -> None:
+    """Print CREATE TABLE for a Trino Hive external table over a Parquet sink.
+
+    Uses the schema recorded by the pipeline's last run. Prints only; run the
+    statement in Trino yourself. An external table has one fixed schema, so pin
+    CSV column types (`source.column_types`) if files may disagree.
+    """
+    try:
+        spec = load_pipeline(spec_path)
+        if spec.sink.type != "parquet":
+            hint = (
+                " (Trino reads an iceberg sink through its catalog; no DDL is needed)"
+                if spec.sink.type == "iceberg"
+                else ""
+            )
+            raise FatalError(
+                f"pugio ddl describes a parquet sink; this pipeline writes to "
+                f"{spec.sink.type}{hint}"
+            )
+        state_file = Path(spec.state_dir) / f"{spec.name}.db"
+        if not state_file.exists():
+            raise FatalError(f"no recorded schema for {spec.name!r}: run the pipeline once first")
+        store = StateStore(state_file)
+        try:
+            recorded = store.last_schema(spec.name)
+        finally:
+            store.close()
+        if recorded is None:
+            raise FatalError(f"no recorded schema for {spec.name!r}: run the pipeline once first")
+        statement = trino_hive_external_table(
+            schema_json=recorded,
+            location=spec.sink.path,
+            catalog=catalog,
+            schema=schema,
+            table=table or spec.name.replace("-", "_"),
+        )
+    except ArsenalError as e:
+        typer.echo(f"error: {e}", err=True)
+        raise typer.Exit(1) from e
+    typer.echo(statement)
 
 
 @dlq_app.command("list")

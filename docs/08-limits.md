@@ -168,6 +168,16 @@ preflight에서 거부된다.
 | 계약·거버넌스 | 계약 해시 변경 감지, 최신 스키마와의 불일치 보고, 태그·deprecate·FTS 검색 | 강제 — 접근 제어는 서버 없이는 불가, 계약 강제는 Scutum의 몫 |
 | 다른 도구에 대한 영향 | 상태 DB는 읽기 전용으로 열어 마이그레이션·백업·잠금을 일으키지 않는다 | 스캔과 동시에 쓰이는 WAL DB의 마지막 커밋 반영(다음 스캔에서 반영) |
 
+## Trino에서 읽기: Iceberg sink와 Hive 외부 테이블 (0.6.5 experimental)
+
+| 항목 | 보장하는 것 | 보장하지 않는 것 |
+|---|---|---|
+| Iceberg sink 멱등 | `merge_key`가 있으면 키 기준 upsert라 같은 batch를 다시 써도 결과가 같다. 없으면 append하고, 스냅샷에 unit id를 남겨 같은 unit을 두 번 append하지 않는다 | 스냅샷을 만료(expire)시킨 뒤의 append 중복 방지: unit id 기록이 스냅샷 이력에만 있다. 장기 보관 테이블에는 `merge_key`를 쓴다 |
+| Iceberg sink 원자성 | batch 하나가 Iceberg 커밋 하나다. 다른 writer와 충돌하면 커밋이 실패하고 재시도된다 | upsert의 대용량 성능(대상 테이블에서 같은 키를 찾아 읽는다), 파티션·정렬 지정, compaction과 스냅샷 만료(엔진 쪽에서 한다) |
+| Iceberg 스키마 | 첫 batch로 테이블을 만들고, 나중에 나타난 컬럼은 추가한다. 값이 전부 빈 컬럼은 문자열, 초·밀리초 timestamp는 마이크로초가 된다 | 컬럼 타입 변경·삭제. 타입이 충돌하면 그 batch는 실패한다 |
+| 검증 범위 | SQLite 카탈로그와 로컬 warehouse의 실제 Iceberg 테이블에서 계약 테스트를 돌렸다 | **REST·Glue 카탈로그, S3, Trino에서의 실제 조회.** `pugio ddl`의 Hive DDL은 문장만 확인했고 Trino에서 실행해 본 적이 없다 |
+| Hive 외부 테이블 | `pugio ddl`이 마지막으로 기록된 스키마로 `CREATE TABLE` 문을 출력한다 | 실행(직접 Trino에서 돌린다), 스키마가 바뀐 뒤의 `ALTER`. 외부 테이블은 스키마가 하나라, 파일마다 타입이 다르면 조회가 깨진다. CSV는 `source.column_types`로 고정한다 |
+
 ## Redshift sink의 보장과 한계 (0.6 experimental)
 
 | 항목 | 보장하는 것 | 보장하지 않는 것 |

@@ -3,7 +3,8 @@
 > 단검. 가장 작고 늘 휴대하는 일상 도구.
 
 수집·전송(ETL) 엔진. REST API·로컬 파일(csv/jsonl/excel)·운영 DB에서 데이터를
-읽어 Parquet/DuckDB/Postgres/Redshift(experimental, `pugio[redshift]`)로 적재한다. 재개·멱등·인증 자동 갱신이 기본값 —
+읽어 Parquet/DuckDB/Postgres로 적재한다. Redshift(`pugio[redshift]`)와 Iceberg(`pugio[iceberg]`) sink는
+experimental이다. `pugio ddl`은 S3 Parquet sink를 Trino Hive 외부 테이블로 읽기 위한 DDL을 출력한다. 재개·멱등·인증 자동 갱신이 기본값 —
 중단 후 재실행하면 마지막 완료 지점부터 이어지고, 같은 unit을 다시 적재해도
 중복이 생기지 않는다.
 

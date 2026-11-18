@@ -1,6 +1,6 @@
 [project]
 name = "de-ballista"
-version = "0.6.0"
+version = "0.6.5"
 description = "Ballista — capability-gated remote execution lifecycle for Gladius plans"
 readme = "README.md"
 requires-python = ">=3.11"

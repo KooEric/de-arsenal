@@ -23,7 +23,7 @@ _ENV_PATTERN = re.compile(r"\$\{(\w+)\}")
 # 경로(source.url)가 더 읽기 쉽고, M1 에러 메시지와도 하위 호환된다.
 _UNION_TAGS: dict[str, frozenset[str]] = {
     "source": frozenset({"rest", "file", "database", "python", "dlt"}),
-    "sink": frozenset({"parquet", "duckdb", "postgres", "redshift"}),
+    "sink": frozenset({"parquet", "duckdb", "postgres", "redshift", "iceberg"}),
 }
 
 
