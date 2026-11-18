@@ -33,7 +33,9 @@ def catalog_properties(root: Path) -> dict[str, str]:
     return {
         "type": "sql",
         "uri": f"sqlite:///{(root / 'catalog.db').as_posix()}",
-        "warehouse": warehouse.as_uri(),
+        # A plain path, not a file:// URL: pyiceberg reads `file:///C:/...` as the path
+        # `/C:/...` on Windows, but treats a drive-letter path as local.
+        "warehouse": warehouse.as_posix(),
     }
 
 
