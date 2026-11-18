@@ -39,6 +39,17 @@ def test_offset_pagination_unchanged() -> None:
     assert PaginationSpec(mode="offset", size=50).size == 50
 
 
+@pytest.mark.parametrize("param", ["page", "Page", "page_number", "pageNo"])
+def test_offset_mode_rejects_page_numbered_param(param: str) -> None:
+    """offset 값(0, size, 2*size…)을 페이지 번호에 실으면 대부분의 페이지를 건너뛴다."""
+    with pytest.raises(ValidationError, match="mode: page"):
+        PaginationSpec(mode="offset", param=param, size_param="per_page", size=100)
+
+
+def test_page_mode_accepts_page_param() -> None:
+    assert PaginationSpec(mode="page", param="page").param == "page"
+
+
 def test_fetch_result_next_cursor_defaults_none() -> None:
     assert FetchResult(batch=None, exhausted=True).next_cursor is None
 

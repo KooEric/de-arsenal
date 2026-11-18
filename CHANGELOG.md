@@ -12,6 +12,40 @@ minor.
 
 ## [Unreleased]
 
+Two silent data-loss bugs found by running the tools against real data
+(the GitHub API and the public airport-codes CSV). Neither raised an error.
+
+### Fixed
+
+- **The `github-issues` recipe collected only its first page.** The recipe,
+  `examples/github-issues.yaml` and the Pugio README used
+  `mode: offset, param: page`. Offset mode sends `0, size, 2×size, …`, so a
+  page-numbered API was asked for page 0 and then page `size`, and the run
+  reported success after one page (6 of 21 issues in a real run with
+  `per_page=5`). They now use `mode: page`.
+- **CSV cells reading `NA` could turn into nulls.** The file source used
+  pyarrow's default null tokens (`NA`, `N/A`, `null`, …). When every value of
+  a column in one file was such a token, the column was inferred as type
+  `null` and the values were lost, so the same data loaded differently
+  depending on how it was split into files (39,842 North American airports lost
+  their `continent` when the CSV was split by continent). Only an empty cell
+  is null now.
+
+### Added
+
+- `source.null_values` for `type: file`: the CSV cell values read as null
+  (default `[""]`). Set `["", "NA", "N/A"]` to restore the old tokens for a file
+  that really uses them as null markers.
+
+### ⚠️ Upgrade notes
+
+- **`mode: offset` with a page-numbered `param`** (`page`, `page_number`,
+  `pageNo`, …) is now a spec validation error that points at `mode: page`.
+  Such a spec was already skipping pages.
+- **CSV columns holding `NA`/`N/A`/`null` now load those as strings.** A numeric
+  column that used `NA` for missing values becomes a string column unless
+  `null_values` lists the token.
+
 ## [0.5.2] - 2026-11-17
 
 Patch release: two correctness fixes (a Pugio run racing Onager compaction, a
