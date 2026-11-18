@@ -48,6 +48,18 @@ stays v3 and `aquila.db` stays v2. Upgrade steps: [docs/upgrade-0.6.md](docs/upg
   deduplicates on the idempotency key. The ledger is its own SQLite file, not a
   StateStore migration (PL-ADR-3). Not included: bulk requests, OAuth refresh,
   `arsenal run` integration. See [packages/pilum/README.md](packages/pilum/README.md).
+- **Redshift sink** (`type: redshift`, `pugio[redshift]` / `de-arsenal[redshift]`,
+  experimental): staged delete + insert on `merge_key` in one transaction.
+  `load: insert` sends multi-row INSERTs; `load: copy` stages each batch as
+  Parquet under `staging_path` and loads it with `COPY` and an IAM role. Not
+  verified against a live cluster: the insert path is tested on PostgreSQL, the
+  copy path through the statements it issues. Pipelines only, not streams.
+- **`validate.on_violation: split`**: load the rows that pass and write only the
+  failing rows to the DLQ. `quarantine` sets a whole page or file aside, so data
+  with a few bad rows in every unit loads nothing (NYC taxi 2024 Q1: 1.2% bad
+  rows, 0 of 9.55M rows loaded). The unit is `done`; `pugio run` reports
+  `rejected_rows` and `pugio dlq list` shows what was set aside. The default
+  stays `quarantine`.
 - `source.column_types` for `type: file` (CSV): pin a column to `string`,
   `int64`, `float64`, `bool`, `date` or `timestamp`.
 - `source.allow_empty` for `type: file`.
@@ -65,6 +77,12 @@ stays v3 and `aquila.db` stays v2. Upgrade steps: [docs/upgrade-0.6.md](docs/upg
 - Tests that need Postgres use an existing server when
   `ARSENAL_TEST_POSTGRES_URL` is set (one fresh database per test module), so
   they run where Docker does not.
+- **Augur works with OpenAI-compatible APIs.** `--provider openai` reads
+  `OPENAI_BASE_URL` (the OpenAI SDK convention), so Gemini, Groq, OpenRouter or a
+  local server can run `augur ask` and `augur eval`. The key stays in
+  `OPENAI_API_KEY`.
+- `docs/11-real-data-experiments.md` and `experiments/real-data/`: results and
+  reproducible specs from running the tools on real APIs and data.
 - The `csv-cleanup` recipe ships `input/sample.csv`, so `arsenal init
   csv-cleanup && arsenal run` works without adding data.
 - `docs/adr/` PL-ADR-1..5, `docs/README.md` (index of the design documents),

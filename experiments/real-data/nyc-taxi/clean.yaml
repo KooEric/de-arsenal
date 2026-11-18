@@ -1,0 +1,13 @@
+name: trips-clean
+input: ./raw
+steps:
+  - filter: "total_amount >= 0 AND trip_distance > 0 AND trip_distance <= 200 AND tpep_dropoff_datetime > tpep_pickup_datetime"
+  - derive:
+      trip_month: "strftime(tpep_pickup_datetime, '%Y-%m')"
+      duration_min: "date_diff('second', tpep_pickup_datetime, tpep_dropoff_datetime) / 60.0"
+      airport_fee_any: "Airport_fee"
+  - filter: "duration_min BETWEEN 1 AND 240"
+  - derive:
+      mph: "trip_distance / (duration_min / 60.0)"
+  - select: [trip_month, tpep_pickup_datetime, PULocationID, DOLocationID, passenger_count, trip_distance, duration_min, mph, fare_amount, tip_amount, total_amount, airport_fee_any]
+output: ./data/trips_clean

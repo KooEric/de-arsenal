@@ -5,7 +5,7 @@ spec.validation.on_violation(block/quarantine/warn)에 따라 처리한다.
 """
 
 from dataclasses import dataclass
-from typing import Any, cast
+from typing import Any
 
 import pyarrow as pa
 import pyarrow.compute as pc
@@ -105,4 +105,5 @@ def violation_mask(batch: pa.RecordBatch, rules: list[ValidateRule]) -> pa.Boole
             marks.append(compute.is_in(col, value_set=repeated.drop_null()))
         for mark in marks:
             bad = compute.or_(bad, compute.fill_null(mark, False))
-    return cast(pa.BooleanArray, bad)
+    mask: pa.BooleanArray = bad
+    return mask

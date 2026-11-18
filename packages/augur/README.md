@@ -31,6 +31,14 @@ gladius query "SELECT failure_mode, count(*) FROM './data/augur/eval/*.parquet' 
 (TTY라면) 실행 시 숨김 프롬프트 순으로 찾는다. 인자로는 받지 않는다 — 셸 히스토리에 남는다.
 파일 위치는 `AUGUR_HOME`으로 바꿀 수 있다. 키는 trace·로그·`repr`에 절대 찍히지 않는다.
 
+OpenAI 호환 API(Gemini, Groq, OpenRouter, 로컬 서버)는 `--provider openai`에 `OPENAI_BASE_URL`을
+준다. 키는 그대로 `OPENAI_API_KEY`에 넣는다.
+
+```bash
+export OPENAI_BASE_URL=https://generativelanguage.googleapis.com/v1beta/openai
+augur eval packages/augur/eval/cases.yaml --provider openai --model gemini-flash-latest
+```
+
 ## 실패 모드 (자동 분류, 단계 순)
 
 | 모드 | 판정 | 원인 층 |

@@ -73,7 +73,29 @@ pagination: { mode: page, param: page, size_param: per_page, size: 100, stop_on:
 
 기본값은 0.5와 같은 `short_page`다.
 
-## 4. 선택 — Pilum
+## 4. 선택 — 검증 위반 행만 분리, Redshift
+
+```yaml
+validate:
+  rules: [{ field: amount, min: 0 }]
+  on_violation: split      # 통과한 행은 적재, 위반 행만 DLQ. 기본값은 quarantine 그대로
+```
+
+```yaml
+sink:
+  type: redshift           # uv tool install "de-arsenal[redshift]"
+  dsn_env: REDSHIFT_DSN    # redshift://user:password@host:5439/database
+  table: analytics.orders
+  merge_key: [order_id]
+  load: copy               # 또는 insert (기본). copy는 아래 둘이 필요하다
+  staging_path: s3://my-bucket/arsenal-staging
+  iam_role_env: REDSHIFT_COPY_ROLE
+```
+
+Redshift sink는 실제 클러스터에서 검증되지 않았다. 처음에는 테스트용 테이블로 한 번 돌려 본다.
+S3에 올릴 때의 자격증명은 S3 Parquet sink와 같은 방식(AWS 환경 변수)을 쓴다.
+
+## 5. 선택 — Pilum
 
 ```bash
 uv tool install --force "de-arsenal[dispatch]"    # 또는 pip install de-pilum
@@ -85,13 +107,13 @@ pilum run dispatch.yaml
 다른 도구는 이 파일을 읽지 않는다. experimental이므로 스펙과 원장 형식은 0.x에서 바뀔 수 있다.
 보장 범위: [08-limits.md](08-limits.md#pilum-reverse-etl의-보장과-한계-06-experimental).
 
-## 5. 상태 표기
+## 6. 상태 표기
 
 Onager·Scutum·Scorpio·Spatha의 표기가 stable에서 beta로 바뀌었다. 코드와 API는 그대로다.
 이 저장소 밖 사용 사례가 적다는 사실을 표기에 반영한 것이다.
 
-## 6. 롤백
+## 7. 롤백
 
 패키지를 0.5.3으로 다시 설치하면 된다. 0.6이 기존 상태 DB에 쓰는 것이 없으므로 복원할 파일이
-없다. 0.6에서 추가된 스펙 필드(`column_types`, `allow_empty`, `stop_on`)는 0.5가 거부하므로
+없다. 0.6에서 추가된 스펙 필드(`column_types`, `allow_empty`, `detect_changes`, `stop_on`, `on_violation: split`, `type: redshift`)는 0.5가 거부하므로
 YAML에서 지운다. `.arsenal/*.pilum.db`는 0.5가 읽지 않으니 남겨 둬도 된다.

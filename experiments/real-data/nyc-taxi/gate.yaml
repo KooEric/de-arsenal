@@ -1,0 +1,8 @@
+name: nyc-gate
+source: { type: python, target: "nyc_source:ParquetRowGroupSource", options: { path: "./raw/yellow_tripdata_2024-*.parquet" } }
+sink: { type: parquet, path: ./data/nyc_gate }
+validate:
+  rules:
+    - { field: total_amount, min: 0 }
+    - { field: trip_distance, min: 0, max: 200 }
+  on_violation: quarantine

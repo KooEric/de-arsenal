@@ -33,9 +33,15 @@ arsenal query "SELECT * FROM './data/clean/*.parquet' LIMIT 10"
   경고가 된다.
 
 sink별·도구별로 무엇을 보장하고 무엇을 보장하지 않는지는 [docs/08-limits.md](docs/08-limits.md)에
-있다. 단일 노드 도구다. 측정된 수치는 노트북에서 1 GB Parquet를 웜 캐시로 변환한 DuckDB
-벤치마크 하나뿐이고([benchmarks/RESULTS.md](benchmarks/RESULTS.md)), 수집 벤치마크와 다른
-도구와의 비교는 아직 없다.
+있다. 단일 노드 도구다. 실데이터로 측정한 것
+([docs/11-real-data-experiments.md](docs/11-real-data-experiments.md), 4 vCPU):
+
+- GitLab 이슈 9,554건(96페이지)을 수집 중 `kill -9` 후 재개: 적재 건수가 API 전체 건수와 같고
+  중복 id가 없다.
+- NYC 택시 955만 행을 4.0초에 적재. 크래시 후 재개해도 행 수와 금액 합계가 원본과 일치한다.
+- 24,000 이벤트 스트림을 6번 강제 종료: 누락 0, 중복 0.
+
+다른 도구와의 비교는 아직 없다.
 
 ## 도구
 
@@ -45,7 +51,7 @@ sink별·도구별로 무엇을 보장하고 무엇을 보장하지 않는지는
 | 도구 | 하는 일 | 패키지 | 상태 |
 |---|---|---|---|
 | **Arsenal** | 프로젝트 CLI: `init`, `run`, `status`, `query`, 시작용 레시피 3종 | `de-arsenal` | stable |
-| **Pugio** | 수집: REST, CSV/JSONL/Excel, DB, dlt 소스 → Parquet, DuckDB, Postgres, S3/GCS | `pugio` | stable |
+| **Pugio** | 수집: REST, CSV/JSONL/Excel, DB, dlt 소스 → Parquet, DuckDB, Postgres, S3/GCS, Redshift(experimental) | `pugio` | stable |
 | **Gladius** | YAML 변환을 DuckDB SQL로 컴파일. 증분 실행, Python UDF, 즉석 쿼리 | `de-gladius` | stable |
 | **Onager** | 로컬 Parquet의 small-file compaction과 격리 백필 | `de-onager` | beta |
 | **Scutum** | 라이브러리: Arrow 데이터 계약과 파일 잠금 (Pugio가 사용) | `de-scutum` | beta |
@@ -68,6 +74,7 @@ sink별·도구별로 무엇을 보장하고 무엇을 보장하지 않는지는
 |---|---|
 | 수집·변환·쿼리·레시피 | `uv tool install de-arsenal` |
 | …+ Postgres sink | `uv tool install "de-arsenal[postgres]"` |
+| …+ Redshift sink | `uv tool install "de-arsenal[redshift]"` |
 | …+ 스트리밍·CDC (Hasta) | `uv tool install "de-arsenal[streaming]"` |
 | …+ Spark on Kubernetes 실행 (Ballista) | `uv tool install "de-arsenal[distributed]"` |
 | …+ 카탈로그 (Aquila) | `uv tool install "de-arsenal[catalog]"` |
@@ -142,6 +149,7 @@ Ballista는 Kubernetes 클러스터, 객체 스토리지, Iceberg 카탈로그�
 | [docs/tools.md](docs/tools.md) | 도구별 사용 시점과 짧은 시작 방법 |
 | [docs/reference/](docs/reference/) | 코드에서 생성한 YAML 필드 전체 |
 | [docs/08-limits.md](docs/08-limits.md) | 보장하는 것과 보장하지 않는 것 |
+| [docs/11-real-data-experiments.md](docs/11-real-data-experiments.md) · [experiments/](experiments/real-data/README.md) | 실제 API·데이터(GitHub, GitLab, 공항 CSV, NYC 택시) 실험 결과, 찾은 버그와 확인한 한계 |
 | [CHANGELOG.md](CHANGELOG.md) · [0.6 업그레이드](docs/upgrade-0.6.md) | 변경 내역과 업그레이드 방법 |
 | [docs/README.md](docs/README.md) | 설계 문서, 결정 기록, 릴리스 절차 |
 

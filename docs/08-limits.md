@@ -168,6 +168,27 @@ preflight에서 거부된다.
 | 계약·거버넌스 | 계약 해시 변경 감지, 최신 스키마와의 불일치 보고, 태그·deprecate·FTS 검색 | 강제 — 접근 제어는 서버 없이는 불가, 계약 강제는 Scutum의 몫 |
 | 다른 도구에 대한 영향 | 상태 DB는 읽기 전용으로 열어 마이그레이션·백업·잠금을 일으키지 않는다 | 스캔과 동시에 쓰이는 WAL DB의 마지막 커밋 반영(다음 스캔에서 반영) |
 
+## Redshift sink의 보장과 한계 (0.6 experimental)
+
+| 항목 | 보장하는 것 | 보장하지 않는 것 |
+|---|---|---|
+| 멱등 | batch를 임시 테이블에 넣고, 같은 `merge_key`의 기존 행을 지운 뒤 넣는다. 한 트랜잭션이라 실패하면 대상 테이블은 그대로다. 같은 batch를 다시 써도 결과가 같다 | **실제 Redshift 클러스터에서의 검증.** `load: insert` 경로는 같은 SQL을 받는 PostgreSQL에서 실행해 확인했고, `load: copy` 경로는 발행하는 SQL문만 확인했다 |
+| 적재 방식 | `insert`: 다중 행 INSERT(문장당 최대 1,000행). `copy`: batch를 `staging_path`에 Parquet로 올리고 IAM 역할로 `COPY` | `insert`의 대량 적재 성능(수만 행 이상은 `copy`를 쓴다). staging 파일 삭제(재시도가 덮어쓰도록 unit별 이름으로 남는다. S3 lifecycle 규칙으로 지운다) |
+| 타입 | 문자열은 `VARCHAR(65535)`(Redshift의 `TEXT`는 256자다), 날짜·timestamp·decimal·정수 크기별 매핑 | 중첩·배열·바이너리 타입, 기존 테이블의 컬럼 추가·변경(첫 batch로 만든 뒤에는 스키마가 맞아야 한다), sort key·dist key 지정 |
+| 범위 | Pugio 파이프라인 | Hasta 스트림·CDC, Ballista 출력, 여러 writer의 동시 실행(직렬화 충돌은 재시도로 나타난다) |
+
+## 검증 게이트의 분리 정책
+
+`validate.on_violation`의 `quarantine`은 unit(페이지·파일) 전체를 격리한다. 실데이터는 거의 모든
+unit에 나쁜 행이 몇 개씩 있어서 이 정책으로는 적재가 0건이 될 수 있다
+([실험](11-real-data-experiments.md)). `split`은 위반 행만 DLQ Parquet에 남기고 나머지를 적재한다.
+
+- unit은 `done`이 된다. `pugio status --cost`의 행 수는 적재된 행만 센다.
+- `unique` 규칙은 중복된 값의 모든 행을 걸러 낸다. 어느 쪽이 맞는지 알 수 없기 때문이다.
+- 걸러진 행은 `pugio dlq list`에 보이지만 `dlq retry`로 되돌릴 수 없다(unit이 격리 상태가 아니다).
+  원천을 고친 뒤 다시 넣으려면 `source.detect_changes`를 쓰거나 상태를 지우고 재수집한다.
+- Scutum 계약(`contract`)에는 `split`이 없다. 계약 위반은 스키마 수준이라 행으로 나눌 수 없다.
+
 ## Pilum reverse ETL의 보장과 한계 (0.6 experimental)
 
 | 항목 | 보장하는 것 | 보장하지 않는 것 |

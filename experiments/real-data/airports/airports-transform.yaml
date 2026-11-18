@@ -1,0 +1,11 @@
+name: airports-clean
+input: ./data/airports_raw
+steps:
+  - filter: "type IN ('large_airport', 'medium_airport') AND iata_code IS NOT NULL"
+  - derive:
+      lat: "CAST(trim(split_part(coordinates, ',', 1)) AS DOUBLE)"
+      lon: "CAST(trim(split_part(coordinates, ',', 2)) AS DOUBLE)"
+      elevation_m: "round(CAST(elevation_ft AS DOUBLE) * 0.3048, 1)"
+  - dedup: [iata_code]
+  - select: [iata_code, name, type, continent, iso_country, municipality, lat, lon, elevation_m]
+output: ./data/airports_clean

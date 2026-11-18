@@ -33,9 +33,16 @@ These four commands run as written; CI runs the same `init` and `run` on every c
   are errors or warnings, not silent successes.
 
 What is and is not guaranteed, per sink and per tool: [docs/08-limits.md](docs/08-limits.md).
-It is a single-node tool. The one measured data point is a warm-cache DuckDB transform
-of a 1 GB Parquet file on a laptop ([benchmarks/RESULTS.md](benchmarks/RESULTS.md));
-there is no ingestion benchmark and no comparison with other tools yet.
+It is a single-node tool. What has been measured on real data
+([docs/11-real-data-experiments.md](docs/11-real-data-experiments.md), 4 vCPU):
+
+- 9,554 GitLab issues over 96 pages with a `kill -9` mid-run: the loaded count equals
+  the API's total, with no duplicate ids.
+- 9.55M NYC taxi rows loaded in 4.0 s; after a crash and resume the row count and the
+  amount total match the source.
+- A stream of 24,000 events killed six times: none missing, none duplicated.
+
+There is no comparison with other tools yet.
 
 ## Tools
 
@@ -45,7 +52,7 @@ and they exchange data only as Parquet files.
 | Tool | Does | Package | Status |
 |---|---|---|---|
 | **Arsenal** | Project CLI: `init`, `run`, `status`, `query`; three starter recipes | `de-arsenal` | stable |
-| **Pugio** | Ingestion: REST, CSV/JSONL/Excel, databases, dlt sources → Parquet, DuckDB, Postgres, S3/GCS | `pugio` | stable |
+| **Pugio** | Ingestion: REST, CSV/JSONL/Excel, databases, dlt sources → Parquet, DuckDB, Postgres, S3/GCS, Redshift (experimental) | `pugio` | stable |
 | **Gladius** | YAML transforms compiled to DuckDB SQL; incremental runs, Python UDFs, ad-hoc queries | `de-gladius` | stable |
 | **Onager** | Small-file compaction and isolated backfills for local Parquet | `de-onager` | beta |
 | **Scutum** | Library: Arrow data contracts and a file lock (used by Pugio) | `de-scutum` | beta |
@@ -69,6 +76,7 @@ The project is pre-1.0 and has no long-term API commitment; see the
 |---|---|
 | Ingest, transform, query, recipes | `uv tool install de-arsenal` |
 | …plus a Postgres sink | `uv tool install "de-arsenal[postgres]"` |
+| …plus a Redshift sink | `uv tool install "de-arsenal[redshift]"` |
 | …plus streaming and CDC (Hasta) | `uv tool install "de-arsenal[streaming]"` |
 | …plus Spark-on-Kubernetes runs (Ballista) | `uv tool install "de-arsenal[distributed]"` |
 | …plus the catalog (Aquila) | `uv tool install "de-arsenal[catalog]"` |
@@ -144,6 +152,7 @@ Postgres upsert, needs `[postgres]`).
 | [docs/tools.md](docs/tools.md) | When to use each tool, with a short start for each |
 | [docs/reference/](docs/reference/) | Every YAML field, generated from the code |
 | [docs/08-limits.md](docs/08-limits.md) | Guarantees and non-guarantees |
+| [docs/11-real-data-experiments.md](docs/11-real-data-experiments.md) · [experiments/](experiments/real-data/README.md) | Results on real APIs and data (GitHub, GitLab, airports CSV, NYC taxi), bugs found, limits confirmed |
 | [CHANGELOG.md](CHANGELOG.md) · [upgrade to 0.6](docs/upgrade-0.6.md) | What changed and how to upgrade |
 | [docs/README.md](docs/README.md) | Design documents, decision records and release procedure |
 

@@ -38,6 +38,9 @@
    - [ ] `de_arsenal` wheel에 `arsenal/recipes/csv-cleanup/input/sample.csv`가 들어 있다
          (`unzip -l dist/de_arsenal-0.6.0-*.whl | grep sample.csv`).
    - [ ] `examples/pilum`의 주석대로 실행해 두 번째 `pilum run`이 0건을 보낸다.
+   - [ ] Redshift sink를 테스트용 테이블에 `load: insert`와 `load: copy`로 한 번씩 돌린다. 실제
+         클러스터에서 검증된 적이 없다. 안 되면 CHANGELOG에 그대로 적고 experimental로 둔다.
+   - [ ] `examples/deploy`의 워크플로와 Dockerfile을 한 번씩 실행·빌드한다.
    - [ ] CHANGELOG의 `## [0.6.0] - TBD`를 실제 날짜로 바꾼다.
 4. PyPI 준비 — 신규 배포명 1개 (계정 소유자). PyPI **Publishing → Pending publishers**에 등록한다.
 
@@ -74,6 +77,16 @@
    ```bash
    gh release create v0.6.0 --title v0.6.0 --notes-file <(sed -n '/^## \[0.6.0\]/,/^## \[0.5.3\]/p' CHANGELOG.md | sed '$d')
    ```
+
+**0.5.3 릴리스에서 확인된 것:**
+
+- Claude 세션에서는 태그 push와 `release.yml` 수동 실행이 되지 않는다(403, 또는 원격에 태그가
+  생기지 않음). 4~5번은 계정 소유자가 직접 한다. `gh` 대신 GitHub 웹의 Releases → "Draft a new
+  release"에서 새 태그 `v0.6.0`으로 Release를 만들어도 `release.yml`이 실행된다. 태그로 시작된
+  실행도 `verify-and-build`를 통과해야 게시하므로, 검증 전용 실행을 생략해도 안전장치는 남는다.
+- `ballista-e2e`는 Docker 빌드 중 Maven Central 429로 실패할 수 있다. 코드와 무관하며 다시 돌리면 된다.
+- PR #23(`claude/peaceful-rubin-2er7lh`: 실데이터 실험 문서, Augur `OPENAI_BASE_URL`)의 커밋은 이
+  브랜치에 병합돼 있다. 어느 쪽을 먼저 머지해도 된다.
 
 실패 시: PyPI에 올라간 버전은 덮어쓸 수 없다. 일부만 게시된 상태에서 결함이 나오면 13개 전체를
 0.6.1로 다시 릴리스하고 0.6.0은 yank한다.

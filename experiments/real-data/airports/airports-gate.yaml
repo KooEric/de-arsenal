@@ -1,0 +1,8 @@
+name: airports-gate
+source: { type: file, path: ./drops/*.csv, format: csv }
+sink: { type: parquet, path: ./data/airports_raw }
+validate:
+  rules:
+    - { field: ident, not_null: true, unique: true }
+    - { field: elevation_ft, min: -1500, max: 30000 }
+  on_violation: quarantine

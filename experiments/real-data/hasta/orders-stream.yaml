@@ -1,0 +1,31 @@
+# Experiment 4 — stream with repeated kill -9 (see experiments/real-data/README.md).
+# Start the API first:  python examples/hasta/fake_orders_api.py --port 8799 --initial 20000 --every 0.2 --batch 50
+name: orders
+state_dir: .arsenal/hasta
+source:
+  type: rest_poll
+  url: http://127.0.0.1:8799/orders
+  limit_param: limit
+  record_path: data
+  cursor:
+    request_param: after
+    response_path: next_cursor
+    event_id_path: id          # stable per-event identity; required
+stream:
+  name: orders
+  poll_interval_seconds: 0.5
+  batch:
+    max_records: 500
+    max_bytes: 1000000
+    max_wait_seconds: 1
+  checkpoint:
+    lease_ttl_seconds: 3
+contract:
+  on_violation: quarantine     # bad batches go to the DLQ, never to the sink
+  allow_extra: true            # customer/created_at are allowed but not checked
+  columns:
+    - {name: id, type: int64, nullable: false}
+    - {name: amount, type: double, nullable: false}
+sink:
+  type: parquet
+  path: data/orders
