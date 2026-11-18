@@ -12,7 +12,7 @@ minor.
 
 ## [Unreleased]
 
-## [0.6.5] - TBD
+## [0.6.5] - 2026-11-18
 
 Two ways to make a pipeline's output readable from Trino. All 13 packages move
 to `0.6.5`; internal pins stay `>=0.6,<0.7`. No state migrations and no change

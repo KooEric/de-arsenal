@@ -12,7 +12,7 @@ Trino에서 읽기 위한 두 가지 추가다: Iceberg sink(`pugio[iceberg]`)�
 
 1. 이 PR CI green → `main` 머지
 2. `main`에서 검증: 아래 0.6.0 절차의 2번과 같다. 기대값은 "13 packages at v0.6.5", 산출물 26개.
-3. CHANGELOG의 `## [0.6.5] - TBD`에 날짜를 넣는다.
+3. CHANGELOG `## [0.6.5]`의 날짜를 확인한다 (PR에서 2026-11-18로 기입).
 4. `git tag v0.6.5 && git push origin v0.6.5` (계정 소유자). 신규 프로젝트가 없으므로 수동 최초 게시는 필요 없다.
 5. 게시 확인: 13개 패키지의 `https://pypi.org/pypi/<name>/0.6.5/json`이 모두 `200`.
 6. 출시 후 권장: 실제 카탈로그(REST/Glue)와 S3에 Iceberg sink로 한 번 쓰고 Trino에서 조회한다.
