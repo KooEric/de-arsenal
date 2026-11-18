@@ -45,7 +45,8 @@ def jsonable(value: Any) -> Any:
 
 
 def _fetch(con: duckdb.DuckDBPyConnection, sql: str, params: list[str]) -> pa.Table:
-    return cast(pa.Table, con.execute(sql, params).to_arrow_table())  # pyright: ignore[reportUnknownMemberType]
+    relation = con.sql(sql, params=params) if params else con.sql(sql)
+    return cast(pa.Table, relation.to_arrow_table())  # pyright: ignore[reportUnknownMemberType]
 
 
 def read_source(source: SourceSpec) -> list[dict[str, Any]]:
