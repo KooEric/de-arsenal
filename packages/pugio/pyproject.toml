@@ -1,6 +1,6 @@
 [project]
 name = "pugio"
-version = "0.6.0"
+version = "0.6.5"
 description = "Pugio — 수집·전송. 재개·멱등·인증 갱신이 기본값인 ETL 엔진"
 readme = "README.md"
 requires-python = ">=3.11"
@@ -25,6 +25,7 @@ Repository = "https://github.com/KooEric/de-arsenal"
 excel = ["fastexcel>=0.11"]
 postgres = ["psycopg[binary]>=3.1"]
 redshift = ["redshift_connector>=2.1"]
+iceberg = ["pyiceberg>=0.9"]
 dlt = ["dlt>=1.29,<2"]
 
 [project.scripts]

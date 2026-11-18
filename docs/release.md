@@ -1,3 +1,25 @@
+# v0.6.5 패치 릴리스 절차
+
+Trino에서 읽기 위한 두 가지 추가다: Iceberg sink(`pugio[iceberg]`)와 `pugio ddl`.
+내역은 [CHANGELOG](../CHANGELOG.md).
+
+**patch인 이유**: 새 sink 타입과 새 명령만 추가하고 기존 동작은 바꾸지 않는다. 교차 핀
+`>=0.6,<0.7`을 유지하고, 상태 마이그레이션과 신규 PyPI 프로젝트가 없다.
+
+**순서 주의**: `v0.6.0` 태그가 `97f57e7`에 올라가 13개 패키지가 게시된 뒤에 이 PR을 머지한다.
+먼저 머지하면 `main`의 버전이 0.6.5라 `v0.6.0` 태그 실행이 메타데이터 검사에서 실패한다
+(그 경우 `git tag v0.6.0 97f57e7`처럼 커밋을 지정해 태그한다).
+
+1. 이 PR CI green → `main` 머지
+2. `main`에서 검증: 아래 0.6.0 절차의 2번과 같다. 기대값은 "13 packages at v0.6.5", 산출물 26개.
+3. CHANGELOG의 `## [0.6.5] - TBD`에 날짜를 넣는다.
+4. `git tag v0.6.5 && git push origin v0.6.5` (계정 소유자). 신규 프로젝트가 없으므로 수동 최초 게시는 필요 없다.
+5. 게시 확인: 13개 패키지의 `https://pypi.org/pypi/<name>/0.6.5/json`이 모두 `200`.
+6. 출시 후 권장: 실제 카탈로그(REST/Glue)와 S3에 Iceberg sink로 한 번 쓰고 Trino에서 조회한다.
+   `pugio ddl`이 출력한 문장을 Trino에서 한 번 실행한다. 둘 다 그 환경에서 검증된 적이 없다.
+
+---
+
 # v0.6.0 릴리스 절차
 
 13번째 패키지 **Pilum**(`de-pilum`, experimental)이 처음 배포된다. 내역은

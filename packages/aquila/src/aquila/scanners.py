@@ -103,6 +103,8 @@ def sink_uri(sink: dict[str, Any], root: Path) -> tuple[str, str] | None:
         return normalize_uri(
             f"postgres://${{{sink.get('dsn_env', '')}}}/{sink.get('table', '')}"
         ), "postgres"
+    if kind == "iceberg" and isinstance(sink.get("table"), str):
+        return f"iceberg://{sink['table']}", "iceberg"
     if kind == "redshift":
         return normalize_uri(
             f"redshift://${{{sink.get('dsn_env', '')}}}/{sink.get('table', '')}"

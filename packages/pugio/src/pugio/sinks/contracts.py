@@ -56,6 +56,14 @@ REDSHIFT_CAPABILITIES = SinkCapabilities(
     atomic_publish=True,
 )
 
+# One Iceberg commit per batch. Concurrent writers are resolved by the catalog's
+# optimistic commit: the loser fails and is retried, it does not duplicate.
+ICEBERG_CAPABILITIES = SinkCapabilities(
+    idempotent_batch_write=True,
+    atomic_publish=True,
+    concurrent_writers=True,
+)
+
 _OBJECT_STORE_SCHEMES = frozenset({"s3", "gcs", "gs"})
 
 Clock = Callable[[], datetime]
@@ -135,6 +143,8 @@ def capabilities_for_spec(spec: SinkSpec) -> SinkCapabilities:
         return POSTGRES_CAPABILITIES
     if spec.type == "redshift":
         return REDSHIFT_CAPABILITIES
+    if spec.type == "iceberg":
+        return ICEBERG_CAPABILITIES
     raise AssertionError(f"unknown sink type: {spec.type}")  # pragma: no cover
 
 
@@ -162,6 +172,8 @@ def output_ref_for_spec(spec: SinkSpec, unit: UnitSpec) -> ArtifactRef:
         )
     if spec.type == "redshift":
         return ArtifactRef(uri=f"redshift:///{spec.table}", format="redshift", version=unit.unit_id)
+    if spec.type == "iceberg":
+        return ArtifactRef(uri=f"iceberg://{spec.table}", format="iceberg", version=unit.unit_id)
     raise AssertionError(f"unknown sink type: {spec.type}")  # pragma: no cover
 
 
@@ -193,6 +205,7 @@ __all__ = [
     "LOCAL_PARQUET_CAPABILITIES",
     "OBJECT_STORAGE_PARQUET_CAPABILITIES",
     "POSTGRES_CAPABILITIES",
+    "ICEBERG_CAPABILITIES",
     "REDSHIFT_CAPABILITIES",
     "OutputProofContext",
     "SinkContractAdapter",

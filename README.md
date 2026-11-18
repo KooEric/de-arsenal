@@ -52,7 +52,7 @@ and they exchange data only as Parquet files.
 | Tool | Does | Package | Status |
 |---|---|---|---|
 | **Arsenal** | Project CLI: `init`, `run`, `status`, `query`; three starter recipes | `de-arsenal` | stable |
-| **Pugio** | Ingestion: REST, CSV/JSONL/Excel, databases, dlt sources → Parquet, DuckDB, Postgres, S3/GCS, Redshift (experimental) | `pugio` | stable |
+| **Pugio** | Ingestion: REST, CSV/JSONL/Excel, databases, dlt sources → Parquet, DuckDB, Postgres, S3/GCS, Redshift and Iceberg (both experimental) | `pugio` | stable |
 | **Gladius** | YAML transforms compiled to DuckDB SQL; incremental runs, Python UDFs, ad-hoc queries | `de-gladius` | stable |
 | **Onager** | Small-file compaction and isolated backfills for local Parquet | `de-onager` | beta |
 | **Scutum** | Library: Arrow data contracts and a file lock (used by Pugio) | `de-scutum` | beta |
@@ -77,6 +77,7 @@ The project is pre-1.0 and has no long-term API commitment; see the
 | Ingest, transform, query, recipes | `uv tool install de-arsenal` |
 | …plus a Postgres sink | `uv tool install "de-arsenal[postgres]"` |
 | …plus a Redshift sink | `uv tool install "de-arsenal[redshift]"` |
+| …plus an Iceberg sink (readable from Trino) | `uv tool install "de-arsenal[iceberg]"` |
 | …plus streaming and CDC (Hasta) | `uv tool install "de-arsenal[streaming]"` |
 | …plus Spark-on-Kubernetes runs (Ballista) | `uv tool install "de-arsenal[distributed]"` |
 | …plus the catalog (Aquila) | `uv tool install "de-arsenal[catalog]"` |

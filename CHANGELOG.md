@@ -12,6 +12,26 @@ minor.
 
 ## [Unreleased]
 
+## [0.6.5] - TBD
+
+Two ways to make a pipeline's output readable from Trino. All 13 packages move
+to `0.6.5`; internal pins stay `>=0.6,<0.7`. No state migrations and no change
+to existing behaviour.
+
+### Added
+
+- **Iceberg sink** (`type: iceberg`, `pugio[iceberg]` / `de-arsenal[iceberg]`,
+  experimental), written with pyiceberg to any catalog it supports (REST, Glue,
+  Hive, SQL). With `merge_key`, rows are upserted; without it, batches are
+  appended and a batch already committed for the same unit is not appended
+  again. The table is created from the first batch and later columns are added
+  to it. Tested against real Iceberg tables (SQLite catalog, local warehouse);
+  not verified against a REST or Glue catalog, S3, or Trino itself.
+- **`pugio ddl <spec>`** prints `CREATE TABLE ... WITH (external_location,
+  format = 'PARQUET')` for a Trino Hive external table over a Parquet sink,
+  from the schema the pipeline last recorded. It prints only; the statement has
+  not been run against Trino.
+
 ## [0.6.0] - 2026-11-18
 
 Minor release: a 13th package, **Pilum** (`de-pilum`, experimental reverse ETL),

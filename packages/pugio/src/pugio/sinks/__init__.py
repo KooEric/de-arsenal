@@ -60,6 +60,10 @@ def build_sink(spec: SinkSpec) -> Sink:
         from pugio.sinks.redshift import RedshiftSink
 
         return RedshiftSink(spec)
+    if spec.type == "iceberg":
+        from pugio.sinks.iceberg import IcebergSink
+
+        return IcebergSink(spec)
     raise FatalError(f"unknown sink type: {spec.type}")  # pragma: no cover
 
 

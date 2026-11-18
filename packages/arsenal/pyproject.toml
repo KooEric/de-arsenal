@@ -1,6 +1,6 @@
 [project]
 name = "de-arsenal"
-version = "0.6.0"
+version = "0.6.5"
 description = "Arsenal — 원클릭 데이터 스택. 수집→검증→변환→쿼리를 명령 하나로 (pugio+gladius 우산 CLI)"
 readme = "README.md"
 requires-python = ">=3.11"
@@ -26,6 +26,7 @@ classifiers = [
 [project.optional-dependencies]
 postgres = ["pugio[postgres]"]
 redshift = ["pugio[redshift]"]
+iceberg = ["pugio[iceberg]"]
 dlt = ["pugio[dlt]"]
 dbt = ["dbt-duckdb>=1.8,<2"]
 streaming = ["de-hasta>=0.6,<0.7"]

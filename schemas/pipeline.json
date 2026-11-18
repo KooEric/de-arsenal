@@ -325,6 +325,45 @@
       "title": "FileSourceSpec",
       "type": "object"
     },
+    "IcebergSinkSpec": {
+      "additionalProperties": false,
+      "description": "Apache Iceberg sink (experimental), written with pyiceberg.\n\nTrino, Spark, Athena and Snowflake read the same table through the catalog.",
+      "properties": {
+        "type": {
+          "const": "iceberg",
+          "title": "Type",
+          "type": "string"
+        },
+        "catalog": {
+          "additionalProperties": {
+            "type": "string"
+          },
+          "description": "pyiceberg catalog properties, e.g. `{type: rest, uri: https://..., warehouse: s3://bucket/wh}` or `{type: glue}`. Put secrets in `${ENV_VAR}`. An optional `name` sets the catalog name (default `arsenal`), which a SQL catalog records.",
+          "title": "Catalog",
+          "type": "object"
+        },
+        "table": {
+          "description": "`namespace.table`.",
+          "title": "Table",
+          "type": "string"
+        },
+        "merge_key": {
+          "description": "With keys: rows are upserted on them. Without: batches are appended, and a batch that was already committed (same unit) is not appended again.",
+          "items": {
+            "type": "string"
+          },
+          "title": "Merge Key",
+          "type": "array"
+        }
+      },
+      "required": [
+        "type",
+        "catalog",
+        "table"
+      ],
+      "title": "IcebergSinkSpec",
+      "type": "object"
+    },
     "PaginationSpec": {
       "additionalProperties": false,
       "properties": {
@@ -804,6 +843,7 @@
       "discriminator": {
         "mapping": {
           "duckdb": "#/$defs/DuckDBSinkSpec",
+          "iceberg": "#/$defs/IcebergSinkSpec",
           "parquet": "#/$defs/ParquetSinkSpec",
           "postgres": "#/$defs/PostgresSinkSpec",
           "redshift": "#/$defs/RedshiftSinkSpec"
@@ -822,6 +862,9 @@
         },
         {
           "$ref": "#/$defs/RedshiftSinkSpec"
+        },
+        {
+          "$ref": "#/$defs/IcebergSinkSpec"
         }
       ],
       "title": "Sink"

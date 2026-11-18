@@ -12,7 +12,7 @@ A pipeline YAML file declares one `PipelineSpec`: a name, a `source` (discrimina
 | `name` | string | Yes |  |  |
 | `state_dir` | string | No | `".arsenal"` |  |
 | `source` | RestSourceSpec \| FileSourceSpec \| DatabaseSourceSpec \| PythonSourceSpec \| DltSourceSpec | Yes |  |  |
-| `sink` | ParquetSinkSpec \| DuckDBSinkSpec \| PostgresSinkSpec \| RedshiftSinkSpec | Yes |  |  |
+| `sink` | ParquetSinkSpec \| DuckDBSinkSpec \| PostgresSinkSpec \| RedshiftSinkSpec \| IcebergSinkSpec | Yes |  |  |
 | `validate` | ValidateSpec \| null | No | `null` |  |
 | `contract` | ContractSpec \| null | No | `null` |  |
 | `schema_drift` | "allow" \| "warn" \| "block" | No | `"allow"` | Policy when the observed source schema differs from the last snapshot. |
@@ -99,6 +99,19 @@ DuckDB 파일 싱크 (M2) — temp 테이블 → MERGE로 멱등 upsert.
 | `column_types` | object<string, "string" \| "int64" \| "float64" \| "bool" \| "date" \| "timestamp"> | No |  | CSV only. Pin a column's type instead of inferring it per file, e.g. `{zip: string}`. A named column missing from a file is an error. |
 | `detect_changes` | boolean | No | `false` | By default a file is ingested once, by its path: editing or overwriting an already-ingested file changes nothing. Set true to also key on the file's content, so a changed file is ingested again. Requires an upsert sink (`duckdb` or `postgres`): a Parquet sink would keep both versions. |
 | `allow_empty` | boolean | No | `false` | By default a `path` that matches no files is an error (a wrong path looks exactly like 'nothing to do'). Set true for a drop folder that may be empty. |
+
+## IcebergSinkSpec
+
+Apache Iceberg sink (experimental), written with pyiceberg.
+
+Trino, Spark, Athena and Snowflake read the same table through the catalog.
+
+| Field | Type | Required | Default | Description |
+|---|---|---|---|---|
+| `type` | "iceberg" | Yes |  |  |
+| `catalog` | object<string, string> | Yes |  | pyiceberg catalog properties, e.g. `{type: rest, uri: https://..., warehouse: s3://bucket/wh}` or `{type: glue}`. Put secrets in `${ENV_VAR}`. An optional `name` sets the catalog name (default `arsenal`), which a SQL catalog records. |
+| `table` | string | Yes |  | `namespace.table`. |
+| `merge_key` | array of string | No |  | With keys: rows are upserted on them. Without: batches are appended, and a batch that was already committed (same unit) is not appended again. |
 
 ## PaginationSpec
 
