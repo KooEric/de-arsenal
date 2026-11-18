@@ -1,7 +1,7 @@
 # v0.5.3 패치 릴리스 절차
 
 실데이터 도그푸딩에서 찾은 조용한 데이터 손실 두 건의 수정이다. 내역은
-[CHANGELOG](../CHANGELOG.md#053---tbd).
+[CHANGELOG](../CHANGELOG.md#053---2026-11-18).
 
 - **수정:** `github-issues` 레시피·예제·Pugio README의 `mode: offset, param: page`가 첫
   페이지만 수집하던 문제. CSV에서 값이 전부 `NA`인 컬럼이 null 타입으로 추론돼 값을 잃던 문제.
@@ -33,7 +33,7 @@ PyPI 프로젝트가 없다.
    uv build --all-packages && ls dist/ | wc -l       # 24
    ```
 
-3. CHANGELOG의 `## [0.5.3] - TBD`를 실제 날짜로 바꾼다.
+3. CHANGELOG의 `## [0.5.3]`에 날짜가 들어갔는지 확인한다 (머지 전 PR에서 2026-11-18로 기입).
 4. 검증 전용 수동 실행 후 태그
 
    ```bash

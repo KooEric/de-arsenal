@@ -12,7 +12,7 @@ minor.
 
 ## [Unreleased]
 
-## [0.5.3] - TBD
+## [0.5.3] - 2026-11-18
 
 Patch release: two silent data-loss bugs found by running the tools against
 real data (the GitHub API and the public airport-codes CSV). Neither raised an
