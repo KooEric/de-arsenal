@@ -8,6 +8,7 @@ at-least-once 실행 + 멱등 쓰기 = exactly-once 결과.
 구현: docs/plans/2026-07-08-m1-core-foundation.md Task 8
 """
 
+import dataclasses
 import functools
 import json
 import logging
@@ -19,6 +20,7 @@ from typing import Any, Protocol
 
 import httpx
 import pyarrow as pa
+import pyarrow.compute as pc
 from scutum import ContractColumn, DataContract
 
 from arsenal_core.errors import AuthExpiredError, FatalError
@@ -35,7 +37,7 @@ from pugio.sources.dlt import load_dlt_source
 from pugio.sources.file import FileSource
 from pugio.sources.python_source import load_python_source
 from pugio.sources.rest import RestSource
-from pugio.validate.gate import Violation, check
+from pugio.validate.gate import Violation, check, violation_mask
 from pugio.writer_guard import pipeline_lease
 
 logger = logging.getLogger("pugio.runner")
@@ -47,6 +49,7 @@ class RunReport:
     written: int
     skipped: int  # done이라 건너뛴 unit 수 — 재개의 증거
     quarantined: int = 0  # 검증 위반으로 격리된 unit 수 (M2-E)
+    rejected_rows: int = 0  # on_violation: split이 DLQ로 보낸 행 수 (unit은 done)
 
 
 def _schema_json(batch: pa.RecordBatch) -> str:
@@ -57,6 +60,22 @@ def _schema_json(batch: pa.RecordBatch) -> str:
     return json.dumps(
         [{"name": f.name, "type": str(f.type), "nullable": f.nullable} for f in batch.schema]
     )
+
+
+def _type_conflicts(seen: dict[str, tuple[str, str]], batch: pa.RecordBatch, unit_key: str) -> str:
+    """Columns whose type in this file differs from an earlier file of the same run.
+
+    An all-empty column (type ``null``) fits any type and is not a conflict.
+    """
+    conflicts: list[str] = []
+    for field in batch.schema:
+        kind = str(field.type)
+        if kind == "null":
+            continue
+        first = seen.setdefault(field.name, (kind, unit_key))
+        if first[0] != kind:
+            conflicts.append(f"'{field.name}' is {first[0]} in {first[1]} but {kind} in {unit_key}")
+    return "; ".join(conflicts)
 
 
 def _fetch_with_retry(source: Source, unit: UnitSpec, max_attempts: int) -> FetchResult:
@@ -211,8 +230,9 @@ def _run_units(
     max_attempts: int,
     renew_lease: Callable[[], None],
 ) -> RunReport:
-    fetched = written = skipped = done_count = quarantined = 0
+    fetched = written = skipped = done_count = quarantined = rejected_rows = 0
     schema_recorded = False  # 이번 run에서 스냅샷 기록 여부 (첫 non-empty batch에서 한 번만)
+    file_types: dict[str, tuple[str, str]] = {}  # 컬럼 → (타입, 처음 본 파일)
     for unit in source.units():
         store.register(unit)
         if store.is_done(unit.unit_id):
@@ -226,6 +246,19 @@ def _run_units(
             store.mark_failed(unit.unit_id, str(e))
             raise
         fetched += 1
+        if spec.source.type == "file" and result.batch is not None:
+            # 파일마다 타입을 따로 추론하므로 같은 컬럼이 파일에 따라 다른 타입이 될 수
+            # 있다. 읽는 쪽에서 조용히 문자열로 합쳐지기 전에 여기서 알린다.
+            conflict = _type_conflicts(file_types, result.batch, unit.unit_key)
+            if conflict:
+                message = (
+                    f"column types differ between files of pipeline {spec.name!r}: {conflict}. "
+                    "Pin them with source.column_types"
+                )
+                if spec.schema_drift == "block":
+                    store.mark_failed(unit.unit_id, message)
+                    raise FatalError(message)
+                logger.warning(message)
         if not schema_recorded and result.batch is not None:
             schema_json = _schema_json(result.batch)
             previous_schema = store.last_schema(spec.name)
@@ -269,6 +302,14 @@ def _run_units(
             report = check(result.batch, spec.validation.rules)
             if not report.ok:
                 policy = spec.validation.on_violation
+                if policy == "split":
+                    # 위반 행만 DLQ로, 나머지는 그대로 적재한다. unit은 done이 된다.
+                    mask = violation_mask(result.batch, spec.validation.rules)
+                    bad = result.batch.filter(mask)
+                    good = result.batch.filter(pc.invert(mask))  # pyright: ignore[reportUnknownMemberType, reportAttributeAccessIssue]
+                    write_dlq(spec.state_dir, spec.name, unit, bad, report.violations, split=True)
+                    rejected_rows += bad.num_rows
+                    result = dataclasses.replace(result, batch=good if good.num_rows else None)
                 if policy == "block":
                     # M2-E FIX 3: 이 FatalError는 _fetch_with_auth_refresh를 감싼
                     # try/except(Exception → mark_failed → raise) 바깥에서 던져지므로,
@@ -359,4 +400,10 @@ def _run_units(
             on_unit_complete(done_count)
         if result.exhausted:
             break
-    return RunReport(fetched=fetched, written=written, skipped=skipped, quarantined=quarantined)
+    return RunReport(
+        fetched=fetched,
+        written=written,
+        skipped=skipped,
+        quarantined=quarantined,
+        rejected_rows=rejected_rows,
+    )

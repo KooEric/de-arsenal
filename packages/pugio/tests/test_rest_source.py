@@ -317,3 +317,30 @@ def test_close_closes_underlying_httpx_client() -> None:
     assert client.is_closed is False
     src.close()
     assert client.is_closed is True
+
+
+@respx.mock
+def test_stop_on_empty_page_survives_a_server_page_cap() -> None:
+    """The server caps pages at 1 row though the spec asks for 2.
+
+    With the default (`short_page`) the first page already looks like the last
+    and the rest of the data is never requested.
+    """
+    pages = {0: [{"id": 1}], 2: [{"id": 2}], 4: []}
+    for offset, rows in pages.items():
+        respx.get("https://api.test/items", params={"offset": offset}).respond(json=rows)
+    capped = SPEC.model_copy(
+        update={"pagination": SPEC.pagination.model_copy(update={"stop_on": "empty_page"})}
+    )
+    source = RestSource(capped, pipeline="p", client=httpx.Client())
+
+    fetched: list[int] = []
+    for unit in source.units():
+        result = source.fetch(unit)
+        if result.batch is not None:
+            fetched.extend(row["id"] for row in result.batch.to_pylist())
+        if result.exhausted:
+            break
+
+    assert fetched == [1, 2]
+    assert make_source().fetch(next(iter(make_source().units()))).exhausted is True

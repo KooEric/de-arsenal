@@ -169,7 +169,7 @@ class RestSource:
     def fetch(self, unit: UnitSpec) -> FetchResult:
         """GET → classify_http_status로 예외 매핑 → RecordBatch.
 
-        offset/page: len(rows) < size 이면 exhausted=True.
+        offset/page: len(rows) < size 이면 exhausted=True (stop_on: empty_page면 빈 페이지에서만).
         cursor/link: next_cursor가 None이면 exhausted=True (행 수와 무관).
         빈 응답은 batch=None.
         """
@@ -212,7 +212,7 @@ class RestSource:
             self._pending_cursor = next_cursor
             self._cursor_exhausted = next_cursor is None
             return FetchResult(batch=batch, exhausted=next_cursor is None, next_cursor=next_cursor)
-        exhausted = len(rows) < p.size
+        exhausted = not rows if p.stop_on == "empty_page" else len(rows) < p.size
         return FetchResult(batch=batch, exhausted=exhausted)
 
     def _fetch_link(self, unit: UnitSpec) -> FetchResult:

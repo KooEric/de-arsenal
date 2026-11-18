@@ -1,0 +1,24 @@
+# Pilum example — send every refunded or pending order to a local endpoint.
+# Run from the repository root (no account, no network):
+#
+#   python examples/pilum/fake_alerts_api.py &
+#   pilum plan examples/pilum/alerts.yaml
+#   pilum run  examples/pilum/alerts.yaml      # sends 2 records
+#   pilum run  examples/pilum/alerts.yaml      # sends nothing: nothing changed
+#   curl -s http://127.0.0.1:8766/alerts
+name: order-alerts
+source:
+  type: query
+  sql: >
+    SELECT order_id, customer, amount, status
+    FROM read_csv('examples/quickstart/orders.csv')
+    WHERE status <> 'paid'
+key: [order_id]
+mode: mirror            # an order that becomes 'paid' is deleted from the endpoint
+destination:
+  type: http
+  url: ${ALERTS_URL}/{order_id}
+  method: PUT
+  body: { customer: "{customer}", amount: "{amount}", note: "order {order_id} is {status}" }
+  idempotency_header: Idempotency-Key
+  delete: { url: "${ALERTS_URL}/{order_id}" }

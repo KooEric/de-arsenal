@@ -21,10 +21,13 @@ HEAVY = {
     "obstore",
     "psycopg",
     "psycopg-binary",
+    "redshift-connector",
+    "boto3",
     "dbt-duckdb",
     "de-hasta",
     "de-ballista",
     "de-aquila",
+    "de-pilum",
 }
 
 _NAME = re.compile(r"^\s*([A-Za-z0-9][A-Za-z0-9._-]*)")

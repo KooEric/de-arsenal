@@ -26,6 +26,8 @@ def write_dlq(
     unit: UnitSpec,
     batch: pa.RecordBatch,
     violations: list[Violation],
+    *,
+    split: bool = False,
 ) -> Path:
     """격리 batch를 parquet으로, 위반 사유를 같은 이름의 json으로 저장한다."""
     d = dlq_dir(state_dir, pipeline)
@@ -38,6 +40,10 @@ def write_dlq(
         "violations": [{"rule": v.rule, "field": v.field, "count": v.count} for v in violations],
         "quarantined_at": datetime.now(UTC).isoformat(),
     }
+    if split:
+        # 행 단위 분리: unit은 done이고 이 파일에는 걸러진 행만 들어 있다.
+        reason["mode"] = "split"
+        reason["rejected_rows"] = batch.num_rows
     (d / f"{unit.unit_id}.json").write_text(
         json.dumps(reason, ensure_ascii=False, indent=2), encoding="utf-8"
     )

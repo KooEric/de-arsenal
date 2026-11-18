@@ -12,7 +12,7 @@ A pipeline YAML file declares one `PipelineSpec`: a name, a `source` (discrimina
 | `name` | string | Yes |  |  |
 | `state_dir` | string | No | `".arsenal"` |  |
 | `source` | RestSourceSpec \| FileSourceSpec \| DatabaseSourceSpec \| PythonSourceSpec \| DltSourceSpec | Yes |  |  |
-| `sink` | ParquetSinkSpec \| DuckDBSinkSpec \| PostgresSinkSpec | Yes |  |  |
+| `sink` | ParquetSinkSpec \| DuckDBSinkSpec \| PostgresSinkSpec \| RedshiftSinkSpec | Yes |  |  |
 | `validate` | ValidateSpec \| null | No | `null` |  |
 | `contract` | ContractSpec \| null | No | `null` |  |
 | `schema_drift` | "allow" \| "warn" \| "block" | No | `"allow"` | Policy when the observed source schema differs from the last snapshot. |
@@ -96,6 +96,9 @@ DuckDB 파일 싱크 (M2) — temp 테이블 → MERGE로 멱등 upsert.
 | `format` | "auto" \| "csv" \| "jsonl" \| "excel" | No | `"auto"` |  |
 | `encoding` | string | No | `"utf-8"` |  |
 | `null_values` | array of string | No |  | CSV cell values read as null. Default is only the empty cell: tokens such as 'NA' are real data (North America, Namibia). Add them explicitly if the file uses them as null markers. |
+| `column_types` | object<string, "string" \| "int64" \| "float64" \| "bool" \| "date" \| "timestamp"> | No |  | CSV only. Pin a column's type instead of inferring it per file, e.g. `{zip: string}`. A named column missing from a file is an error. |
+| `detect_changes` | boolean | No | `false` | By default a file is ingested once, by its path: editing or overwriting an already-ingested file changes nothing. Set true to also key on the file's content, so a changed file is ingested again. Requires an upsert sink (`duckdb` or `postgres`): a Parquet sink would keep both versions. |
+| `allow_empty` | boolean | No | `false` | By default a `path` that matches no files is an error (a wrong path looks exactly like 'nothing to do'). Set true for a drop folder that may be empty. |
 
 ## PaginationSpec
 
@@ -109,6 +112,7 @@ DuckDB 파일 싱크 (M2) — temp 테이블 → MERGE로 멱등 upsert.
 | `cursor_param` | string \| null | No | `null` |  |
 | `cursor_path` | string \| null | No | `null` |  |
 | `record_path` | string \| null | No | `null` |  |
+| `stop_on` | "short_page" \| "empty_page" | No | `"short_page"` | offset/page modes: when to stop. `short_page` stops at the first page with fewer than `size` rows, which ends the run after ONE page if the server caps its page size below `size`. `empty_page` keeps going until a page has no rows (one extra request) and is safe when the server's cap is unknown. |
 
 ## ParquetSinkSpec
 
@@ -143,6 +147,20 @@ Postgres 싱크 (M2) — merge_key 기준 upsert.
 | Field | Type | Required | Default | Description |
 |---|---|---|---|---|
 | `rps` | number | Yes |  |  |
+
+## RedshiftSinkSpec
+
+Amazon Redshift sink (experimental): staged delete + insert on `merge_key`.
+
+| Field | Type | Required | Default | Description |
+|---|---|---|---|---|
+| `type` | "redshift" | Yes |  |  |
+| `dsn_env` | string | Yes |  | Environment variable holding `redshift://user:password@host:5439/database`. |
+| `table` | string | Yes |  | Target table, optionally `schema.table`. |
+| `merge_key` | array of string | Yes |  |  |
+| `load` | "insert" \| "copy" | No | `"insert"` | `insert`: multi-row INSERT over the connection; fine for thousands of rows. `copy`: write each batch as Parquet under `staging_path` and COPY it; use this for large loads. |
+| `staging_path` | string \| null | No | `null` | `copy` only. S3 prefix for staged files, `s3://bucket/prefix`. |
+| `iam_role_env` | string \| null | No | `null` | `copy` only. Environment variable holding the IAM role ARN COPY assumes. |
 
 ## RestSourceSpec
 
@@ -182,4 +200,4 @@ REST API 소스 — M1 SourceSpec의 필드를 그대로 옮긴 것 (하위 호�
 | Field | Type | Required | Default | Description |
 |---|---|---|---|---|
 | `rules` | array of ValidateRule | Yes |  |  |
-| `on_violation` | "block" \| "quarantine" \| "warn" | No | `"quarantine"` |  |
+| `on_violation` | "block" \| "quarantine" \| "split" \| "warn" | No | `"quarantine"` | `block`: fail the run. `quarantine`: set the whole unit (page, file) aside and load none of it. `split`: load the rows that pass and set only the failing rows aside. `warn`: load everything and log. Real data usually has a few bad rows in every unit, where `quarantine` loads nothing. |

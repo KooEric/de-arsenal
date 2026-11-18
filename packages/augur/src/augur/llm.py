@@ -19,7 +19,15 @@ DEFAULT_TIMEOUT_SECONDS = 60.0
 DEFAULT_MAX_TOKENS = 1024
 ANTHROPIC_URL = "https://api.anthropic.com/v1/messages"
 ANTHROPIC_VERSION = "2023-06-01"
-OPENAI_URL = "https://api.openai.com/v1/chat/completions"
+OPENAI_BASE_URL = "https://api.openai.com/v1"
+OPENAI_URL = f"{OPENAI_BASE_URL}/chat/completions"
+# OpenAI SDK와 같은 관례: 이 환경변수로 OpenAI 호환 API(Gemini, Groq, OpenRouter, 로컬 서버)를 쓴다.
+OPENAI_BASE_URL_ENV = "OPENAI_BASE_URL"
+
+
+def openai_chat_url() -> str:
+    base = os.environ.get(OPENAI_BASE_URL_ENV) or OPENAI_BASE_URL
+    return f"{base.rstrip('/')}/chat/completions"
 
 
 @dataclass(frozen=True)
@@ -109,7 +117,7 @@ class OpenAIProvider:
         def call() -> Completion:
             try:
                 resp = httpx.post(
-                    OPENAI_URL,
+                    openai_chat_url(),
                     headers={"authorization": f"Bearer {api_key}"},
                     json={
                         "model": self.model,

@@ -1,0 +1,4 @@
+name: nyc-drift
+source: { type: python, target: "nyc_source:ParquetRowGroupSource", options: { path: "./raw/yellow_tripdata_2022-01.parquet" } }
+sink: { type: parquet, path: ./data/nyc_drift }
+schema_drift: block

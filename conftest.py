@@ -14,6 +14,10 @@ help), and starting a container raises a raw `requests.exceptions
 setup time, before any container is started.
 """
 
+import os
+import uuid
+from collections.abc import Iterator
+
 import pytest
 
 
@@ -50,3 +54,40 @@ def require_docker() -> None:
     """
     if not docker_available():
         pytest.skip("Docker daemon not available")
+
+
+POSTGRES_URL_ENV = "ARSENAL_TEST_POSTGRES_URL"
+
+
+@pytest.fixture(scope="module")
+def postgres_url(request: pytest.FixtureRequest) -> Iterator[str]:
+    """A fresh, empty Postgres database for one test module.
+
+    With ``ARSENAL_TEST_POSTGRES_URL`` set (a server the tests may create
+    databases on, e.g. ``postgresql://postgres:pw@localhost:5432/postgres``),
+    each module gets its own database there and Docker is not needed.
+    Otherwise a ``postgres:16-alpine`` container is started, and the module is
+    skipped when Docker is unavailable.
+    """
+    server = os.environ.get(POSTGRES_URL_ENV)
+    if not server:
+        request.getfixturevalue("require_docker")
+        pgtc = pytest.importorskip("testcontainers.postgres")
+        with pgtc.PostgresContainer("postgres:16-alpine") as container:
+            yield container.get_connection_url(driver=None)
+        return
+
+    import psycopg
+    from psycopg import sql
+
+    name = f"arsenal_test_{uuid.uuid4().hex[:12]}"
+    with psycopg.connect(server, autocommit=True) as con:
+        con.execute(sql.SQL("CREATE DATABASE {}").format(sql.Identifier(name)))
+    base, _, _ = server.rpartition("/")
+    try:
+        yield f"{base}/{name}"
+    finally:
+        with psycopg.connect(server, autocommit=True) as con:
+            con.execute(
+                sql.SQL("DROP DATABASE IF EXISTS {} WITH (FORCE)").format(sql.Identifier(name))
+            )

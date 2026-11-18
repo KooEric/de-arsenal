@@ -1,0 +1,7 @@
+name: gl-issues
+source:
+  type: rest
+  url: https://gitlab.com/api/v4/projects/gitlab-org%2Fgitlab-runner/issues?state=all&order_by=created_at&sort=asc
+  pagination: { mode: link, size_param: per_page, size: 100 }
+  rate_limit: { rps: 5 }
+sink: { type: parquet, path: ./data/gl_issues }

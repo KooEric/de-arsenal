@@ -7,10 +7,13 @@ excel은 optional extra(pugio[excel] → fastexcel) — 미설치 시 FatalError
 """
 
 import glob as glob_module
+import hashlib
 from collections.abc import Iterator
 from pathlib import Path
+from typing import Any
 
 import pyarrow as pa
+import pyarrow.compute as pc
 import pyarrow.csv as pa_csv
 import pyarrow.json as pa_json
 
@@ -58,6 +61,68 @@ def _read_excel(path: Path) -> pa.Table:
     return table  # pyright: ignore[reportUnknownVariableType]  # pragma: no cover
 
 
+_COLUMN_TYPES: dict[str, pa.DataType] = {
+    "string": pa.string(),
+    "int64": pa.int64(),
+    "float64": pa.float64(),
+    "bool": pa.bool_(),
+    "date": pa.date32(),
+    "timestamp": pa.timestamp("us"),
+}
+
+# "01234", "-007": 숫자로 읽으면 앞자리 0이 사라지는 값 (단독 "0"은 해당 없음).
+_LEADING_ZERO = r"^-?0[0-9]+$"
+
+
+def _read_csv(
+    path: Path,
+    read_opts: Any,
+    null_values: list[str],
+    types: dict[str, Any],
+    only: list[str] | None = None,
+) -> Any:
+    convert_opts = pa_csv.ConvertOptions(  # pyright: ignore[reportUnknownMemberType, reportUnknownVariableType, reportPrivateImportUsage]
+        null_values=null_values, column_types=types, include_columns=only
+    )
+    return pa_csv.read_csv(  # pyright: ignore[reportUnknownMemberType, reportUnknownVariableType, reportPrivateImportUsage]
+        path, read_options=read_opts, convert_options=convert_opts
+    )
+
+
+def _identifier_columns(path: Path, read_opts: Any, table: pa.Table, pinned: set[str]) -> list[str]:
+    """정수로 추론됐지만 원문에 앞자리 0이 있는 컬럼 (우편번호·사번·계좌번호).
+
+    정수 컬럼만 문자열로 한 번 더 읽어 확인한다. 숫자로 두면 "01234"가 1234가 되는
+    조용한 손실이므로 이런 컬럼은 문자열로 남긴다.
+    """
+    candidates = [
+        field.name
+        for field in table.schema
+        if pa.types.is_integer(field.type) and field.name not in pinned
+    ]
+    if not candidates:
+        return []
+    as_text = dict.fromkeys(candidates, pa.string())
+    raw: pa.Table = _read_csv(path, read_opts, [""], as_text, only=candidates)
+    found: list[str] = []
+    for name in candidates:
+        hits = pc.match_substring_regex(raw.column(name), _LEADING_ZERO)  # pyright: ignore[reportUnknownMemberType, reportUnknownVariableType, reportAttributeAccessIssue]
+        if pc.any(hits).as_py():  # pyright: ignore[reportUnknownMemberType, reportUnknownArgumentType, reportAttributeAccessIssue]
+            found.append(name)
+    return found
+
+
+def _content_hash(path: Path) -> str:
+    digest = hashlib.sha256()
+    try:
+        with path.open("rb") as handle:
+            for chunk in iter(lambda: handle.read(1 << 20), b""):
+                digest.update(chunk)
+    except OSError as e:
+        raise FatalError(f"cannot read {path}: {e}") from e
+    return digest.hexdigest()[:16]
+
+
 class FileSource:
     def __init__(self, spec: FileSourceSpec, *, pipeline: str) -> None:
         self._spec = spec
@@ -66,8 +131,19 @@ class FileSource:
     def units(self) -> Iterator[UnitSpec]:
         """글롭 매칭 파일을 정렬 순서로 열거 — 결정적 순서."""
         root = _glob_root(self._spec.path)
-        for p in sorted(glob_module.glob(self._spec.path, recursive=True)):
+        matches = sorted(glob_module.glob(self._spec.path, recursive=True))
+        if not matches and not self._spec.allow_empty:
+            raise FatalError(
+                f"source.path '{self._spec.path}' matches no files (looked from "
+                f"{Path.cwd()}). Put the input files there, fix the path, or set "
+                "`allow_empty: true` if an empty folder is normal"
+            )
+        for p in matches:
             rel = str(Path(p).relative_to(root)) if root.parts else p
+            if self._spec.detect_changes:
+                # 같은 이름으로 덮어써지는 파일(매일 내려받는 export.csv)을 다시 읽기 위해
+                # 내용 해시를 unit_key에 넣는다 — 내용이 같으면 같은 unit이라 건너뛴다.
+                rel = f"{rel}@{_content_hash(Path(p))}"
             yield UnitSpec.create(
                 pipeline=self._pipeline,
                 source=self._spec.path,
@@ -91,18 +167,29 @@ class FileSource:
                 # pyarrow의 기본 null 토큰("NA", "N/A", "null", …)을 쓰면 컬럼 값이
                 # 전부 "NA"인 파일에서 타입이 null로 추론돼 값이 통째로 사라진다 —
                 # 같은 데이터가 파일 분할 방식에 따라 다르게 적재되는 조용한 손상.
-                convert_opts = pa_csv.ConvertOptions(  # pyright: ignore[reportUnknownMemberType, reportUnknownVariableType, reportPrivateImportUsage]
-                    null_values=list(self._spec.null_values)
-                )
-                table = pa_csv.read_csv(  # pyright: ignore[reportUnknownMemberType, reportUnknownVariableType, reportPrivateImportUsage]
-                    path, read_options=read_opts, convert_options=convert_opts
-                )
+                nulls = list(self._spec.null_values)
+                pinned: dict[str, Any] = {
+                    name: _COLUMN_TYPES[kind] for name, kind in self._spec.column_types.items()
+                }
+                table = _read_csv(path, read_opts, nulls, pinned)
+                missing = sorted(set(pinned) - set(table.column_names))
+                if missing:
+                    raise FatalError(
+                        f"source.column_types names columns that {path} does not have: "
+                        f"{missing} (columns: {table.column_names})"
+                    )
+                keep_text = _identifier_columns(path, read_opts, table, set(pinned))
+                if keep_text:
+                    pinned.update(dict.fromkeys(keep_text, pa.string()))
+                    table = _read_csv(path, read_opts, nulls, pinned)
             elif fmt == "jsonl":
                 table = pa_json.read_json(  # pyright: ignore[reportUnknownMemberType, reportUnknownVariableType, reportPrivateImportUsage]
                     path
                 )
             else:
                 table = _read_excel(path)
+            if fmt != "csv" and self._spec.column_types:
+                raise FatalError("source.column_types applies to csv files only")
         except FatalError:
             raise
         except Exception as e:

@@ -103,12 +103,16 @@ def sink_uri(sink: dict[str, Any], root: Path) -> tuple[str, str] | None:
         return normalize_uri(
             f"postgres://${{{sink.get('dsn_env', '')}}}/{sink.get('table', '')}"
         ), "postgres"
+    if kind == "redshift":
+        return normalize_uri(
+            f"redshift://${{{sink.get('dsn_env', '')}}}/{sink.get('table', '')}"
+        ), "redshift"
     return None
 
 
 def _format_of(uri: str) -> str:
     scheme = uri.split("://", 1)[0]
-    if scheme in {"iceberg", "duckdb", "postgres", "postgresql"}:
+    if scheme in {"iceberg", "duckdb", "postgres", "postgresql", "redshift"}:
         return scheme
     return "parquet"
 

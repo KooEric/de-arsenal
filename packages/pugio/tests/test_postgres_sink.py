@@ -1,5 +1,4 @@
 import urllib.parse
-from collections.abc import Iterator
 
 import psycopg
 import pyarrow as pa
@@ -24,9 +23,8 @@ DSN_ENV = "PUGIO_TEST_PG_DSN"
 
 
 @pytest.fixture(scope="module")
-def pg_url(require_docker: None) -> Iterator[str]:
-    with pgtc.PostgresContainer("postgres:16-alpine") as container:
-        yield container.get_connection_url(driver=None)
+def pg_url(postgres_url: str) -> str:
+    return postgres_url
 
 
 @pytest.fixture
@@ -106,19 +104,67 @@ def test_malformed_dsn_is_fatal(monkeypatch: pytest.MonkeyPatch) -> None:
         sink.write(make_unit("u"), pa.RecordBatch.from_pylist([{"id": 1}]))
 
 
-def test_naive_timestamp_is_fatal(dsn: str) -> None:
-    """tz 정보가 없는 timestamp 컬럼은 postgres에 꽂히는 순간 서버 세션 타임존
-    기준으로 암묵 해석되어 값이 조용히 shift될 수 있다 — 업스트림에서 UTC로
-    정규화하도록 강제하며 FatalError로 막는다 (M2-F FIX 6)."""
+def test_naive_timestamp_is_stored_as_written(dsn: str) -> None:
+    """tz 없는 timestamp는 `timestamp`(without time zone) 컬럼에 적힌 시각 그대로 들어간다.
+
+    timestamptz에 넣으면 세션 타임존으로 해석돼 값이 shift된다 — 세션 타임존을 바꿔도
+    읽은 값이 같아야 한다.
+    """
     import datetime
 
     sink = make_sink("contract_naive_ts")
+    written = datetime.datetime(2026, 1, 1, 9, 30)  # noqa: DTZ001 — naive가 테스트 대상
     batch = pa.RecordBatch.from_pylist(
-        [{"id": 1, "seen_at": datetime.datetime(2026, 1, 1)}],  # noqa: DTZ001 — naive가 테스트 대상
-        schema=pa.schema([("id", pa.int64()), ("seen_at", pa.timestamp("us"))]),
+        [{"id": 1, "seen_at": written}],
+        schema=pa.schema([("id", pa.int64()), ("seen_at", pa.timestamp("s"))]),
     )
-    with pytest.raises(FatalError, match="naive timestamp"):
-        sink.write(make_unit("u"), batch)
+    sink.write(make_unit("u"), batch)
+
+    with psycopg.connect(dsn) as con:
+        con.execute("SET TIME ZONE 'Asia/Seoul'")
+        row = con.execute("SELECT seen_at FROM contract_naive_ts").fetchone()
+        kind = con.execute(
+            "SELECT data_type FROM information_schema.columns "
+            "WHERE table_name = 'contract_naive_ts' AND column_name = 'seen_at'"
+        ).fetchone()
+    assert row == (written,)
+    assert kind == ("timestamp without time zone",)
+
+
+def test_csv_shaped_types_round_trip(dsn: str) -> None:
+    """A plain CSV infers date, small ints, decimals and all-empty columns."""
+    import datetime
+    from decimal import Decimal
+
+    sink = make_sink("contract_csv_types")
+    schema = pa.schema(
+        [
+            ("id", pa.int64()),
+            ("day", pa.date32()),
+            ("qty", pa.int32()),
+            ("flag", pa.int8()),
+            ("ratio", pa.float32()),
+            ("price", pa.decimal128(10, 2)),
+            ("at", pa.time64("us")),
+            ("blob", pa.binary()),
+            ("empty", pa.null()),
+        ]
+    )
+    record = {
+        "id": 1,
+        "day": datetime.date(2026, 11, 1),
+        "qty": 3,
+        "flag": 1,
+        "ratio": 0.5,
+        "price": Decimal("42.50"),
+        "at": datetime.time(9, 30),
+        "blob": b"\x00\x01",
+        "empty": None,
+    }
+    sink.write(make_unit("u"), pa.RecordBatch.from_pylist([record], schema=schema))
+    sink.write(make_unit("u"), pa.RecordBatch.from_pylist([record], schema=schema))
+
+    assert readback(dsn, "contract_csv_types") == [record]
 
 
 def test_missing_dsn_env_raises_fatal_error(monkeypatch: pytest.MonkeyPatch) -> None:
@@ -145,7 +191,9 @@ def test_unreachable_dsn_raises_retryable_error(monkeypatch: pytest.MonkeyPatch)
 
 def test_unsupported_arrow_type_raises_fatal_error(dsn: str) -> None:
     sink = make_sink("contract_badtype")
-    batch = pa.RecordBatch.from_arrays([pa.array([1], type=pa.int32())], names=["id"])
+    batch = pa.RecordBatch.from_arrays(
+        [pa.array([1]), pa.array([[1, 2]], type=pa.list_(pa.int64()))], names=["id", "tags"]
+    )
     with pytest.raises(FatalError, match="unsupported arrow type"):
         sink.write(make_unit("u"), batch)
 

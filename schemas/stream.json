@@ -543,9 +543,11 @@
         },
         "on_violation": {
           "default": "quarantine",
+          "description": "`block`: fail the run. `quarantine`: set the whole unit (page, file) aside and load none of it. `split`: load the rows that pass and set only the failing rows aside. `warn`: load everything and log. Real data usually has a few bad rows in every unit, where `quarantine` loads nothing.",
           "enum": [
             "block",
             "quarantine",
+            "split",
             "warn"
           ],
           "title": "On Violation",

@@ -1,0 +1,299 @@
+{
+  "$defs": {
+    "DeleteSpec": {
+      "additionalProperties": false,
+      "description": "The request sent for a record that left the source (`mode: mirror`).",
+      "properties": {
+        "url": {
+          "description": "May use `${ENV_VAR}` and `{column}` for key columns only.",
+          "title": "Url",
+          "type": "string"
+        },
+        "method": {
+          "default": "DELETE",
+          "enum": [
+            "DELETE",
+            "POST",
+            "PUT",
+            "PATCH"
+          ],
+          "title": "Method",
+          "type": "string"
+        }
+      },
+      "required": [
+        "url"
+      ],
+      "title": "DeleteSpec",
+      "type": "object"
+    },
+    "DestinationSpec": {
+      "additionalProperties": false,
+      "properties": {
+        "type": {
+          "enum": [
+            "http",
+            "slack"
+          ],
+          "title": "Type",
+          "type": "string"
+        },
+        "url": {
+          "description": "Request URL. `${ENV_VAR}` is read from the environment when a request is sent and never stored; `{column}` is filled from the record, percent-encoded.",
+          "title": "Url",
+          "type": "string"
+        },
+        "method": {
+          "default": "POST",
+          "enum": [
+            "POST",
+            "PUT",
+            "PATCH"
+          ],
+          "title": "Method",
+          "type": "string"
+        },
+        "headers": {
+          "additionalProperties": {
+            "type": "string"
+          },
+          "description": "Header values may use `${ENV_VAR}`, e.g. `Authorization: Bearer ${TOKEN}`.",
+          "title": "Headers",
+          "type": "object"
+        },
+        "body": {
+          "default": null,
+          "description": "`http` only. JSON body template. A string that is exactly `{column}` becomes that column's typed value; other strings are formatted. Omit to send the whole record.",
+          "title": "Body"
+        },
+        "text": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "`slack` only. Message text; `{column}` is filled in.",
+          "title": "Text"
+        },
+        "idempotency_header": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "`http` only. Header that carries the dispatch id, e.g. `Idempotency-Key`. Without it (or if the endpoint ignores it) delivery is at-least-once.",
+          "title": "Idempotency Header"
+        },
+        "delete": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/DeleteSpec"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        },
+        "rps": {
+          "anyOf": [
+            {
+              "exclusiveMinimum": 0,
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "Requests per second ceiling.",
+          "title": "Rps"
+        },
+        "timeout_seconds": {
+          "default": 30.0,
+          "exclusiveMinimum": 0,
+          "title": "Timeout Seconds",
+          "type": "number"
+        }
+      },
+      "required": [
+        "type",
+        "url"
+      ],
+      "title": "DestinationSpec",
+      "type": "object"
+    },
+    "DlqSpec": {
+      "additionalProperties": false,
+      "properties": {
+        "after_attempts": {
+          "default": 5,
+          "description": "A record whose failed tries, summed over runs, reach this count is parked in the dead-letter queue. A 4xx rejection parks it immediately.",
+          "minimum": 1,
+          "title": "After Attempts",
+          "type": "integer"
+        }
+      },
+      "title": "DlqSpec",
+      "type": "object"
+    },
+    "RetrySpec": {
+      "additionalProperties": false,
+      "properties": {
+        "max_attempts": {
+          "default": 5,
+          "description": "Tries per record within one run.",
+          "minimum": 1,
+          "title": "Max Attempts",
+          "type": "integer"
+        },
+        "base_wait_seconds": {
+          "default": 1.0,
+          "description": "Doubles per try, max 60 s.",
+          "minimum": 0,
+          "title": "Base Wait Seconds",
+          "type": "number"
+        }
+      },
+      "title": "RetrySpec",
+      "type": "object"
+    },
+    "SafetySpec": {
+      "additionalProperties": false,
+      "properties": {
+        "max_first_dispatch": {
+          "default": 1000,
+          "description": "With an empty ledger, refuse to send more than this many records unless `--confirm-initial-load` is given.",
+          "minimum": 0,
+          "title": "Max First Dispatch",
+          "type": "integer"
+        },
+        "max_delete_fraction": {
+          "default": 0.5,
+          "description": "`mirror`: refuse a run that would delete more than this share of the ledger unless `--confirm-deletes` is given (an empty or mis-pointed source looks like 'everything was removed').",
+          "maximum": 1,
+          "minimum": 0,
+          "title": "Max Delete Fraction",
+          "type": "number"
+        },
+        "max_consecutive_failures": {
+          "default": 5,
+          "description": "Stop the run when this many records in a row exhaust their retries: the destination is down, and the records are not at fault.",
+          "minimum": 1,
+          "title": "Max Consecutive Failures",
+          "type": "integer"
+        }
+      },
+      "title": "SafetySpec",
+      "type": "object"
+    },
+    "SourceSpec": {
+      "additionalProperties": false,
+      "properties": {
+        "type": {
+          "enum": [
+            "parquet",
+            "query"
+          ],
+          "title": "Type",
+          "type": "string"
+        },
+        "path": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "`parquet`: a file, a glob, or a directory (read as `<dir>/**/*.parquet`).",
+          "title": "Path"
+        },
+        "sql": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "`query`: one DuckDB SELECT, e.g. over `read_parquet('data/marts/*.parquet')`.",
+          "title": "Sql"
+        }
+      },
+      "required": [
+        "type"
+      ],
+      "title": "SourceSpec",
+      "type": "object"
+    }
+  },
+  "additionalProperties": false,
+  "properties": {
+    "name": {
+      "pattern": "^[A-Za-z0-9][A-Za-z0-9._-]*$",
+      "title": "Name",
+      "type": "string"
+    },
+    "source": {
+      "$ref": "#/$defs/SourceSpec"
+    },
+    "key": {
+      "description": "Columns that identify one record.",
+      "items": {
+        "type": "string"
+      },
+      "minItems": 1,
+      "title": "Key",
+      "type": "array"
+    },
+    "mode": {
+      "default": "upsert",
+      "description": "`insert`: new keys only. `upsert`: new and changed keys. `mirror`: also send `destination.delete` for keys that left the source.",
+      "enum": [
+        "insert",
+        "upsert",
+        "mirror"
+      ],
+      "title": "Mode",
+      "type": "string"
+    },
+    "destination": {
+      "$ref": "#/$defs/DestinationSpec"
+    },
+    "retry": {
+      "$ref": "#/$defs/RetrySpec"
+    },
+    "dlq": {
+      "$ref": "#/$defs/DlqSpec"
+    },
+    "safety": {
+      "$ref": "#/$defs/SafetySpec"
+    },
+    "state_dir": {
+      "default": ".arsenal",
+      "title": "State Dir",
+      "type": "string"
+    }
+  },
+  "required": [
+    "name",
+    "source",
+    "key",
+    "destination"
+  ],
+  "title": "DispatchSpec",
+  "type": "object"
+}

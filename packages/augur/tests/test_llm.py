@@ -14,6 +14,7 @@ from augur.llm import (
     OPENAI_URL,
     AnthropicProvider,
     OpenAIProvider,
+    openai_chat_url,
     provider_from_name,
 )
 
@@ -79,6 +80,25 @@ def test_401_raises_auth_expired_without_retry(keys: None) -> None:
     with pytest.raises(AuthExpiredError):
         OpenAIProvider().complete("s", "u")
     assert route.call_count == 1
+
+
+@respx.mock
+def test_openai_base_url_env_targets_compatible_api(
+    keys: None, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """OPENAI_BASE_URL로 OpenAI 호환 API(예: Gemini)를 쓴다. 뒤 슬래시는 무시한다."""
+    monkeypatch.setenv("OPENAI_BASE_URL", "https://compat.test/v1beta/openai/")
+    route = respx.post("https://compat.test/v1beta/openai/chat/completions").mock(
+        return_value=Response(200, json=OPENAI_OK)
+    )
+    c = OpenAIProvider(model="gemini-flash-latest").complete("sys", "user")
+    assert c.text == "SELECT 2"
+    assert route.called
+
+
+def test_openai_url_defaults_to_openai(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.delenv("OPENAI_BASE_URL", raising=False)
+    assert openai_chat_url() == OPENAI_URL
 
 
 def test_missing_api_key_is_fatal(monkeypatch: pytest.MonkeyPatch) -> None:

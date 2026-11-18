@@ -708,3 +708,112 @@ def test_warn_policy_writes_anyway(tmp_path: Path, caplog: pytest.LogCaptureFixt
 
     # M2-E FIX 6: warn 정책은 print(stderr) 대신 logging을 쓴다.
     assert any("validation violations" in rec.message for rec in caplog.records)
+
+
+def _two_files(tmp_path: Path, schema_drift: Literal["allow", "warn", "block"]) -> PipelineSpec:
+    (tmp_path / "a.csv").write_text("id,amt\n1,10\n", encoding="utf-8")
+    (tmp_path / "b.csv").write_text("id,amt\n2,n/a\n", encoding="utf-8")
+    (tmp_path / "c.csv").write_text("id,amt\n3,\n", encoding="utf-8")  # all-empty: no conflict
+    return PipelineSpec(
+        name="mixed",
+        state_dir=str(tmp_path / ".arsenal"),
+        source=FileSourceSpec(type="file", path=str(tmp_path / "*.csv")),
+        sink=ParquetSinkSpec(type="parquet", path=str(tmp_path / "out")),
+        schema_drift=schema_drift,
+    )
+
+
+def test_type_conflict_between_files_warns_by_default(
+    tmp_path: Path, caplog: LogCaptureFixture
+) -> None:
+    with caplog.at_level("WARNING", logger="pugio.runner"):
+        report = run_pipeline(_two_files(tmp_path, "allow"))
+
+    assert report.written == 3
+    messages = [record.getMessage() for record in caplog.records]
+    assert len(messages) == 1
+    assert "'amt' is int64 in a.csv but string in b.csv" in messages[0]
+    assert "source.column_types" in messages[0]
+
+
+def test_type_conflict_between_files_blocks_when_asked(tmp_path: Path) -> None:
+    with pytest.raises(FatalError, match="column types differ between files"):
+        run_pipeline(_two_files(tmp_path, "block"))
+
+
+def test_pinned_types_remove_the_conflict(tmp_path: Path, caplog: LogCaptureFixture) -> None:
+    spec = _two_files(tmp_path, "block")
+    pinned = spec.model_copy(
+        update={"source": spec.source.model_copy(update={"column_types": {"amt": "string"}})}
+    )
+    with caplog.at_level("WARNING", logger="pugio.runner"):
+        assert run_pipeline(pinned).written == 3
+    assert caplog.records == []
+
+
+def _orders_with_refunds(tmp_path: Path, policy: str) -> PipelineSpec:
+    """Every file has a refund (negative amount) in it, as real data does."""
+    (tmp_path / "a.csv").write_text("id,amount\n1,10\n2,-5\n3,30\n", encoding="utf-8")
+    (tmp_path / "b.csv").write_text("id,amount\n4,40\n5,-1\n", encoding="utf-8")
+    return PipelineSpec.model_validate(
+        {
+            "name": "refunds",
+            "state_dir": str(tmp_path / ".arsenal"),
+            "source": {"type": "file", "path": str(tmp_path / "*.csv")},
+            "sink": {"type": "parquet", "path": str(tmp_path / "out")},
+            "validate": {"rules": [{"field": "amount", "min": 0}], "on_violation": policy},
+        }
+    )
+
+
+def _parquet_ids(directory: Path) -> list[int]:
+    ids: list[int] = []
+    for file in sorted(directory.glob("*.parquet")):
+        table = pq.read_table(file)  # pyright: ignore[reportUnknownMemberType, reportUnknownVariableType]
+        ids.extend(table.column("id").to_pylist())  # pyright: ignore[reportUnknownMemberType, reportUnknownArgumentType]
+    return sorted(ids)
+
+
+def _loaded_ids(tmp_path: Path) -> list[int]:
+    return _parquet_ids(tmp_path / "out")
+
+
+def test_quarantine_loads_nothing_when_every_unit_has_a_bad_row(tmp_path: Path) -> None:
+    report = run_pipeline(_orders_with_refunds(tmp_path, "quarantine"))
+
+    assert (report.written, report.quarantined, report.rejected_rows) == (0, 2, 0)
+    assert _loaded_ids(tmp_path) == []
+
+
+def test_split_loads_the_good_rows_and_sets_the_bad_ones_aside(tmp_path: Path) -> None:
+    spec = _orders_with_refunds(tmp_path, "split")
+
+    report = run_pipeline(spec)
+
+    assert (report.written, report.quarantined, report.rejected_rows) == (2, 0, 2)
+    assert _loaded_ids(tmp_path) == [1, 3, 4]
+    assert _parquet_ids(tmp_path / ".arsenal" / "dlq" / "refunds") == [2, 5]
+
+    # The units are done: a rerun fetches nothing and changes nothing.
+    again = run_pipeline(spec)
+    assert (again.fetched, again.skipped, again.rejected_rows) == (0, 2, 0)
+    assert _loaded_ids(tmp_path) == [1, 3, 4]
+
+    store = StateStore(tmp_path / ".arsenal" / "refunds.db")
+    try:
+        assert store.counts("refunds") == {"done": 2}
+        assert store.pipeline_metrics("refunds").row_count == 3  # loaded rows only
+    finally:
+        store.close()
+
+
+def test_split_with_every_row_bad_writes_no_file(tmp_path: Path) -> None:
+    (tmp_path / "a.csv").write_text("id,amount\n1,-1\n", encoding="utf-8")
+    spec = _orders_with_refunds(tmp_path, "split")
+    (tmp_path / "a.csv").write_text("id,amount\n1,-1\n", encoding="utf-8")
+    (tmp_path / "b.csv").unlink()
+
+    report = run_pipeline(spec)
+
+    assert (report.written, report.rejected_rows) == (0, 1)
+    assert _loaded_ids(tmp_path) == []

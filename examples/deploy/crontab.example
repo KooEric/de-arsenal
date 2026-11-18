@@ -1,0 +1,14 @@
+# Run an Arsenal project from cron on your own server.
+#
+#   uv tool install "de-arsenal[postgres]"      # once
+#   crontab -e                                  # paste the lines below, edit the paths
+#
+# The state directory (.arsenal/) lives in the project directory on this disk, so
+# a rerun after a crash or reboot continues where the last run stopped.
+# flock keeps a slow run from overlapping the next one.
+
+PATH=/home/me/.local/bin:/usr/bin:/bin
+PG_DSN=postgresql://user:password@db.internal:5432/app
+SLACK_WEBHOOK_URL=https://hooks.slack.com/services/XXX/YYY/ZZZ
+
+23 3 * * *  cd /srv/pipelines/orders && flock -n .arsenal.lock arsenal run >> run.log 2>&1 || curl -sS -X POST -H 'Content-Type: application/json' -d '{"text":"orders pipeline failed on '"$(hostname)"'"}' "$SLACK_WEBHOOK_URL"

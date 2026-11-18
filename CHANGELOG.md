@@ -12,6 +12,100 @@ minor.
 
 ## [Unreleased]
 
+## [0.6.0] - 2026-11-18
+
+Minor release: a 13th package, **Pilum** (`de-pilum`, experimental reverse ETL),
+three more fixes for input that used to be lost or accepted without a word, and
+a first-run path that works as the README prints it. All 13 packages move to
+`0.6.0`; internal pins move to `>=0.6,<0.7`. No state migrations: StateStore
+stays v3 and `aquila.db` stays v2. Upgrade steps: [docs/upgrade-0.6.md](docs/upgrade-0.6.md).
+
+### ⚠️ Upgrade notes
+
+- **A file source whose `path` matches no files is now an error.** It used to
+  finish with `fetched=0`. Set `source.allow_empty: true` for a drop folder that
+  is sometimes empty.
+- **CSV columns with leading zeros now load as strings.** A column holding
+  `02139` or `007` was inferred as an integer and stored as `2139` and `7`. If
+  such a column really is numeric, pin it: `column_types: { seq: int64 }`.
+  Downstream `cast` steps and Postgres/DuckDB sink tables built on the old
+  integer type need the same decision.
+- **Pugio warns when files of one run disagree on a column's type**, and fails
+  the run under `schema_drift: block`. Pin the type with `source.column_types`.
+- **The Postgres sink stores a timestamp without a time zone as `timestamp`**
+  instead of refusing it. Timestamps with a zone are `timestamptz` as before.
+- **Status labels changed.** Onager, Scutum, Scorpio and Spatha are listed as
+  beta instead of stable. No code or API changed with the label.
+
+### Added
+
+- **Pilum** (`de-pilum`, `pilum` CLI, `de-arsenal[dispatch]`): sends records
+  from a Parquet dataset or a DuckDB query to an HTTP endpoint or a Slack
+  webhook, and sends each change once. `insert` / `upsert` / `mirror` modes, a
+  per-dispatch ledger written only after a 2xx, idempotency-key header,
+  retry with backoff, a dead-letter queue with `replay`, a first-run size limit
+  and a delete-share limit. Delivery is at-least-once unless the endpoint
+  deduplicates on the idempotency key. The ledger is its own SQLite file, not a
+  StateStore migration (PL-ADR-3). Not included: bulk requests, OAuth refresh,
+  `arsenal run` integration. See [packages/pilum/README.md](packages/pilum/README.md).
+- **Redshift sink** (`type: redshift`, `pugio[redshift]` / `de-arsenal[redshift]`,
+  experimental): staged delete + insert on `merge_key` in one transaction.
+  `load: insert` sends multi-row INSERTs; `load: copy` stages each batch as
+  Parquet under `staging_path` and loads it with `COPY` and an IAM role. Not
+  verified against a live cluster: the insert path is tested on PostgreSQL, the
+  copy path through the statements it issues. Pipelines only, not streams.
+- **`validate.on_violation: split`**: load the rows that pass and write only the
+  failing rows to the DLQ. `quarantine` sets a whole page or file aside, so data
+  with a few bad rows in every unit loads nothing (NYC taxi 2024 Q1: 1.2% bad
+  rows, 0 of 9.55M rows loaded). The unit is `done`; `pugio run` reports
+  `rejected_rows` and `pugio dlq list` shows what was set aside. The default
+  stays `quarantine`.
+- `source.column_types` for `type: file` (CSV): pin a column to `string`,
+  `int64`, `float64`, `bool`, `date` or `timestamp`.
+- `source.allow_empty` for `type: file`.
+- `pagination.stop_on: empty_page` for `offset` and `page` modes. The default,
+  `short_page`, stops at the first page with fewer than `size` rows; if the
+  server caps its page size below `size`, that is the first page. `empty_page`
+  costs one extra request and does not depend on the cap.
+- `source.detect_changes` for `type: file`: also key a file on its content, so
+  a file that is overwritten under the same name (a daily `export.csv`) is
+  ingested again. Off by default, where a file is ingested once by its path.
+  Refused with a Parquet sink, which would keep both versions.
+- `examples/deploy/`: a GitHub Actions workflow, a crontab line and a
+  Dockerfile for running a project on a schedule, each keeping the state
+  directory and posting to Slack on failure. Syntax-checked only.
+- Tests that need Postgres use an existing server when
+  `ARSENAL_TEST_POSTGRES_URL` is set (one fresh database per test module), so
+  they run where Docker does not.
+- **Augur works with OpenAI-compatible APIs.** `--provider openai` reads
+  `OPENAI_BASE_URL` (the OpenAI SDK convention), so Gemini, Groq, OpenRouter or a
+  local server can run `augur ask` and `augur eval`. The key stays in
+  `OPENAI_API_KEY`.
+- `docs/11-real-data-experiments.md` and `experiments/real-data/`: results and
+  reproducible specs from running the tools on real APIs and data.
+- The `csv-cleanup` recipe ships `input/sample.csv`, so `arsenal init
+  csv-cleanup && arsenal run` works without adding data.
+- `docs/adr/` PL-ADR-1..5, `docs/README.md` (index of the design documents),
+  `schemas/dispatch.json` and its generated reference.
+
+### Fixed
+
+- **`arsenal init csv-cleanup` followed by `arsenal run` failed** with a raw
+  DuckDB `IO Error` and left an empty `data/clean.tmp` directory: the recipe had
+  no input and the collect step reported success with zero rows.
+- **A CSV with a date, a naive timestamp, a small integer or an all-empty
+  column could not be loaded into Postgres** (`unsupported arrow type`). The
+  sink now maps `date`, `time`, `timestamp`, `smallint`/`integer`, `real`,
+  `numeric`, `bytea`, and creates an all-empty column as `text`.
+- A transform whose input has no Parquet files now says which input is empty
+  instead of printing the compiled SQL, and removes its temporary directory.
+
+### Changed
+
+- The READMEs are rewritten around what the tools do and what has been
+  measured. Design-document links moved to `docs/README.md`.
+- `arsenal init` copies a recipe's subdirectories, not only its top-level files.
+
 ## [0.5.3] - 2026-11-18
 
 Patch release: two silent data-loss bugs found by running the tools against

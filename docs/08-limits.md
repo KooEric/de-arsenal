@@ -55,6 +55,18 @@ Arsenal(Pugio/Gladius)은 분산 엔진을 만들지 않는다([설계 원칙 1]
 | dlt/dbt 인터롭 | P1 | `type: dlt` 래퍼와 `arsenal.yaml`의 `- dbt: ./project` 단계가 optional extra로 제공된다. dlt는 소스 함수·리소스의 인증/페이지네이션을 사용하고, dbt 단계는 `dbt run`만 호출한다(`deps`/`test`/`build` orchestration은 아직 없음). |
 | S3/GCS sink | P1 | `sink.type: parquet`의 `s3://`, `gcs://`, `gs://` 경로를 DuckDB `httpfs`로 쓸 수 있다. unit ID 기반 결정적 객체 키로 멱등성을 보장하지만, 원격 객체 교체의 cross-provider 원자성은 보장하지 않는다. |
 
+## 파일·페이지 수집에서 알아 둘 것
+
+- **CSV 타입은 파일마다 따로 추론한다.** 앞자리 0이 있는 정수 모양 컬럼은 문자열로 남기고
+  (정수 컬럼만 한 번 더 읽어 확인하므로 그만큼 파싱 비용이 든다), 한 실행 안에서 파일끼리 타입이
+  다르면 경고한다. 추론에 맡기지 않으려면 `source.column_types`로 고정한다. JSONL·Excel에는
+  타입 고정이 없다.
+- **`offset`·`page` 모드의 기본 종료 조건은 "`size`보다 짧은 페이지"다.** 서버가 페이지 크기를
+  `size`보다 작게 제한하면 첫 페이지에서 끝나고 성공으로 보고된다. Pugio는 서버의 상한을 알 수
+  없으므로 이 경우를 감지하지 못한다. `pagination.stop_on: empty_page`가 상한과 무관한 방법이다.
+- **스키마 드리프트 비교는 실행의 첫 non-empty batch만 이전 실행과 비교한다.** REST 소스의
+  페이지 간 타입 차이는 보고하지 않는다.
+
 ## sink별 멱등 보장 범위
 
 Scutum 설계 원칙("끝점 능력별 멱등 전략을 명시", [roadmap.md](roadmap.md) Scutum
@@ -155,6 +167,38 @@ preflight에서 거부된다.
 | 스키마 이력 | Pugio가 기록한 모든 스냅샷 + 로컬 Parquet footer(이름순 마지막 파일). `--remote`면 원격 Parquet footer, `--iceberg-uri`면 Iceberg 테이블이 거쳐 온 모든 스키마(처음 쓴 snapshot 시각). 버전 키는 schema hash | DuckDB·Postgres 데이터셋의 스키마. 원격 Parquet은 마지막 파일 footer만 본다. A→B→A로 돌아온 스키마는 한 버전으로 합쳐진다 |
 | 계약·거버넌스 | 계약 해시 변경 감지, 최신 스키마와의 불일치 보고, 태그·deprecate·FTS 검색 | 강제 — 접근 제어는 서버 없이는 불가, 계약 강제는 Scutum의 몫 |
 | 다른 도구에 대한 영향 | 상태 DB는 읽기 전용으로 열어 마이그레이션·백업·잠금을 일으키지 않는다 | 스캔과 동시에 쓰이는 WAL DB의 마지막 커밋 반영(다음 스캔에서 반영) |
+
+## Redshift sink의 보장과 한계 (0.6 experimental)
+
+| 항목 | 보장하는 것 | 보장하지 않는 것 |
+|---|---|---|
+| 멱등 | batch를 임시 테이블에 넣고, 같은 `merge_key`의 기존 행을 지운 뒤 넣는다. 한 트랜잭션이라 실패하면 대상 테이블은 그대로다. 같은 batch를 다시 써도 결과가 같다 | **실제 Redshift 클러스터에서의 검증.** `load: insert` 경로는 같은 SQL을 받는 PostgreSQL에서 실행해 확인했고, `load: copy` 경로는 발행하는 SQL문만 확인했다 |
+| 적재 방식 | `insert`: 다중 행 INSERT(문장당 최대 1,000행). `copy`: batch를 `staging_path`에 Parquet로 올리고 IAM 역할로 `COPY` | `insert`의 대량 적재 성능(수만 행 이상은 `copy`를 쓴다). staging 파일 삭제(재시도가 덮어쓰도록 unit별 이름으로 남는다. S3 lifecycle 규칙으로 지운다) |
+| 타입 | 문자열은 `VARCHAR(65535)`(Redshift의 `TEXT`는 256자다), 날짜·timestamp·decimal·정수 크기별 매핑 | 중첩·배열·바이너리 타입, 기존 테이블의 컬럼 추가·변경(첫 batch로 만든 뒤에는 스키마가 맞아야 한다), sort key·dist key 지정 |
+| 범위 | Pugio 파이프라인 | Hasta 스트림·CDC, Ballista 출력, 여러 writer의 동시 실행(직렬화 충돌은 재시도로 나타난다) |
+
+## 검증 게이트의 분리 정책
+
+`validate.on_violation`의 `quarantine`은 unit(페이지·파일) 전체를 격리한다. 실데이터는 거의 모든
+unit에 나쁜 행이 몇 개씩 있어서 이 정책으로는 적재가 0건이 될 수 있다
+([실험](11-real-data-experiments.md)). `split`은 위반 행만 DLQ Parquet에 남기고 나머지를 적재한다.
+
+- unit은 `done`이 된다. `pugio status --cost`의 행 수는 적재된 행만 센다.
+- `unique` 규칙은 중복된 값의 모든 행을 걸러 낸다. 어느 쪽이 맞는지 알 수 없기 때문이다.
+- 걸러진 행은 `pugio dlq list`에 보이지만 `dlq retry`로 되돌릴 수 없다(unit이 격리 상태가 아니다).
+  원천을 고친 뒤 다시 넣으려면 `source.detect_changes`를 쓰거나 상태를 지우고 재수집한다.
+- Scutum 계약(`contract`)에는 `split`이 없다. 계약 위반은 스키마 수준이라 행으로 나눌 수 없다.
+
+## Pilum reverse ETL의 보장과 한계 (0.6 experimental)
+
+| 항목 | 보장하는 것 | 보장하지 않는 것 |
+|---|---|---|
+| 전달 | 2xx 응답을 받은 레코드만 원장에 기록한다. 응답과 기록 사이에 죽으면 다음 실행이 같은 dispatch id(멱등 header)로 다시 보낸다 | exactly-once. 끝점이 멱등 키로 중복을 거르지 않으면 at-least-once다. Slack webhook은 거르지 않는다 |
+| 변경 감지 | 키별 내용 해시로 새 키·바뀐 키·(mirror) 사라진 키만 보낸다. 토큰 교체·URL 변경은 재전송을 일으키지 않는다 | 끝점의 실제 상태 확인. 원장이 유일한 기억이라 밖에서 끝점을 고치면 모른다(`reset` 후 재전송으로 맞춘다) |
+| 실패 | 4xx는 즉시 DLQ, 408/429/5xx·네트워크 오류는 backoff 재시도 후 `dlq.after_attempts`에 DLQ. 401/403과 연속 실패는 레코드 탓으로 세지 않고 실행을 멈춘다 | 자동 재투입. DLQ는 `pilum replay` 전까지 건너뛴다 |
+| 안전장치 | 첫 실행 건수 상한, mirror 삭제 비율 상한, dispatch당 실행 하나 | 여러 호스트에 걸친 잠금(같은 파일시스템의 SQLite 잠금이다) |
+| 자격증명 | `${ENV_VAR}`는 요청을 보낼 때만 읽고 원장·`status`에 남기지 않으며 오류 메시지에서 마스킹한다 | `body`·Slack `text` 안의 `${...}` 치환(의도적으로 하지 않는다). 레코드 내용은 끝점 응답 일부(200자)와 함께 DLQ에 남을 수 있다 |
+| 규모 | 소스 전체를 메모리로 읽고 레코드당 요청 하나를 순차 전송한다 | bulk API, 병렬 전송, 메모리보다 큰 소스. OAuth 토큰 갱신, `arsenal run`·Aquila 연동도 없다 |
 
 ## 변환 스펙의 신뢰 경계
 

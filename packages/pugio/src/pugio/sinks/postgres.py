@@ -79,26 +79,40 @@ def _classify_operational_error(
 
 def _pg_type(field: pa.Field) -> sql.SQL:
     """고정 화이트리스트만 반환한다 — sql.SQL은 LiteralString만 받는 안전 API라서,
-    호출부마다 리터럴로 감싸 반환해야 임의 문자열이 SQL 조각으로 흘러들지 않는다."""
+    호출부마다 리터럴로 감싸 반환해야 임의 문자열이 SQL 조각으로 흘러들지 않는다.
+
+    CSV에서 추론되는 타입(date, 초 단위 naive timestamp, 작은 정수, 전부 빈 컬럼)을
+    모두 받는다 — 평범한 CSV가 "unsupported arrow type"으로 막히면 안 된다.
+    """
     t = field.type
-    if pa.types.is_int64(t):
+    if pa.types.is_int64(t) or pa.types.is_uint32(t):
         return sql.SQL("bigint")
-    if pa.types.is_string(t) or pa.types.is_large_string(t):
+    if pa.types.is_int32(t) or pa.types.is_uint16(t):
+        return sql.SQL("integer")
+    if pa.types.is_int16(t) or pa.types.is_int8(t) or pa.types.is_uint8(t):
+        return sql.SQL("smallint")
+    if pa.types.is_string(t) or pa.types.is_large_string(t) or pa.types.is_null(t):
+        # 값이 전부 비어 있는 컬럼(null 타입)은 다음 파일에서 무엇이든 될 수 있다 — text.
         return sql.SQL("text")
     if pa.types.is_float64(t):
         return sql.SQL("double precision")
+    if pa.types.is_float32(t):
+        return sql.SQL("real")
+    if pa.types.is_decimal(t):
+        return sql.SQL("numeric")
     if pa.types.is_boolean(t):
         return sql.SQL("boolean")
+    if pa.types.is_date(t):
+        return sql.SQL("date")
+    if pa.types.is_time(t):
+        return sql.SQL("time")
+    if pa.types.is_binary(t) or pa.types.is_large_binary(t):
+        return sql.SQL("bytea")
     if pa.types.is_timestamp(t):
-        # naive timestamp는 postgres에 꽂히는 순간 서버(세션) 타임존 기준으로 암묵
-        # 해석되어 값이 조용히 shift될 수 있다 (M2-F FIX 6) — 업스트림에서 UTC로
-        # 정규화하도록 강제한다.
-        if t.tz is None:
-            raise FatalError(
-                f"column {field.name!r}: naive timestamp not supported; "
-                "normalize to a timezone (UTC) upstream"
-            )
-        return sql.SQL("timestamptz")
+        # tz가 있으면 timestamptz. naive는 `timestamp`(without time zone)에 넣는다 —
+        # timestamptz에 넣으면 세션 타임존으로 해석돼 값이 shift되지만(M2-F FIX 6),
+        # `timestamp`는 적힌 시각 그대로 저장한다.
+        return sql.SQL("timestamp") if t.tz is None else sql.SQL("timestamptz")
     raise FatalError(f"unsupported arrow type for postgres sink: column={field.name!r} type={t!r}")
 
 

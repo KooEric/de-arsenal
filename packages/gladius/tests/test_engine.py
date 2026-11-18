@@ -97,3 +97,16 @@ def test_run_transform_survives_cpu_count_returning_none(
     row = duckdb.sql(f"SELECT count(*) FROM read_parquet('{out}/*.parquet')").fetchone()
     assert row is not None
     assert row[0] == 2
+
+
+def test_missing_input_says_what_to_do_and_leaves_no_tmp_dir(tmp_path: Path) -> None:
+    spec = make_spec(
+        input=tmp_path / "raw", output=tmp_path / "clean", steps=[{"filter": "id > 0"}]
+    )
+
+    with pytest.raises(FatalError) as caught:
+        run_transform(spec)
+
+    message = str(caught.value)
+    assert "no Parquet files under input" in message and "compiled SQL" not in message
+    assert not (tmp_path / "clean.tmp").exists()

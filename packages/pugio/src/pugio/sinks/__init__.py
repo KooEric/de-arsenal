@@ -18,7 +18,7 @@ from typing import TYPE_CHECKING, Any
 
 from arsenal_core.errors import FatalError
 from arsenal_core.execution import SinkCapabilities
-from arsenal_core.spec.models import SinkSpec
+from arsenal_core.spec.models import PipelineSinkSpec as SinkSpec
 from pugio.sinks.base import CapableSink, Sink
 from pugio.sinks.cdc import DuckDBChangeSink, PostgresChangeSink
 from pugio.sinks.contracts import (
@@ -56,6 +56,10 @@ def build_sink(spec: SinkSpec) -> Sink:
             ) from e
 
         return _PostgresSink(spec)
+    if spec.type == "redshift":
+        from pugio.sinks.redshift import RedshiftSink
+
+        return RedshiftSink(spec)
     raise FatalError(f"unknown sink type: {spec.type}")  # pragma: no cover
 
 

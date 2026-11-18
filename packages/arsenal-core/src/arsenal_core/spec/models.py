@@ -32,6 +32,15 @@ class PaginationSpec(_Frozen):
     cursor_param: str | None = None  # "cursor" 모드: 커서를 실어 보낼 요청 파라미터명
     cursor_path: str | None = None  # "cursor" 모드: 응답에서 다음 커서를 읽을 dot-path
     record_path: str | None = None  # envelope 내 레코드 배열의 dot-path (None=응답 자체가 배열)
+    stop_on: Literal["short_page", "empty_page"] = Field(
+        default="short_page",
+        description=(
+            "offset/page modes: when to stop. `short_page` stops at the first page with "
+            "fewer than `size` rows, which ends the run after ONE page if the server caps "
+            "its page size below `size`. `empty_page` keeps going until a page has no rows "
+            "(one extra request) and is safe when the server's cap is unknown."
+        ),
+    )
 
     @model_validator(mode="after")
     def _cursor_fields_required(self) -> "PaginationSpec":
@@ -117,6 +126,31 @@ class FileSourceSpec(_Frozen):
             "CSV cell values read as null. Default is only the empty cell: tokens such as "
             "'NA' are real data (North America, Namibia). Add them explicitly if the file "
             "uses them as null markers."
+        ),
+    )
+    column_types: dict[str, Literal["string", "int64", "float64", "bool", "date", "timestamp"]] = (
+        Field(
+            default_factory=dict,
+            description=(
+                "CSV only. Pin a column's type instead of inferring it per file, e.g. "
+                "`{zip: string}`. A named column missing from a file is an error."
+            ),
+        )
+    )
+    detect_changes: bool = Field(
+        default=False,
+        description=(
+            "By default a file is ingested once, by its path: editing or overwriting an "
+            "already-ingested file changes nothing. Set true to also key on the file's "
+            "content, so a changed file is ingested again. Requires an upsert sink "
+            "(`duckdb` or `postgres`): a Parquet sink would keep both versions."
+        ),
+    )
+    allow_empty: bool = Field(
+        default=False,
+        description=(
+            "By default a `path` that matches no files is an error (a wrong path looks "
+            "exactly like 'nothing to do'). Set true for a drop folder that may be empty."
         ),
     )
 
@@ -215,8 +249,55 @@ class PostgresSinkSpec(_Frozen):
         return _merge_key_non_empty(v)
 
 
+class RedshiftSinkSpec(_Frozen):
+    """Amazon Redshift sink (experimental): staged delete + insert on `merge_key`."""
+
+    type: Literal["redshift"]
+    dsn_env: str = Field(
+        description="Environment variable holding `redshift://user:password@host:5439/database`."
+    )
+    table: str = Field(description="Target table, optionally `schema.table`.")
+    merge_key: list[str]
+    load: Literal["insert", "copy"] = Field(
+        default="insert",
+        description=(
+            "`insert`: multi-row INSERT over the connection; fine for thousands of rows. "
+            "`copy`: write each batch as Parquet under `staging_path` and COPY it; use "
+            "this for large loads."
+        ),
+    )
+    staging_path: str | None = Field(
+        default=None, description="`copy` only. S3 prefix for staged files, `s3://bucket/prefix`."
+    )
+    iam_role_env: str | None = Field(
+        default=None,
+        description="`copy` only. Environment variable holding the IAM role ARN COPY assumes.",
+    )
+
+    @field_validator("merge_key")
+    @classmethod
+    def _merge_key_non_empty(cls, v: list[str]) -> list[str]:
+        return _merge_key_non_empty(v)
+
+    @model_validator(mode="after")
+    def _copy_needs_staging(self) -> "RedshiftSinkSpec":
+        if self.load == "copy":
+            if not self.staging_path or not self.iam_role_env:
+                raise ValueError("load: copy requires staging_path and iam_role_env")
+            if not self.staging_path.lower().startswith("s3://"):
+                raise ValueError("staging_path must be an s3:// URL")
+        return self
+
+
+# Sinks every tool can write to (Pugio pipelines and Hasta streams).
 SinkSpec = Annotated[
     ParquetSinkSpec | DuckDBSinkSpec | PostgresSinkSpec,
+    Field(discriminator="type"),
+]
+
+# Sinks a Pugio pipeline can write to. Redshift is batch-only for now.
+PipelineSinkSpec = Annotated[
+    ParquetSinkSpec | DuckDBSinkSpec | PostgresSinkSpec | RedshiftSinkSpec,
     Field(discriminator="type"),
 ]
 
@@ -231,7 +312,15 @@ class ValidateRule(_Frozen):
 
 class ValidateSpec(_Frozen):
     rules: list[ValidateRule]
-    on_violation: Literal["block", "quarantine", "warn"] = "quarantine"
+    on_violation: Literal["block", "quarantine", "split", "warn"] = Field(
+        default="quarantine",
+        description=(
+            "`block`: fail the run. `quarantine`: set the whole unit (page, file) aside and "
+            "load none of it. `split`: load the rows that pass and set only the failing "
+            "rows aside. `warn`: load everything and log. Real data usually has a few bad "
+            "rows in every unit, where `quarantine` loads nothing."
+        ),
+    )
 
 
 class ContractColumnSpec(_Frozen):
@@ -256,7 +345,7 @@ class PipelineSpec(_Frozen):
     # 파일시스템 연산이 필요한 지점에서 Path(...)로 감싸 해석한다.
     state_dir: str = ".arsenal"
     source: SourceSpec
-    sink: SinkSpec
+    sink: PipelineSinkSpec
     validation: ValidateSpec | None = Field(default=None, alias="validate")
     contract: ContractSpec | None = None
     schema_drift: Literal["allow", "warn", "block"] = Field(
@@ -270,6 +359,20 @@ class PipelineSpec(_Frozen):
         if isinstance(v, Path):
             return str(v)
         return v
+
+    @model_validator(mode="after")
+    def _detect_changes_needs_an_upsert_sink(self) -> "PipelineSpec":
+        if (
+            self.source.type == "file"
+            and self.source.detect_changes
+            and self.sink.type == "parquet"
+        ):
+            raise ValueError(
+                "source.detect_changes re-ingests a changed file as a new unit; a parquet "
+                "sink would then hold the old and the new rows. Use a duckdb or postgres "
+                "sink (merge_key upsert), or leave detect_changes off"
+            )
+        return self
 
     @field_validator("name")
     @classmethod

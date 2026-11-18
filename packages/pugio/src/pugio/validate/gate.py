@@ -5,6 +5,7 @@ spec.validation.on_violation(block/quarantine/warn)에 따라 처리한다.
 """
 
 from dataclasses import dataclass
+from typing import Any
 
 import pyarrow as pa
 import pyarrow.compute as pc
@@ -75,3 +76,34 @@ def check(batch: pa.RecordBatch, rules: list[ValidateRule]) -> GateReport:
             if n:
                 out.append(Violation("max", r.field, n))
     return GateReport(out)
+
+
+def violation_mask(batch: pa.RecordBatch, rules: list[ValidateRule]) -> pa.BooleanArray:
+    """True for every row that breaks at least one rule (`on_violation: split`).
+
+    Same rules as :func:`check`, so the number of flagged rows never exceeds the
+    counts it reports: null is neither a min/max nor a unique violation. For
+    `unique`, every row holding a repeated value is flagged, because which
+    of the copies is the right one cannot be known here.
+    """
+    compute: Any = pc  # pyarrow.compute is untyped; keep the noise in one place
+    bad: Any = pa.array([False] * batch.num_rows)
+    for r in rules:
+        col = batch.column(r.field)
+        marks: list[Any] = []
+        if r.not_null:
+            marks.append(compute.is_null(col))
+        if r.min is not None:
+            marks.append(compute.less(col, r.min))
+        if r.max is not None:
+            marks.append(compute.greater(col, r.max))
+        if r.unique:
+            counts: Any = compute.value_counts(col)
+            repeated: Any = counts.field("values").filter(
+                compute.greater(counts.field("counts"), 1)
+            )
+            marks.append(compute.is_in(col, value_set=repeated.drop_null()))
+        for mark in marks:
+            bad = compute.or_(bad, compute.fill_null(mark, False))
+    mask: pa.BooleanArray = bad
+    return mask
