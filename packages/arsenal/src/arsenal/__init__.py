@@ -9,4 +9,4 @@ from importlib.metadata import PackageNotFoundError, version
 try:
     __version__ = version("de-arsenal")
 except PackageNotFoundError:
-    __version__ = "0.5.2"
+    __version__ = "0.5.3"
