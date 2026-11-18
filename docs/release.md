@@ -41,7 +41,7 @@
    - [ ] Redshift sink를 테스트용 테이블에 `load: insert`와 `load: copy`로 한 번씩 돌린다. 실제
          클러스터에서 검증된 적이 없다. 안 되면 CHANGELOG에 그대로 적고 experimental로 둔다.
    - [ ] `examples/deploy`의 워크플로와 Dockerfile을 한 번씩 실행·빌드한다.
-   - [ ] CHANGELOG의 `## [0.6.0] - TBD`를 실제 날짜로 바꾼다.
+   - [x] CHANGELOG `## [0.6.0]`의 날짜 (PR에서 2026-11-18로 기입. 태그가 다른 날이면 고친다).
 4. PyPI 준비 — 신규 배포명 1개 (계정 소유자). PyPI **Publishing → Pending publishers**에 등록한다.
 
    | 필드 | 값 |

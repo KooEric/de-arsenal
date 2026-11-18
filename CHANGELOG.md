@@ -12,7 +12,7 @@ minor.
 
 ## [Unreleased]
 
-## [0.6.0] - TBD
+## [0.6.0] - 2026-11-18
 
 Minor release: a 13th package, **Pilum** (`de-pilum`, experimental reverse ETL),
 three more fixes for input that used to be lost or accepted without a word, and
