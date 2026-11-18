@@ -12,6 +12,18 @@ minor.
 
 ## [Unreleased]
 
+### Added
+
+- **Augur works with OpenAI-compatible APIs.** `--provider openai` reads
+  `OPENAI_BASE_URL` (the OpenAI SDK convention), so Gemini, Groq, OpenRouter or a
+  local server can run `augur ask` and `augur eval`. The key stays in
+  `OPENAI_API_KEY`.
+
+### Documentation
+
+- `docs/11-real-data-experiments.md` and `experiments/real-data/`: results and
+  reproducible specs from running the tools on real APIs and data.
+
 ## [0.5.3] - 2026-11-18
 
 Patch release: two silent data-loss bugs found by running the tools against

@@ -165,6 +165,7 @@ Databricks 제품군과의 대응표: [docs/00-overview.md](docs/00-overview.md)
 | [05-testing-plan](docs/05-testing-plan.md) · [06-conventions](docs/06-conventions.md) | 테스트 전략, 코딩·커밋·CI 컨벤션 |
 | [10-augur-eval-protocol](docs/10-augur-eval-protocol.md) · [dogfooding](docs/dogfooding.md) | Augur 평가 절차, 2주 도그푸딩 runbook |
 | [release](docs/release.md) | 버전·빌드·PyPI 릴리스 절차 |
+| [11-real-data-experiments](docs/11-real-data-experiments.md) · [experiments/](experiments/real-data/README.md) | 실제 API·데이터(GitHub, GitLab, 공항 CSV, NYC 택시 1,970만 행) 실험 결과, 찾은 버그와 확인한 한계 |
 
 ## 라이선스
 

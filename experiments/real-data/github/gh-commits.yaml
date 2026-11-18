@@ -1,0 +1,9 @@
+name: gh-commits
+source:
+  type: rest
+  url: https://api.github.com/repos/KooEric/de-arsenal/commits
+  pagination: { mode: page, param: page, size_param: per_page, size: 5 }
+  auth: { type: static_token, token_env: GITHUB_TOKEN }
+sink:
+  type: parquet
+  path: ./data/gh_commits
