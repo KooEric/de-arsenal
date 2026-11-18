@@ -37,7 +37,7 @@ def test_github_issues_recipe_runs_end_to_end(
     with respx.mock(assert_all_called=False) as respx_mock:
         respx_mock.get(
             "https://api.github.com/repos/duckdb/duckdb/issues",
-            params={"page": 0, "per_page": 100},
+            params={"page": 1, "per_page": 100},  # GitHub pages start at 1
         ).mock(return_value=Response(200, json=issues))
 
         run_result = runner.invoke(app, ["run", "--project", str(dest)])

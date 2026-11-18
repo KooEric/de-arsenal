@@ -1,31 +1,31 @@
-# v0.5.2 패치 릴리스 절차
+# v0.5.3 패치 릴리스 절차
 
-정확성 수정 두 개와 기능 보완을 담은 패치다(#21). 내역은
-[CHANGELOG](../CHANGELOG.md#052---2026-11-17).
+실데이터 도그푸딩에서 찾은 조용한 데이터 손실 두 건의 수정이다. 내역은
+[CHANGELOG](../CHANGELOG.md#053---2026-11-18).
 
-- **수정:** 실행 중인 Pugio의 Parquet 출력을 Onager가 compact할 수 있던 문제. Hasta API
-  토큰을 교체하면 커밋 전 batch가 새 identity로 두 번 쓰이던 문제.
-- **추가:** Hasta `cursor.on_null: last_event_id`(연속 폴링), Aquila 다중 writer 경고·삭제된
-  스펙 정리·원격 스키마(`--remote`, `--iceberg-uri`), `docs/adr/`, CI Actions의 Node 24 전환.
+- **수정:** `github-issues` 레시피·예제·Pugio README의 `mode: offset, param: page`가 첫
+  페이지만 수집하던 문제. CSV에서 값이 전부 `NA`인 컬럼이 null 타입으로 추론돼 값을 잃던 문제.
+- **추가:** `type: file` 소스의 `null_values` (기본 `[""]`).
 
-**patch인 이유**: 스펙 필드는 기본값이 기존 동작인 추가뿐이고, 교차 핀 `>=0.5,<0.6`을
-유지한다. 상태 변경은 Aquila 전용 파일(`aquila.db` v1 → v2, 그 자리에서 마이그레이션)뿐이고
-파이프라인 상태 DB는 그대로다. 신규 PyPI 프로젝트가 없다.
+**patch인 이유**: 바뀌는 동작 두 가지가 모두 데이터를 잃던 경로다. offset 모드에 페이지
+번호형 `param`을 쓰던 스펙은 이미 페이지를 건너뛰고 있었고, `NA`를 null로 읽던 동작은 파일
+분할 방식에 따라 결과가 달라졌다. 교차 핀 `>=0.5,<0.6`을 유지하고, 상태 마이그레이션과 신규
+PyPI 프로젝트가 없다.
 
 **사용자 고지 (CHANGELOG Upgrade notes와 같음):**
-- `headers`가 있는 Hasta 스트림은 업그레이드 직후 revision이 한 번 바뀐다. 업그레이드 전에
-  진행 중 batch를 커밋해 둔다(`hasta checkpoint show`의 `planned`가 0).
-- Pugio 실행은 같은 파이프라인의 다른 실행이나 그 출력의 compaction이 lease를 잡고 있으면
-  시작을 거부한다. 강제 종료된 실행의 lease는 60초 안에 풀린다.
+- `mode: offset`에 `page`·`page_number`·`pageNo` 같은 `param`을 쓰면 이제 스펙 검증
+  에러다. 메시지대로 `mode: page`로 바꾼다.
+- CSV의 `NA`·`N/A`·`null`은 이제 문자열로 읽힌다. 이 토큰을 결측값으로 쓰는 숫자 컬럼은
+  `null_values: ["", "NA"]`처럼 지정해야 숫자로 남는다.
 
 ## 절차
 
-1. #21 CI green → `main` 머지(auto-merge)
+1. 이 PR CI green → `main` 머지
 2. `main`에서 검증
 
    ```bash
    uv sync
-   uv run python scripts/check_release_metadata.py   # "12 packages at v0.5.2"
+   uv run python scripts/check_release_metadata.py   # "12 packages at v0.5.3"
    uv run ruff check . && uv run ruff format --check .
    uv run pyright
    uv run python scripts/gen_schema_docs.py --check
@@ -33,12 +33,12 @@
    uv build --all-packages && ls dist/ | wc -l       # 24
    ```
 
-3. CHANGELOG의 `## [0.5.2] - TBD`를 실제 날짜로 바꾼다.
+3. CHANGELOG의 `## [0.5.3]`에 날짜가 들어갔는지 확인한다 (머지 전 PR에서 2026-11-18로 기입).
 4. 검증 전용 수동 실행 후 태그
 
    ```bash
-   gh workflow run release.yml -f version=0.5.2 -f publish_package=none
-   git tag v0.5.2 && git push origin v0.5.2
+   gh workflow run release.yml -f version=0.5.3 -f publish_package=none
+   git tag v0.5.3 && git push origin v0.5.3
    ```
 
 5. 게시 확인 — 12개 모두 `200`, 새 venv 설치
@@ -46,19 +46,18 @@
    ```bash
    for p in arsenal-core de-arsenal pugio de-gladius de-scorpio de-scutum de-onager spatha \
             de-augur de-hasta de-ballista de-aquila; do
-     curl -s -o /dev/null -w "$p %{http_code}\n" "https://pypi.org/pypi/$p/0.5.2/json"
+     curl -s -o /dev/null -w "$p %{http_code}\n" "https://pypi.org/pypi/$p/0.5.3/json"
    done
-   uv tool install --force "de-arsenal[streaming,distributed,catalog]==0.5.2"
+   uv tool install --force "de-arsenal[streaming,distributed,catalog]==0.5.3"
    ```
 
-6. GitHub Release `v0.5.2`
+6. GitHub Release `v0.5.3`
 
    ```bash
-   gh release create v0.5.2 --title v0.5.2 --notes-file <(sed -n '/^## \[0.5.2\]/,/^## \[0.5.1\]/p' CHANGELOG.md | sed '$d')
+   gh release create v0.5.3 --title v0.5.3 --notes-file <(sed -n '/^## \[0.5.3\]/,/^## \[0.5.2\]/p' CHANGELOG.md | sed '$d')
    ```
 
-이번 릴리스는 setup-uv v10(commit pin)으로 도는 첫 release workflow다. 4번의 검증 전용
-실행이 성공하는지 먼저 확인한다. 실패 시 처리는 아래 0.5.0 절차와 같다(재게시 불가 → 0.5.3).
+실패 시 처리는 아래 0.5.0 절차와 같다(PyPI 재게시 불가 → 0.5.4).
 
 ---
 

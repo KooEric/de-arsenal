@@ -20,6 +20,9 @@ class _Frozen(BaseModel):
     model_config = ConfigDict(frozen=True, extra="forbid")
 
 
+_PAGE_NUMBER_PARAMS = frozenset({"page", "page_number", "pagenumber", "page_no", "pageno"})
+
+
 class PaginationSpec(_Frozen):
     mode: Literal["offset", "page", "cursor", "link"]
     param: str = "offset"
@@ -34,6 +37,19 @@ class PaginationSpec(_Frozen):
     def _cursor_fields_required(self) -> "PaginationSpec":
         if self.mode == "cursor" and not (self.cursor_param and self.cursor_path):
             raise ValueError("cursor mode requires cursor_param and cursor_path")
+        return self
+
+    @model_validator(mode="after")
+    def _offset_mode_not_page_numbered(self) -> "PaginationSpec":
+        # offset 모드는 0, size, 2*size, … 를 보낸다. 이를 페이지 번호 파라미터에
+        # 실으면 page=0 → page=size로 건너뛰어 대부분의 데이터를 조용히 놓친다
+        # (GitHub issues 21건 중 6건만 수집하고 "성공"으로 끝난 실측 사례).
+        if self.mode == "offset" and self.param.lower() in _PAGE_NUMBER_PARAMS:
+            raise ValueError(
+                f"offset mode sends row offsets (0, {self.size}, {2 * self.size}, …), "
+                f"but param {self.param!r} looks page-numbered; use "
+                f"`mode: page, param: {self.param}` instead"
+            )
         return self
 
 
@@ -95,6 +111,14 @@ class FileSourceSpec(_Frozen):
     path: str  # 글롭 (예: "./raw/**/*.csv")
     format: Literal["auto", "csv", "jsonl", "excel"] = "auto"
     encoding: str = "utf-8"
+    null_values: list[str] = Field(
+        default_factory=lambda: [""],
+        description=(
+            "CSV cell values read as null. Default is only the empty cell: tokens such as "
+            "'NA' are real data (North America, Namibia). Add them explicitly if the file "
+            "uses them as null markers."
+        ),
+    )
 
 
 class SplitSpec(_Frozen):

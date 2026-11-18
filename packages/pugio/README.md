@@ -26,7 +26,7 @@ source:
   type: rest
   url: https://api.github.com/repos/duckdb/duckdb/issues
   headers: { Authorization: "Bearer ${GITHUB_TOKEN}" }
-  pagination: { mode: offset, param: page, size_param: per_page, size: 100 }
+  pagination: { mode: page, param: page, size_param: per_page, size: 100 }
 sink:
   type: parquet
   path: ./data/issues

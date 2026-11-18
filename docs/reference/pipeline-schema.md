@@ -95,6 +95,7 @@ DuckDB 파일 싱크 (M2) — temp 테이블 → MERGE로 멱등 upsert.
 | `path` | string | Yes |  |  |
 | `format` | "auto" \| "csv" \| "jsonl" \| "excel" | No | `"auto"` |  |
 | `encoding` | string | No | `"utf-8"` |  |
+| `null_values` | array of string | No |  | CSV cell values read as null. Default is only the empty cell: tokens such as 'NA' are real data (North America, Namibia). Add them explicitly if the file uses them as null markers. |
 
 ## PaginationSpec
 

@@ -1,5 +1,6 @@
 from pathlib import Path
 
+import pyarrow as pa
 import pytest
 
 from arsenal_core.errors import FatalError
@@ -40,6 +41,40 @@ def test_euc_kr_csv_decodes_with_explicit_encoding(tmp_path: Path) -> None:
     result = src.fetch(next(iter(src.units())))
     assert result.batch is not None
     assert result.batch.to_pylist()[0]["v"] == "가"
+
+
+def test_csv_na_token_is_data_even_when_every_value_is_na(tmp_path: Path) -> None:
+    """회귀: 컬럼 값이 전부 "NA"(북미·나미비아)인 파일도 값이 보존돼야 한다.
+
+    pyarrow 기본 null 토큰을 쓰면 이 파일의 continent가 null 타입으로 추론돼
+    통째로 사라졌다 — 같은 데이터를 대륙별로 나눠 넣었을 때 46%의 행이 손상됐다.
+    """
+    (tmp_path / "na.csv").write_text("id,continent\n1,NA\n2,NA\n", encoding="utf-8")
+    (tmp_path / "mixed.csv").write_text("id,continent\n3,NA\n4,EU\n", encoding="utf-8")
+    src = FileSource(FileSourceSpec(type="file", path=str(tmp_path / "*.csv")), pipeline="p")
+    by_file = {u.unit_key: src.fetch(u).batch for u in src.units()}
+    for key, expected in {"na.csv": ["NA", "NA"], "mixed.csv": ["NA", "EU"]}.items():
+        batch = by_file[key]
+        assert batch is not None
+        assert batch.schema.field("continent").type == pa.string()
+        assert batch.column("continent").to_pylist() == expected
+
+
+def test_csv_empty_cell_is_still_null_for_numbers(tmp_path: Path) -> None:
+    (tmp_path / "a.csv").write_text("id,elevation\n1,10\n2,\n", encoding="utf-8")
+    src = FileSource(FileSourceSpec(type="file", path=str(tmp_path / "a.csv")), pipeline="p")
+    batch = src.fetch(next(iter(src.units()))).batch
+    assert batch is not None
+    assert batch.column("elevation").to_pylist() == [10, None]
+
+
+def test_csv_null_values_are_configurable(tmp_path: Path) -> None:
+    (tmp_path / "a.csv").write_text("id,score\n1,N/A\n2,7\n", encoding="utf-8")
+    spec = FileSourceSpec(type="file", path=str(tmp_path / "a.csv"), null_values=["", "N/A"])
+    src = FileSource(spec, pipeline="p")
+    batch = src.fetch(next(iter(src.units()))).batch
+    assert batch is not None
+    assert batch.column("score").to_pylist() == [None, 7]
 
 
 def test_explicit_format_overrides_extension(tmp_path: Path) -> None:

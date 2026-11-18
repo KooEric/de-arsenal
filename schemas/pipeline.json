@@ -280,6 +280,14 @@
           "default": "utf-8",
           "title": "Encoding",
           "type": "string"
+        },
+        "null_values": {
+          "description": "CSV cell values read as null. Default is only the empty cell: tokens such as 'NA' are real data (North America, Namibia). Add them explicitly if the file uses them as null markers.",
+          "items": {
+            "type": "string"
+          },
+          "title": "Null Values",
+          "type": "array"
         }
       },
       "required": [

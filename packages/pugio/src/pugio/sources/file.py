@@ -88,8 +88,14 @@ class FileSource:
                 read_opts = pa_csv.ReadOptions(  # pyright: ignore[reportUnknownMemberType, reportUnknownVariableType, reportPrivateImportUsage]
                     encoding=self._spec.encoding
                 )
+                # pyarrow의 기본 null 토큰("NA", "N/A", "null", …)을 쓰면 컬럼 값이
+                # 전부 "NA"인 파일에서 타입이 null로 추론돼 값이 통째로 사라진다 —
+                # 같은 데이터가 파일 분할 방식에 따라 다르게 적재되는 조용한 손상.
+                convert_opts = pa_csv.ConvertOptions(  # pyright: ignore[reportUnknownMemberType, reportUnknownVariableType, reportPrivateImportUsage]
+                    null_values=list(self._spec.null_values)
+                )
                 table = pa_csv.read_csv(  # pyright: ignore[reportUnknownMemberType, reportUnknownVariableType, reportPrivateImportUsage]
-                    path, read_options=read_opts
+                    path, read_options=read_opts, convert_options=convert_opts
                 )
             elif fmt == "jsonl":
                 table = pa_json.read_json(  # pyright: ignore[reportUnknownMemberType, reportUnknownVariableType, reportPrivateImportUsage]
