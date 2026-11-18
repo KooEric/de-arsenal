@@ -170,4 +170,4 @@ implementation from silently accepting unsafe timestamp scans.
 | Field | Type | Required | Default | Description |
 |---|---|---|---|---|
 | `rules` | array of ValidateRule | Yes |  |  |
-| `on_violation` | "block" \| "quarantine" \| "warn" | No | `"quarantine"` |  |
+| `on_violation` | "block" \| "quarantine" \| "split" \| "warn" | No | `"quarantine"` | `block`: fail the run. `quarantine`: set the whole unit (page, file) aside and load none of it. `split`: load the rows that pass and set only the failing rows aside. `warn`: load everything and log. Real data usually has a few bad rows in every unit, where `quarantine` loads nothing. |

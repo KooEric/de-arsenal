@@ -12,7 +12,7 @@ A pipeline YAML file declares one `PipelineSpec`: a name, a `source` (discrimina
 | `name` | string | Yes |  |  |
 | `state_dir` | string | No | `".arsenal"` |  |
 | `source` | RestSourceSpec \| FileSourceSpec \| DatabaseSourceSpec \| PythonSourceSpec \| DltSourceSpec | Yes |  |  |
-| `sink` | ParquetSinkSpec \| DuckDBSinkSpec \| PostgresSinkSpec | Yes |  |  |
+| `sink` | ParquetSinkSpec \| DuckDBSinkSpec \| PostgresSinkSpec \| RedshiftSinkSpec | Yes |  |  |
 | `validate` | ValidateSpec \| null | No | `null` |  |
 | `contract` | ContractSpec \| null | No | `null` |  |
 | `schema_drift` | "allow" \| "warn" \| "block" | No | `"allow"` | Policy when the observed source schema differs from the last snapshot. |
@@ -148,6 +148,20 @@ Postgres 싱크 (M2) — merge_key 기준 upsert.
 |---|---|---|---|---|
 | `rps` | number | Yes |  |  |
 
+## RedshiftSinkSpec
+
+Amazon Redshift sink (experimental): staged delete + insert on `merge_key`.
+
+| Field | Type | Required | Default | Description |
+|---|---|---|---|---|
+| `type` | "redshift" | Yes |  |  |
+| `dsn_env` | string | Yes |  | Environment variable holding `redshift://user:password@host:5439/database`. |
+| `table` | string | Yes |  | Target table, optionally `schema.table`. |
+| `merge_key` | array of string | Yes |  |  |
+| `load` | "insert" \| "copy" | No | `"insert"` | `insert`: multi-row INSERT over the connection; fine for thousands of rows. `copy`: write each batch as Parquet under `staging_path` and COPY it; use this for large loads. |
+| `staging_path` | string \| null | No | `null` | `copy` only. S3 prefix for staged files, `s3://bucket/prefix`. |
+| `iam_role_env` | string \| null | No | `null` | `copy` only. Environment variable holding the IAM role ARN COPY assumes. |
+
 ## RestSourceSpec
 
 REST API 소스 — M1 SourceSpec의 필드를 그대로 옮긴 것 (하위 호환).
@@ -186,4 +200,4 @@ REST API 소스 — M1 SourceSpec의 필드를 그대로 옮긴 것 (하위 호�
 | Field | Type | Required | Default | Description |
 |---|---|---|---|---|
 | `rules` | array of ValidateRule | Yes |  |  |
-| `on_violation` | "block" \| "quarantine" \| "warn" | No | `"quarantine"` |  |
+| `on_violation` | "block" \| "quarantine" \| "split" \| "warn" | No | `"quarantine"` | `block`: fail the run. `quarantine`: set the whole unit (page, file) aside and load none of it. `split`: load the rows that pass and set only the failing rows aside. `warn`: load everything and log. Real data usually has a few bad rows in every unit, where `quarantine` loads nothing. |

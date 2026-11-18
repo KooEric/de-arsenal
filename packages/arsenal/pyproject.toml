@@ -25,6 +25,7 @@ classifiers = [
 
 [project.optional-dependencies]
 postgres = ["pugio[postgres]"]
+redshift = ["pugio[redshift]"]
 dlt = ["pugio[dlt]"]
 dbt = ["dbt-duckdb>=1.8,<2"]
 streaming = ["de-hasta>=0.6,<0.7"]

@@ -32,6 +32,7 @@ def run(spec_path: Path) -> None:
     typer.echo(
         f"done: fetched={report.fetched} written={report.written} "
         f"skipped={report.skipped} quarantined={report.quarantined}"
+        + (f" rejected_rows={report.rejected_rows}" if report.rejected_rows else "")
     )
 
 
@@ -106,9 +107,20 @@ def dlq_list(spec_path: Path) -> None:
         records = store.quarantined(spec.name)
     finally:
         store.close()
-    if not records:
+    # on_violation: split은 unit을 done으로 두고 걸러진 행만 DLQ에 남긴다.
+    split_reasons = [
+        reason
+        for path in sorted(dlq_dir(spec.state_dir, spec.name).glob("*.json"))
+        if (reason := read_reason(path)).get("mode") == "split"
+    ]
+    if not records and not split_reasons:
         typer.echo("no quarantined units")
         return
+    for reason in split_reasons:
+        typer.echo(
+            f"{reason.get('unit_id')}  {reason.get('unit_key')}  "
+            f"split: {reason.get('rejected_rows')} rows rejected {reason.get('violations')}"
+        )
     for rec in records:
         json_path = dlq_dir(spec.state_dir, spec.name) / f"{rec.unit_id}.json"
         unit_key = rec.unit_id

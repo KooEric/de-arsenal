@@ -507,6 +507,78 @@
       "title": "RateLimitSpec",
       "type": "object"
     },
+    "RedshiftSinkSpec": {
+      "additionalProperties": false,
+      "description": "Amazon Redshift sink (experimental): staged delete + insert on `merge_key`.",
+      "properties": {
+        "type": {
+          "const": "redshift",
+          "title": "Type",
+          "type": "string"
+        },
+        "dsn_env": {
+          "description": "Environment variable holding `redshift://user:password@host:5439/database`.",
+          "title": "Dsn Env",
+          "type": "string"
+        },
+        "table": {
+          "description": "Target table, optionally `schema.table`.",
+          "title": "Table",
+          "type": "string"
+        },
+        "merge_key": {
+          "items": {
+            "type": "string"
+          },
+          "title": "Merge Key",
+          "type": "array"
+        },
+        "load": {
+          "default": "insert",
+          "description": "`insert`: multi-row INSERT over the connection; fine for thousands of rows. `copy`: write each batch as Parquet under `staging_path` and COPY it; use this for large loads.",
+          "enum": [
+            "insert",
+            "copy"
+          ],
+          "title": "Load",
+          "type": "string"
+        },
+        "staging_path": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "`copy` only. S3 prefix for staged files, `s3://bucket/prefix`.",
+          "title": "Staging Path"
+        },
+        "iam_role_env": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "`copy` only. Environment variable holding the IAM role ARN COPY assumes.",
+          "title": "Iam Role Env"
+        }
+      },
+      "required": [
+        "type",
+        "dsn_env",
+        "table",
+        "merge_key"
+      ],
+      "title": "RedshiftSinkSpec",
+      "type": "object"
+    },
     "RestSourceSpec": {
       "additionalProperties": false,
       "description": "REST API \uc18c\uc2a4 \u2014 M1 SourceSpec\uc758 \ud544\ub4dc\ub97c \uadf8\ub300\ub85c \uc62e\uae34 \uac83 (\ud558\uc704 \ud638\ud658).",
@@ -669,9 +741,11 @@
         },
         "on_violation": {
           "default": "quarantine",
+          "description": "`block`: fail the run. `quarantine`: set the whole unit (page, file) aside and load none of it. `split`: load the rows that pass and set only the failing rows aside. `warn`: load everything and log. Real data usually has a few bad rows in every unit, where `quarantine` loads nothing.",
           "enum": [
             "block",
             "quarantine",
+            "split",
             "warn"
           ],
           "title": "On Violation",
@@ -731,7 +805,8 @@
         "mapping": {
           "duckdb": "#/$defs/DuckDBSinkSpec",
           "parquet": "#/$defs/ParquetSinkSpec",
-          "postgres": "#/$defs/PostgresSinkSpec"
+          "postgres": "#/$defs/PostgresSinkSpec",
+          "redshift": "#/$defs/RedshiftSinkSpec"
         },
         "propertyName": "type"
       },
@@ -744,6 +819,9 @@
         },
         {
           "$ref": "#/$defs/PostgresSinkSpec"
+        },
+        {
+          "$ref": "#/$defs/RedshiftSinkSpec"
         }
       ],
       "title": "Sink"

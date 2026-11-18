@@ -21,6 +21,8 @@ HEAVY = {
     "obstore",
     "psycopg",
     "psycopg-binary",
+    "redshift-connector",
+    "boto3",
     "dbt-duckdb",
     "de-hasta",
     "de-ballista",

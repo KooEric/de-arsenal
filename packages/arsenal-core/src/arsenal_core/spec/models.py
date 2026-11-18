@@ -249,8 +249,55 @@ class PostgresSinkSpec(_Frozen):
         return _merge_key_non_empty(v)
 
 
+class RedshiftSinkSpec(_Frozen):
+    """Amazon Redshift sink (experimental): staged delete + insert on `merge_key`."""
+
+    type: Literal["redshift"]
+    dsn_env: str = Field(
+        description="Environment variable holding `redshift://user:password@host:5439/database`."
+    )
+    table: str = Field(description="Target table, optionally `schema.table`.")
+    merge_key: list[str]
+    load: Literal["insert", "copy"] = Field(
+        default="insert",
+        description=(
+            "`insert`: multi-row INSERT over the connection; fine for thousands of rows. "
+            "`copy`: write each batch as Parquet under `staging_path` and COPY it; use "
+            "this for large loads."
+        ),
+    )
+    staging_path: str | None = Field(
+        default=None, description="`copy` only. S3 prefix for staged files, `s3://bucket/prefix`."
+    )
+    iam_role_env: str | None = Field(
+        default=None,
+        description="`copy` only. Environment variable holding the IAM role ARN COPY assumes.",
+    )
+
+    @field_validator("merge_key")
+    @classmethod
+    def _merge_key_non_empty(cls, v: list[str]) -> list[str]:
+        return _merge_key_non_empty(v)
+
+    @model_validator(mode="after")
+    def _copy_needs_staging(self) -> "RedshiftSinkSpec":
+        if self.load == "copy":
+            if not self.staging_path or not self.iam_role_env:
+                raise ValueError("load: copy requires staging_path and iam_role_env")
+            if not self.staging_path.lower().startswith("s3://"):
+                raise ValueError("staging_path must be an s3:// URL")
+        return self
+
+
+# Sinks every tool can write to (Pugio pipelines and Hasta streams).
 SinkSpec = Annotated[
     ParquetSinkSpec | DuckDBSinkSpec | PostgresSinkSpec,
+    Field(discriminator="type"),
+]
+
+# Sinks a Pugio pipeline can write to. Redshift is batch-only for now.
+PipelineSinkSpec = Annotated[
+    ParquetSinkSpec | DuckDBSinkSpec | PostgresSinkSpec | RedshiftSinkSpec,
     Field(discriminator="type"),
 ]
 
@@ -265,7 +312,15 @@ class ValidateRule(_Frozen):
 
 class ValidateSpec(_Frozen):
     rules: list[ValidateRule]
-    on_violation: Literal["block", "quarantine", "warn"] = "quarantine"
+    on_violation: Literal["block", "quarantine", "split", "warn"] = Field(
+        default="quarantine",
+        description=(
+            "`block`: fail the run. `quarantine`: set the whole unit (page, file) aside and "
+            "load none of it. `split`: load the rows that pass and set only the failing "
+            "rows aside. `warn`: load everything and log. Real data usually has a few bad "
+            "rows in every unit, where `quarantine` loads nothing."
+        ),
+    )
 
 
 class ContractColumnSpec(_Frozen):
@@ -290,7 +345,7 @@ class PipelineSpec(_Frozen):
     # 파일시스템 연산이 필요한 지점에서 Path(...)로 감싸 해석한다.
     state_dir: str = ".arsenal"
     source: SourceSpec
-    sink: SinkSpec
+    sink: PipelineSinkSpec
     validation: ValidateSpec | None = Field(default=None, alias="validate")
     contract: ContractSpec | None = None
     schema_drift: Literal["allow", "warn", "block"] = Field(

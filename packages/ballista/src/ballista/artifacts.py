@@ -25,7 +25,7 @@ from ballista.plan import plan_hash, require_portable_mapping
 
 MANIFEST_SCHEMA_VERSION = 1
 PROOF_SCHEMA_VERSION = 1
-_ARTIFACT_FORMATS = frozenset({"parquet", "iceberg", "duckdb", "postgres"})
+_ARTIFACT_FORMATS = frozenset({"parquet", "iceberg", "duckdb", "postgres", "redshift"})
 
 
 class ArtifactError(FatalError):

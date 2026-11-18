@@ -22,7 +22,7 @@ from pathlib import Path
 import pyarrow as pa
 
 from arsenal_core.execution import ArtifactRef, OutputProof, SinkCapabilities, canonical_hash
-from arsenal_core.spec.models import SinkSpec
+from arsenal_core.spec.models import PipelineSinkSpec as SinkSpec
 from arsenal_core.state import UnitSpec
 from pugio.sinks.base import Sink
 
@@ -46,6 +46,14 @@ POSTGRES_CAPABILITIES = SinkCapabilities(
     atomic_publish=True,
     delete_apply=True,
     concurrent_writers=True,
+)
+
+# Staged delete + insert in one transaction. No delete_apply (no CDC apply sink)
+# and no concurrent_writers claim: Redshift's serializable isolation can abort
+# one of two overlapping writers, which surfaces as a retry, not as duplicates.
+REDSHIFT_CAPABILITIES = SinkCapabilities(
+    idempotent_batch_write=True,
+    atomic_publish=True,
 )
 
 _OBJECT_STORE_SCHEMES = frozenset({"s3", "gcs", "gs"})
@@ -125,6 +133,8 @@ def capabilities_for_spec(spec: SinkSpec) -> SinkCapabilities:
         return DUCKDB_CAPABILITIES
     if spec.type == "postgres":
         return POSTGRES_CAPABILITIES
+    if spec.type == "redshift":
+        return REDSHIFT_CAPABILITIES
     raise AssertionError(f"unknown sink type: {spec.type}")  # pragma: no cover
 
 
@@ -150,6 +160,8 @@ def output_ref_for_spec(spec: SinkSpec, unit: UnitSpec) -> ArtifactRef:
             format="postgres",
             version=unit.unit_id,
         )
+    if spec.type == "redshift":
+        return ArtifactRef(uri=f"redshift:///{spec.table}", format="redshift", version=unit.unit_id)
     raise AssertionError(f"unknown sink type: {spec.type}")  # pragma: no cover
 
 
@@ -181,6 +193,7 @@ __all__ = [
     "LOCAL_PARQUET_CAPABILITIES",
     "OBJECT_STORAGE_PARQUET_CAPABILITIES",
     "POSTGRES_CAPABILITIES",
+    "REDSHIFT_CAPABILITIES",
     "OutputProofContext",
     "SinkContractAdapter",
     "adapt_sink",

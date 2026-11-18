@@ -64,3 +64,32 @@ def test_unique_still_detects_real_duplicates_with_nulls_present() -> None:
     batch = pa.RecordBatch.from_pylist([{"v": 1}, {"v": 1}, {"v": None}])
     report = check(batch, [ValidateRule(field="v", unique=True)])
     assert [(v.rule, v.field, v.count) for v in report.violations] == [("unique", "v", 1)]
+
+
+def test_violation_mask_flags_exactly_the_failing_rows() -> None:
+    from pugio.validate.gate import violation_mask
+
+    batch = pa.RecordBatch.from_pylist(
+        [
+            {"id": 1, "amount": 10.0},  # ok
+            {"id": 2, "amount": -5.0},  # below min
+            {"id": 3, "amount": None},  # null amount: not a min/max violation
+            {"id": None, "amount": 1.0},  # not_null
+            {"id": 5, "amount": 900.0},  # above max
+            {"id": 6, "amount": 2.0},  # ok
+        ]
+    )
+    rules = [ValidateRule(field="id", not_null=True), ValidateRule(field="amount", min=0, max=100)]
+
+    assert violation_mask(batch, rules).to_pylist() == [False, True, False, True, True, False]
+
+
+def test_violation_mask_flags_every_copy_of_a_repeated_value() -> None:
+    from pugio.validate.gate import violation_mask
+
+    batch = pa.RecordBatch.from_pylist(
+        [{"k": "a"}, {"k": "b"}, {"k": "a"}, {"k": None}, {"k": None}]
+    )
+    mask = violation_mask(batch, [ValidateRule(field="k", unique=True)])
+
+    assert mask.to_pylist() == [True, False, True, False, False]  # nulls are not duplicates

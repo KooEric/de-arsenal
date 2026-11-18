@@ -14,7 +14,7 @@ from typing import Any, Literal
 
 from arsenal_core.execution.capabilities import GuaranteeRequest
 
-ArtifactFormat = Literal["parquet", "iceberg", "duckdb", "postgres"]
+ArtifactFormat = Literal["parquet", "iceberg", "duckdb", "postgres", "redshift"]
 
 
 @dataclass(frozen=True)
