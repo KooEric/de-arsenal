@@ -1,16 +1,16 @@
 [project]
 name = "de-arsenal"
-version = "0.5.3"
+version = "0.6.0"
 description = "Arsenal — 원클릭 데이터 스택. 수집→검증→변환→쿼리를 명령 하나로 (pugio+gladius 우산 CLI)"
 readme = "README.md"
 requires-python = ">=3.11"
 license = "Apache-2.0"
 license-files = ["LICENSE"]
 dependencies = [
-    "arsenal-core>=0.5,<0.6",
-    "pugio>=0.5,<0.6",
-    "de-gladius>=0.5,<0.6",
-    "de-scorpio>=0.5,<0.6",
+    "arsenal-core>=0.6,<0.7",
+    "pugio>=0.6,<0.7",
+    "de-gladius>=0.6,<0.7",
+    "de-scorpio>=0.6,<0.7",
     "typer>=0.12",
 ]
 classifiers = [
@@ -27,9 +27,10 @@ classifiers = [
 postgres = ["pugio[postgres]"]
 dlt = ["pugio[dlt]"]
 dbt = ["dbt-duckdb>=1.8,<2"]
-streaming = ["de-hasta>=0.5,<0.6"]
-distributed = ["de-ballista>=0.5,<0.6"]
-catalog = ["de-aquila>=0.5,<0.6"]
+streaming = ["de-hasta>=0.6,<0.7"]
+distributed = ["de-ballista>=0.6,<0.7"]
+catalog = ["de-aquila>=0.6,<0.7"]
+dispatch = ["de-pilum>=0.6,<0.7"]
 
 [project.urls]
 Homepage = "https://github.com/KooEric/de-arsenal"

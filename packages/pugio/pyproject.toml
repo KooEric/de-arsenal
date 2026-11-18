@@ -1,12 +1,12 @@
 [project]
 name = "pugio"
-version = "0.5.3"
+version = "0.6.0"
 description = "Pugio — 수집·전송. 재개·멱등·인증 갱신이 기본값인 ETL 엔진"
 readme = "README.md"
 requires-python = ">=3.11"
 license = "Apache-2.0"
 license-files = ["LICENSE"]
-dependencies = ["arsenal-core>=0.5,<0.6", "de-scorpio>=0.5,<0.6", "de-scutum>=0.5,<0.6", "duckdb>=1.0", "httpx>=0.27", "pyarrow>=17", "typer>=0.12"]
+dependencies = ["arsenal-core>=0.6,<0.7", "de-scorpio>=0.6,<0.7", "de-scutum>=0.6,<0.7", "duckdb>=1.0", "httpx>=0.27", "pyarrow>=17", "typer>=0.12"]
 classifiers = [
     "Programming Language :: Python :: 3",
     "Programming Language :: Python :: 3.11",

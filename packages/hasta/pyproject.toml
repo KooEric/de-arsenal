@@ -1,16 +1,16 @@
 [project]
 name = "de-hasta"
-version = "0.5.3"
+version = "0.6.0"
 description = "Hasta — leased REST and Postgres outbox microbatch streaming"
 readme = "README.md"
 requires-python = ">=3.11"
 license = "Apache-2.0"
 license-files = ["LICENSE"]
 dependencies = [
-    "arsenal-core>=0.5,<0.6",
-    "pugio>=0.5,<0.6",
-    "de-scutum>=0.5,<0.6",
-    "de-scorpio>=0.5,<0.6",
+    "arsenal-core>=0.6,<0.7",
+    "pugio>=0.6,<0.7",
+    "de-scutum>=0.6,<0.7",
+    "de-scorpio>=0.6,<0.7",
     "httpx>=0.27",
     "pyarrow>=17",
     "pydantic>=2.7",
