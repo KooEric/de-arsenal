@@ -12,8 +12,12 @@ minor.
 
 ## [Unreleased]
 
-Two silent data-loss bugs found by running the tools against real data
-(the GitHub API and the public airport-codes CSV). Neither raised an error.
+## [0.5.3] - TBD
+
+Patch release: two silent data-loss bugs found by running the tools against
+real data (the GitHub API and the public airport-codes CSV). Neither raised an
+error. All 12 packages move to `0.5.3`; internal pins stay `>=0.5,<0.6`. No
+state migrations.
 
 ### Fixed
 
