@@ -21,6 +21,7 @@ members = [
     "de-gladius",
     "de-hasta",
     "de-onager",
+    "de-pilum",
     "de-scorpio",
     "de-scutum",
     "pugio",
@@ -260,7 +261,7 @@ wheels = [
 
 [[package]]
 name = "arsenal-core"
-version = "0.5.3"
+version = "0.6.0"
 source = { editable = "packages/arsenal-core" }
 dependencies = [
     { name = "pydantic" },
@@ -639,7 +640,7 @@ wheels = [
 
 [[package]]
 name = "de-aquila"
-version = "0.5.3"
+version = "0.6.0"
 source = { editable = "packages/aquila" }
 dependencies = [
     { name = "arsenal-core" },
@@ -667,7 +668,7 @@ provides-extras = ["iceberg"]
 
 [[package]]
 name = "de-arsenal"
-version = "0.5.3"
+version = "0.6.0"
 source = { editable = "packages/arsenal" }
 dependencies = [
     { name = "arsenal-core" },
@@ -683,6 +684,9 @@ catalog = [
 ]
 dbt = [
     { name = "dbt-duckdb" },
+]
+dispatch = [
+    { name = "de-pilum" },
 ]
 distributed = [
     { name = "de-ballista" },
@@ -705,13 +709,14 @@ requires-dist = [
     { name = "de-ballista", marker = "extra == 'distributed'", editable = "packages/ballista" },
     { name = "de-gladius", editable = "packages/gladius" },
     { name = "de-hasta", marker = "extra == 'streaming'", editable = "packages/hasta" },
+    { name = "de-pilum", marker = "extra == 'dispatch'", editable = "packages/pilum" },
     { name = "de-scorpio", editable = "packages/scorpio" },
     { name = "pugio", editable = "packages/pugio" },
     { name = "pugio", extras = ["dlt"], marker = "extra == 'dlt'", editable = "packages/pugio" },
     { name = "pugio", extras = ["postgres"], marker = "extra == 'postgres'", editable = "packages/pugio" },
     { name = "typer", specifier = ">=0.12" },
 ]
-provides-extras = ["postgres", "dlt", "dbt", "streaming", "distributed", "catalog"]
+provides-extras = ["postgres", "dlt", "dbt", "streaming", "distributed", "catalog", "dispatch"]
 
 [[package]]
 name = "de-arsenal-workspace"
@@ -726,6 +731,7 @@ dependencies = [
     { name = "de-gladius" },
     { name = "de-hasta" },
     { name = "de-onager" },
+    { name = "de-pilum" },
     { name = "de-scorpio" },
     { name = "de-scutum" },
     { name = "pugio", extra = ["postgres"] },
@@ -764,6 +770,7 @@ requires-dist = [
     { name = "de-hasta", editable = "packages/hasta" },
     { name = "de-hasta", marker = "extra == 'streaming'", editable = "packages/hasta" },
     { name = "de-onager", editable = "packages/onager" },
+    { name = "de-pilum", editable = "packages/pilum" },
     { name = "de-scorpio", editable = "packages/scorpio" },
     { name = "de-scutum", editable = "packages/scutum" },
     { name = "pugio", extras = ["postgres"], editable = "packages/pugio" },
@@ -785,7 +792,7 @@ dev = [
 
 [[package]]
 name = "de-augur"
-version = "0.5.3"
+version = "0.6.0"
 source = { editable = "packages/augur" }
 dependencies = [
     { name = "arsenal-core" },
@@ -810,7 +817,7 @@ requires-dist = [
 
 [[package]]
 name = "de-ballista"
-version = "0.5.3"
+version = "0.6.0"
 source = { editable = "packages/ballista" }
 dependencies = [
     { name = "arsenal-core" },
@@ -846,7 +853,7 @@ provides-extras = ["spark-kubernetes", "iceberg", "object-store"]
 
 [[package]]
 name = "de-gladius"
-version = "0.5.3"
+version = "0.6.0"
 source = { editable = "packages/gladius" }
 dependencies = [
     { name = "arsenal-core" },
@@ -873,7 +880,7 @@ provides-extras = ["python"]
 
 [[package]]
 name = "de-hasta"
-version = "0.5.3"
+version = "0.6.0"
 source = { editable = "packages/hasta" }
 dependencies = [
     { name = "arsenal-core" },
@@ -909,7 +916,7 @@ provides-extras = ["postgres"]
 
 [[package]]
 name = "de-onager"
-version = "0.5.3"
+version = "0.6.0"
 source = { editable = "packages/onager" }
 dependencies = [
     { name = "arsenal-core" },
@@ -927,13 +934,38 @@ requires-dist = [
 ]
 
 [[package]]
+name = "de-pilum"
+version = "0.6.0"
+source = { editable = "packages/pilum" }
+dependencies = [
+    { name = "arsenal-core" },
+    { name = "duckdb" },
+    { name = "httpx" },
+    { name = "pyarrow" },
+    { name = "pydantic" },
+    { name = "pyyaml" },
+    { name = "typer" },
+]
+
+[package.metadata]
+requires-dist = [
+    { name = "arsenal-core", editable = "packages/arsenal-core" },
+    { name = "duckdb", specifier = ">=1.0" },
+    { name = "httpx", specifier = ">=0.27" },
+    { name = "pyarrow", specifier = ">=17" },
+    { name = "pydantic", specifier = ">=2.7" },
+    { name = "pyyaml", specifier = ">=6" },
+    { name = "typer", specifier = ">=0.12" },
+]
+
+[[package]]
 name = "de-scorpio"
-version = "0.5.3"
+version = "0.6.0"
 source = { editable = "packages/scorpio" }
 
 [[package]]
 name = "de-scutum"
-version = "0.5.3"
+version = "0.6.0"
 source = { editable = "packages/scutum" }
 dependencies = [
     { name = "arsenal-core" },
@@ -2601,7 +2633,7 @@ wheels = [
 
 [[package]]
 name = "pugio"
-version = "0.5.3"
+version = "0.6.0"
 source = { editable = "packages/pugio" }
 dependencies = [
     { name = "arsenal-core" },
@@ -3588,7 +3620,7 @@ wheels = [
 
 [[package]]
 name = "spatha"
-version = "0.5.3"
+version = "0.6.0"
 source = { editable = "packages/spatha" }
 dependencies = [
     { name = "de-scutum" },

@@ -30,6 +30,8 @@ _STREAM_JSON: Final = Path("schemas/stream.json")
 _STREAM_MD: Final = Path("docs/reference/stream-schema.md")
 _BALLISTA_JSON: Final = Path("schemas/ballista-profile.json")
 _BALLISTA_MD: Final = Path("docs/reference/ballista-profile-schema.md")
+_DISPATCH_JSON: Final = Path("schemas/dispatch.json")
+_DISPATCH_MD: Final = Path("docs/reference/dispatch-schema.md")
 
 
 def _import_pipeline_spec() -> type[Any]:
@@ -54,6 +56,12 @@ def _import_ballista_profile() -> type[Any]:
     from ballista.config import BallistaProfile
 
     return BallistaProfile
+
+
+def _import_dispatch_spec() -> type[Any]:
+    from pilum.spec import DispatchSpec
+
+    return DispatchSpec
 
 
 def _ref_name(ref: str) -> str:
@@ -178,12 +186,13 @@ def _render_json_schema(model: type[Any]) -> str:
 
 
 def generate_artifacts() -> dict[Path, str]:
-    """Build the full content of all 8 generated artifacts, keyed by the
+    """Build the full content of all 10 generated artifacts, keyed by the
     (CWD-relative) path they should be written to."""
     pipeline_spec = _import_pipeline_spec()
     transform_spec = _import_transform_spec()
     stream_spec = _import_stream_spec()
     ballista_profile = _import_ballista_profile()
+    dispatch_spec = _import_dispatch_spec()
 
     pipeline_schema = pipeline_spec.model_json_schema()
     transform_schema = transform_spec.model_json_schema()
@@ -242,6 +251,18 @@ def generate_artifacts() -> dict[Path, str]:
         source_path=ballista_source,
     )
 
+    dispatch_md = render_markdown(
+        dispatch_spec.model_json_schema(),
+        title="Pilum Dispatch YAML Reference",
+        intro=(
+            "A Pilum dispatch YAML file declares one `DispatchSpec`: a `source` (a Parquet "
+            "dataset or a DuckDB query), the `key` columns that identify a record, a `mode` "
+            "and one `destination` (`http` or `slack`). Pilum is experimental: fields may "
+            "change in any 0.x release."
+        ),
+        source_path="packages/pilum/src/pilum/spec.py",
+    )
+
     return {
         _PIPELINE_JSON: _render_json_schema(pipeline_spec),
         _PIPELINE_MD: pipeline_md,
@@ -251,6 +272,8 @@ def generate_artifacts() -> dict[Path, str]:
         _STREAM_MD: stream_md,
         _BALLISTA_JSON: _render_json_schema(ballista_profile),
         _BALLISTA_MD: ballista_md,
+        _DISPATCH_JSON: _render_json_schema(dispatch_spec),
+        _DISPATCH_MD: dispatch_md,
     }
 
 
