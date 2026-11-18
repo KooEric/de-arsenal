@@ -708,3 +708,44 @@ def test_warn_policy_writes_anyway(tmp_path: Path, caplog: pytest.LogCaptureFixt
 
     # M2-E FIX 6: warn 정책은 print(stderr) 대신 logging을 쓴다.
     assert any("validation violations" in rec.message for rec in caplog.records)
+
+
+def _two_files(tmp_path: Path, schema_drift: Literal["allow", "warn", "block"]) -> PipelineSpec:
+    (tmp_path / "a.csv").write_text("id,amt\n1,10\n", encoding="utf-8")
+    (tmp_path / "b.csv").write_text("id,amt\n2,n/a\n", encoding="utf-8")
+    (tmp_path / "c.csv").write_text("id,amt\n3,\n", encoding="utf-8")  # all-empty: no conflict
+    return PipelineSpec(
+        name="mixed",
+        state_dir=str(tmp_path / ".arsenal"),
+        source=FileSourceSpec(type="file", path=str(tmp_path / "*.csv")),
+        sink=ParquetSinkSpec(type="parquet", path=str(tmp_path / "out")),
+        schema_drift=schema_drift,
+    )
+
+
+def test_type_conflict_between_files_warns_by_default(
+    tmp_path: Path, caplog: LogCaptureFixture
+) -> None:
+    with caplog.at_level("WARNING", logger="pugio.runner"):
+        report = run_pipeline(_two_files(tmp_path, "allow"))
+
+    assert report.written == 3
+    messages = [record.getMessage() for record in caplog.records]
+    assert len(messages) == 1
+    assert "'amt' is int64 in a.csv but string in b.csv" in messages[0]
+    assert "source.column_types" in messages[0]
+
+
+def test_type_conflict_between_files_blocks_when_asked(tmp_path: Path) -> None:
+    with pytest.raises(FatalError, match="column types differ between files"):
+        run_pipeline(_two_files(tmp_path, "block"))
+
+
+def test_pinned_types_remove_the_conflict(tmp_path: Path, caplog: LogCaptureFixture) -> None:
+    spec = _two_files(tmp_path, "block")
+    pinned = spec.model_copy(
+        update={"source": spec.source.model_copy(update={"column_types": {"amt": "string"}})}
+    )
+    with caplog.at_level("WARNING", logger="pugio.runner"):
+        assert run_pipeline(pinned).written == 3
+    assert caplog.records == []

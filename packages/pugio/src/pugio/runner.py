@@ -59,6 +59,22 @@ def _schema_json(batch: pa.RecordBatch) -> str:
     )
 
 
+def _type_conflicts(seen: dict[str, tuple[str, str]], batch: pa.RecordBatch, unit_key: str) -> str:
+    """Columns whose type in this file differs from an earlier file of the same run.
+
+    An all-empty column (type ``null``) fits any type and is not a conflict.
+    """
+    conflicts: list[str] = []
+    for field in batch.schema:
+        kind = str(field.type)
+        if kind == "null":
+            continue
+        first = seen.setdefault(field.name, (kind, unit_key))
+        if first[0] != kind:
+            conflicts.append(f"'{field.name}' is {first[0]} in {first[1]} but {kind} in {unit_key}")
+    return "; ".join(conflicts)
+
+
 def _fetch_with_retry(source: Source, unit: UnitSpec, max_attempts: int) -> FetchResult:
     """with_retry(source.fetch(unit)) 래퍼 — 루프 안 클로저(B023 loop-variable 함정)를
     피하려고 top-level 함수로 뺐다."""
@@ -213,6 +229,7 @@ def _run_units(
 ) -> RunReport:
     fetched = written = skipped = done_count = quarantined = 0
     schema_recorded = False  # 이번 run에서 스냅샷 기록 여부 (첫 non-empty batch에서 한 번만)
+    file_types: dict[str, tuple[str, str]] = {}  # 컬럼 → (타입, 처음 본 파일)
     for unit in source.units():
         store.register(unit)
         if store.is_done(unit.unit_id):
@@ -226,6 +243,19 @@ def _run_units(
             store.mark_failed(unit.unit_id, str(e))
             raise
         fetched += 1
+        if spec.source.type == "file" and result.batch is not None:
+            # 파일마다 타입을 따로 추론하므로 같은 컬럼이 파일에 따라 다른 타입이 될 수
+            # 있다. 읽는 쪽에서 조용히 문자열로 합쳐지기 전에 여기서 알린다.
+            conflict = _type_conflicts(file_types, result.batch, unit.unit_key)
+            if conflict:
+                message = (
+                    f"column types differ between files of pipeline {spec.name!r}: {conflict}. "
+                    "Pin them with source.column_types"
+                )
+                if spec.schema_drift == "block":
+                    store.mark_failed(unit.unit_id, message)
+                    raise FatalError(message)
+                logger.warning(message)
         if not schema_recorded and result.batch is not None:
             schema_json = _schema_json(result.batch)
             previous_schema = store.last_schema(spec.name)

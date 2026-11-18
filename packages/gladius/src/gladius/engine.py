@@ -49,6 +49,12 @@ def run_transform(spec: TransformSpec) -> Path:
         out_path = quote_str_literal(str(tmp / "part-0.parquet"))
         con.execute(f"COPY ({sql}) TO {out_path} (FORMAT PARQUET, COMPRESSION ZSTD)")
     except duckdb.Error as e:
+        shutil.rmtree(tmp, ignore_errors=True)  # 실패한 실행이 빈 *.tmp를 남기지 않게
+        if isinstance(e, duckdb.IOException) and "No files found" in str(e):
+            raise FatalError(
+                f"transform '{spec.name}': no Parquet files under input '{spec.input}'. "
+                "Run the step that writes it first (did the collect step fetch 0 rows?)"
+            ) from e
         raise FatalError(f"transform failed: {e}\n--- compiled SQL ---\n{sql}") from e
     finally:
         con.close()

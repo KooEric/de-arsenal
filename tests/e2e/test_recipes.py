@@ -68,7 +68,7 @@ def test_csv_cleanup_recipe_runs_end_to_end(tmp_path: Path) -> None:
     assert init_result.exit_code == 0, init_result.output
 
     input_dir = dest / "input"
-    input_dir.mkdir(parents=True)
+    (input_dir / "sample.csv").unlink()  # 레시피에 딸려 오는 샘플 대신 이 테스트의 데이터로
     with (input_dir / "orders.csv").open("w", newline="", encoding="utf-8") as f:
         writer = csv.writer(f)
         writer.writerow(["id", "name", "amount"])
@@ -189,3 +189,34 @@ def test_broken_recipe_fails_the_test(tmp_path: Path) -> None:
     result = runner.invoke(app, ["init", "not-a-real-recipe", "--dest", str(dest)])
     assert result.exit_code == 1
     assert not dest.exists() or not any(dest.iterdir())
+
+
+def test_csv_cleanup_runs_straight_after_init(tmp_path: Path) -> None:
+    """README 첫 화면 그대로: init → run → query. 사용자가 아무것도 넣지 않아도 된다."""
+    dest = tmp_path / "fresh"
+
+    assert runner.invoke(app, ["init", "csv-cleanup", "--dest", str(dest)]).exit_code == 0
+    run_result = runner.invoke(app, ["run", "--project", str(dest)])
+    assert run_result.exit_code == 0, run_result.output
+
+    con = duckdb.connect()
+    try:
+        clean = f"{dest.as_posix()}/data/clean/*.parquet"
+        rows = con.execute(f"SELECT id, zip FROM read_parquet('{clean}') ORDER BY id").fetchall()
+    finally:
+        con.close()
+    # 중복 id=2는 한 행으로, 우편번호의 앞자리 0은 그대로.
+    assert rows == [(1, "02139"), (2, "94105"), (3, "01234")]
+
+
+def test_empty_input_folder_is_a_clear_error(tmp_path: Path) -> None:
+    dest = tmp_path / "empty"
+    runner.invoke(app, ["init", "csv-cleanup", "--dest", str(dest)])
+    (dest / "input" / "sample.csv").unlink()
+
+    result = runner.invoke(app, ["run", "--project", str(dest)])
+
+    assert result.exit_code == 1
+    assert "matches no files" in result.output and "allow_empty" in result.output
+    assert not list((dest / "data").rglob("*.parquet"))
+    assert not (dest / "data" / "clean.tmp").exists()

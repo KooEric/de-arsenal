@@ -8,8 +8,9 @@ import importlib
 import json
 import os
 import sys
-from collections.abc import Generator
+from collections.abc import Generator, Iterator
 from importlib import resources
+from importlib.resources.abc import Traversable
 from pathlib import Path
 from typing import Any
 
@@ -50,18 +51,28 @@ def _scaffold_recipe(recipe: str, dest: Path) -> None:
         raise FatalError(f"unknown recipe: {recipe!r} (available: {', '.join(available)})")
 
     src_root = resources.files("arsenal") / _RECIPES_DIRNAME / recipe
-    entries = [p for p in src_root.iterdir() if p.is_file()]
+    entries = list(_recipe_files(src_root, Path()))
 
     try:
-        dest.mkdir(parents=True, exist_ok=True)
-        for entry in entries:
-            target = dest / entry.name
-            if target.exists():
-                raise FatalError(f"refusing to overwrite existing file: {target}")
-        for entry in entries:
-            (dest / entry.name).write_bytes(entry.read_bytes())
+        for relative, _ in entries:
+            if (dest / relative).exists():
+                raise FatalError(f"refusing to overwrite existing file: {dest / relative}")
+        for relative, entry in entries:
+            target = dest / relative
+            target.parent.mkdir(parents=True, exist_ok=True)
+            target.write_bytes(entry.read_bytes())
     except OSError as e:
         raise FatalError(f"cannot scaffold recipe into {dest}: {e}") from e
+
+
+def _recipe_files(root: Traversable, prefix: Path) -> Iterator[tuple[Path, Traversable]]:
+    """레시피의 모든 파일을 (상대 경로, 리소스)로 — 하위 디렉터리(input/ 샘플)까지."""
+    for entry in sorted(root.iterdir(), key=lambda item: item.name):
+        if entry.is_dir():
+            if entry.name != "__pycache__":
+                yield from _recipe_files(entry, prefix / entry.name)
+        else:
+            yield prefix / entry.name, entry
 
 
 @app.command()

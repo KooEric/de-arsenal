@@ -96,6 +96,8 @@ DuckDB 파일 싱크 (M2) — temp 테이블 → MERGE로 멱등 upsert.
 | `format` | "auto" \| "csv" \| "jsonl" \| "excel" | No | `"auto"` |  |
 | `encoding` | string | No | `"utf-8"` |  |
 | `null_values` | array of string | No |  | CSV cell values read as null. Default is only the empty cell: tokens such as 'NA' are real data (North America, Namibia). Add them explicitly if the file uses them as null markers. |
+| `column_types` | object<string, "string" \| "int64" \| "float64" \| "bool" \| "date" \| "timestamp"> | No |  | CSV only. Pin a column's type instead of inferring it per file, e.g. `{zip: string}`. A named column missing from a file is an error. |
+| `allow_empty` | boolean | No | `false` | By default a `path` that matches no files is an error (a wrong path looks exactly like 'nothing to do'). Set true for a drop folder that may be empty. |
 
 ## PaginationSpec
 
@@ -109,6 +111,7 @@ DuckDB 파일 싱크 (M2) — temp 테이블 → MERGE로 멱등 upsert.
 | `cursor_param` | string \| null | No | `null` |  |
 | `cursor_path` | string \| null | No | `null` |  |
 | `record_path` | string \| null | No | `null` |  |
+| `stop_on` | "short_page" \| "empty_page" | No | `"short_page"` | offset/page modes: when to stop. `short_page` stops at the first page with fewer than `size` rows, which ends the run after ONE page if the server caps its page size below `size`. `empty_page` keeps going until a page has no rows (one extra request) and is safe when the server's cap is unknown. |
 
 ## ParquetSinkSpec
 

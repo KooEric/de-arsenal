@@ -288,6 +288,28 @@
           },
           "title": "Null Values",
           "type": "array"
+        },
+        "column_types": {
+          "additionalProperties": {
+            "enum": [
+              "string",
+              "int64",
+              "float64",
+              "bool",
+              "date",
+              "timestamp"
+            ],
+            "type": "string"
+          },
+          "description": "CSV only. Pin a column's type instead of inferring it per file, e.g. `{zip: string}`. A named column missing from a file is an error.",
+          "title": "Column Types",
+          "type": "object"
+        },
+        "allow_empty": {
+          "default": false,
+          "description": "By default a `path` that matches no files is an error (a wrong path looks exactly like 'nothing to do'). Set true for a drop folder that may be empty.",
+          "title": "Allow Empty",
+          "type": "boolean"
         }
       },
       "required": [
@@ -365,6 +387,16 @@
           ],
           "default": null,
           "title": "Record Path"
+        },
+        "stop_on": {
+          "default": "short_page",
+          "description": "offset/page modes: when to stop. `short_page` stops at the first page with fewer than `size` rows, which ends the run after ONE page if the server caps its page size below `size`. `empty_page` keeps going until a page has no rows (one extra request) and is safe when the server's cap is unknown.",
+          "enum": [
+            "short_page",
+            "empty_page"
+          ],
+          "title": "Stop On",
+          "type": "string"
         }
       },
       "required": [

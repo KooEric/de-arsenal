@@ -32,6 +32,15 @@ class PaginationSpec(_Frozen):
     cursor_param: str | None = None  # "cursor" 모드: 커서를 실어 보낼 요청 파라미터명
     cursor_path: str | None = None  # "cursor" 모드: 응답에서 다음 커서를 읽을 dot-path
     record_path: str | None = None  # envelope 내 레코드 배열의 dot-path (None=응답 자체가 배열)
+    stop_on: Literal["short_page", "empty_page"] = Field(
+        default="short_page",
+        description=(
+            "offset/page modes: when to stop. `short_page` stops at the first page with "
+            "fewer than `size` rows, which ends the run after ONE page if the server caps "
+            "its page size below `size`. `empty_page` keeps going until a page has no rows "
+            "(one extra request) and is safe when the server's cap is unknown."
+        ),
+    )
 
     @model_validator(mode="after")
     def _cursor_fields_required(self) -> "PaginationSpec":
@@ -117,6 +126,22 @@ class FileSourceSpec(_Frozen):
             "CSV cell values read as null. Default is only the empty cell: tokens such as "
             "'NA' are real data (North America, Namibia). Add them explicitly if the file "
             "uses them as null markers."
+        ),
+    )
+    column_types: dict[str, Literal["string", "int64", "float64", "bool", "date", "timestamp"]] = (
+        Field(
+            default_factory=dict,
+            description=(
+                "CSV only. Pin a column's type instead of inferring it per file, e.g. "
+                "`{zip: string}`. A named column missing from a file is an error."
+            ),
+        )
+    )
+    allow_empty: bool = Field(
+        default=False,
+        description=(
+            "By default a `path` that matches no files is an error (a wrong path looks "
+            "exactly like 'nothing to do'). Set true for a drop folder that may be empty."
         ),
     )
 
