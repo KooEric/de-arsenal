@@ -5,7 +5,6 @@
 """
 
 import csv
-from collections.abc import Iterator
 from pathlib import Path
 
 import duckdb
@@ -102,16 +101,14 @@ def test_csv_cleanup_recipe_runs_end_to_end(tmp_path: Path) -> None:
 
 
 @pytest.fixture(scope="module")
-def api_to_postgres_pg_url(require_docker: None) -> Iterator[str]:
+def api_to_postgres_pg_url(postgres_url: str) -> str:
     """api-to-postgres 레시피 E2E 전용 Postgres 컨테이너.
 
     testcontainers 모듈이 없거나(미설치) Docker 데몬이 미가용인 환경에서는
     이 fixture를 쓰는 테스트만 스킵된다 — 나머지 레시피 E2E(github-issues/
     csv-cleanup)는 영향받지 않는다.
     """
-    pgtc = pytest.importorskip("testcontainers.postgres")
-    with pgtc.PostgresContainer("postgres:16-alpine") as container:
-        yield container.get_connection_url(driver=None)
+    return postgres_url
 
 
 def test_api_to_postgres_recipe_runs_end_to_end(

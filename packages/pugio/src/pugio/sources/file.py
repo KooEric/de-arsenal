@@ -7,6 +7,7 @@ excel은 optional extra(pugio[excel] → fastexcel) — 미설치 시 FatalError
 """
 
 import glob as glob_module
+import hashlib
 from collections.abc import Iterator
 from pathlib import Path
 from typing import Any
@@ -111,6 +112,17 @@ def _identifier_columns(path: Path, read_opts: Any, table: pa.Table, pinned: set
     return found
 
 
+def _content_hash(path: Path) -> str:
+    digest = hashlib.sha256()
+    try:
+        with path.open("rb") as handle:
+            for chunk in iter(lambda: handle.read(1 << 20), b""):
+                digest.update(chunk)
+    except OSError as e:
+        raise FatalError(f"cannot read {path}: {e}") from e
+    return digest.hexdigest()[:16]
+
+
 class FileSource:
     def __init__(self, spec: FileSourceSpec, *, pipeline: str) -> None:
         self._spec = spec
@@ -128,6 +140,10 @@ class FileSource:
             )
         for p in matches:
             rel = str(Path(p).relative_to(root)) if root.parts else p
+            if self._spec.detect_changes:
+                # 같은 이름으로 덮어써지는 파일(매일 내려받는 export.csv)을 다시 읽기 위해
+                # 내용 해시를 unit_key에 넣는다 — 내용이 같으면 같은 unit이라 건너뛴다.
+                rel = f"{rel}@{_content_hash(Path(p))}"
             yield UnitSpec.create(
                 pipeline=self._pipeline,
                 source=self._spec.path,

@@ -32,6 +32,8 @@ stays v3 and `aquila.db` stays v2. Upgrade steps: [docs/upgrade-0.6.md](docs/upg
   integer type need the same decision.
 - **Pugio warns when files of one run disagree on a column's type**, and fails
   the run under `schema_drift: block`. Pin the type with `source.column_types`.
+- **The Postgres sink stores a timestamp without a time zone as `timestamp`**
+  instead of refusing it. Timestamps with a zone are `timestamptz` as before.
 - **Status labels changed.** Onager, Scutum, Scorpio and Spatha are listed as
   beta instead of stable. No code or API changed with the label.
 
@@ -53,6 +55,16 @@ stays v3 and `aquila.db` stays v2. Upgrade steps: [docs/upgrade-0.6.md](docs/upg
   `short_page`, stops at the first page with fewer than `size` rows; if the
   server caps its page size below `size`, that is the first page. `empty_page`
   costs one extra request and does not depend on the cap.
+- `source.detect_changes` for `type: file`: also key a file on its content, so
+  a file that is overwritten under the same name (a daily `export.csv`) is
+  ingested again. Off by default, where a file is ingested once by its path.
+  Refused with a Parquet sink, which would keep both versions.
+- `examples/deploy/`: a GitHub Actions workflow, a crontab line and a
+  Dockerfile for running a project on a schedule, each keeping the state
+  directory and posting to Slack on failure. Syntax-checked only.
+- Tests that need Postgres use an existing server when
+  `ARSENAL_TEST_POSTGRES_URL` is set (one fresh database per test module), so
+  they run where Docker does not.
 - The `csv-cleanup` recipe ships `input/sample.csv`, so `arsenal init
   csv-cleanup && arsenal run` works without adding data.
 - `docs/adr/` PL-ADR-1..5, `docs/README.md` (index of the design documents),
@@ -63,6 +75,10 @@ stays v3 and `aquila.db` stays v2. Upgrade steps: [docs/upgrade-0.6.md](docs/upg
 - **`arsenal init csv-cleanup` followed by `arsenal run` failed** with a raw
   DuckDB `IO Error` and left an empty `data/clean.tmp` directory: the recipe had
   no input and the collect step reported success with zero rows.
+- **A CSV with a date, a naive timestamp, a small integer or an all-empty
+  column could not be loaded into Postgres** (`unsupported arrow type`). The
+  sink now maps `date`, `time`, `timestamp`, `smallint`/`integer`, `real`,
+  `numeric`, `bytea`, and creates an all-empty column as `text`.
 - A transform whose input has no Parquet files now says which input is empty
   instead of printing the compiled SQL, and removes its temporary directory.
 

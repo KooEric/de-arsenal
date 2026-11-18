@@ -9,7 +9,7 @@ from __future__ import annotations
 
 import os
 import uuid
-from collections.abc import Callable, Generator, Iterator
+from collections.abc import Callable, Generator
 from contextlib import AbstractContextManager, contextmanager
 from dataclasses import dataclass
 from pathlib import Path
@@ -72,10 +72,8 @@ def _sorted(rows: Rows) -> Rows:
 
 
 @pytest.fixture(scope="module")
-def contract_pg_url(require_docker: None) -> Iterator[str]:
-    pgtc = pytest.importorskip("testcontainers.postgres")
-    with pgtc.PostgresContainer("postgres:16-alpine") as container:
-        yield container.get_connection_url(driver=None)
+def contract_pg_url(postgres_url: str) -> str:
+    return postgres_url
 
 
 @pytest.fixture(params=("parquet", "duckdb", "postgres"), ids=str)

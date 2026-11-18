@@ -97,6 +97,7 @@ DuckDB 파일 싱크 (M2) — temp 테이블 → MERGE로 멱등 upsert.
 | `encoding` | string | No | `"utf-8"` |  |
 | `null_values` | array of string | No |  | CSV cell values read as null. Default is only the empty cell: tokens such as 'NA' are real data (North America, Namibia). Add them explicitly if the file uses them as null markers. |
 | `column_types` | object<string, "string" \| "int64" \| "float64" \| "bool" \| "date" \| "timestamp"> | No |  | CSV only. Pin a column's type instead of inferring it per file, e.g. `{zip: string}`. A named column missing from a file is an error. |
+| `detect_changes` | boolean | No | `false` | By default a file is ingested once, by its path: editing or overwriting an already-ingested file changes nothing. Set true to also key on the file's content, so a changed file is ingested again. Requires an upsert sink (`duckdb` or `postgres`): a Parquet sink would keep both versions. |
 | `allow_empty` | boolean | No | `false` | By default a `path` that matches no files is an error (a wrong path looks exactly like 'nothing to do'). Set true for a drop folder that may be empty. |
 
 ## PaginationSpec

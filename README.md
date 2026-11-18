@@ -130,6 +130,9 @@ aquila search orders
 Ballista needs a Kubernetes cluster, object storage and an Iceberg catalog; its setup is
 in [packages/ballista/README.md](packages/ballista/README.md).
 
+To run a project on a schedule (cron, GitHub Actions, containers), start from
+[examples/deploy](examples/deploy).
+
 Recipes for `arsenal init`: `csv-cleanup` (folder of CSVs → dedup and cast),
 `github-issues` (REST API → clean table), `api-to-postgres` (REST API → validation →
 Postgres upsert, needs `[postgres]`).

@@ -23,14 +23,12 @@ DSN_ENV = "PUGIO_TEST_SCANNER_PG_DSN"
 
 
 @pytest.fixture(scope="module")
-def pg_url(require_docker: None) -> Iterator[str]:
-    with pgtc.PostgresContainer("postgres:16-alpine") as container:
-        url = container.get_connection_url(driver=None)
-        with psycopg.connect(url) as con, con.cursor() as cur:
-            cur.execute("CREATE TABLE orders (id INTEGER PRIMARY KEY, v TEXT)")
-            cur.executemany("INSERT INTO orders VALUES (%s, %s)", [(i, "x") for i in range(1, 251)])
-            con.commit()
-        yield url
+def pg_url(postgres_url: str) -> str:
+    with psycopg.connect(postgres_url) as con, con.cursor() as cur:
+        cur.execute("CREATE TABLE orders (id INTEGER PRIMARY KEY, v TEXT)")
+        cur.executemany("INSERT INTO orders VALUES (%s, %s)", [(i, "x") for i in range(1, 251)])
+        con.commit()
+    return postgres_url
 
 
 @pytest.fixture

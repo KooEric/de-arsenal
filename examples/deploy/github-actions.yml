@@ -1,0 +1,57 @@
+# Run an Arsenal project on a schedule with GitHub Actions.
+#
+# Copy this file to .github/workflows/pipeline.yml in the repository that holds
+# your arsenal.yaml, then add the secrets it names (Settings → Secrets → Actions).
+name: pipeline
+
+on:
+  schedule:
+    - cron: "23 18 * * *"   # daily 03:23 KST. GitHub cron is UTC and can start late.
+  workflow_dispatch:
+
+# Two runs of one pipeline must not overlap; a second run would be refused anyway.
+concurrency:
+  group: pipeline
+  cancel-in-progress: false
+
+jobs:
+  run:
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    env:
+      # Name each secret your YAML reads through *_env / ${...}.
+      PG_DSN: ${{ secrets.PG_DSN }}
+      API_TOKEN: ${{ secrets.API_TOKEN }}
+    steps:
+      - uses: actions/checkout@v7
+      - uses: astral-sh/setup-uv@68559e99cc807c1eb7e9238fd43a15bba460eec2 # v10.3.3
+      - run: uv tool install "de-arsenal[postgres]==0.6.*"
+
+      # The state directory (.arsenal/) is what lets a run skip finished work.
+      # A fresh runner has none, so it is restored from the newest cache and saved
+      # again afterwards, also after a failure. If the cache is ever lost the next
+      # run fetches everything again: slower, but upsert sinks and deterministic
+      # Parquet file names keep the result the same. A `cursor` source restarts
+      # from its beginning in that case.
+      - uses: actions/cache/restore@v4
+        with:
+          path: .arsenal
+          key: arsenal-state-${{ github.run_id }}
+          restore-keys: arsenal-state-
+
+      - run: arsenal run
+
+      - if: always()
+        uses: actions/cache/save@v4
+        with:
+          path: .arsenal
+          key: arsenal-state-${{ github.run_id }}
+
+      - name: Notify Slack on failure
+        if: failure()
+        env:
+          SLACK_WEBHOOK_URL: ${{ secrets.SLACK_WEBHOOK_URL }}
+          RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+        run: |
+          curl -sS -X POST -H 'Content-Type: application/json' \
+            -d "{\"text\": \"Pipeline failed: ${RUN_URL}\"}" "$SLACK_WEBHOOK_URL"

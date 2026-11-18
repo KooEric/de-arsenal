@@ -129,6 +129,9 @@ aquila search orders
 Ballista는 Kubernetes 클러스터, 객체 스토리지, Iceberg 카탈로그가 있어야 한다. 준비 방법은
 [packages/ballista/README.md](packages/ballista/README.md)에 있다.
 
+주기적으로 실행하려면(cron, GitHub Actions, 컨테이너) [examples/deploy](examples/deploy)에서
+시작한다.
+
 `arsenal init` 레시피: `csv-cleanup`(CSV 폴더 → dedup·cast), `github-issues`(REST API →
 정리된 테이블), `api-to-postgres`(REST API → 검증 → Postgres upsert, `[postgres]` 필요).
 

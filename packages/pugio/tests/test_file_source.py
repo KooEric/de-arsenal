@@ -175,3 +175,39 @@ def test_a_path_matching_nothing_is_an_error_unless_allowed(tmp_path: Path) -> N
 
     allowed = FileSourceSpec(type="file", path=pattern, allow_empty=True)
     assert list(FileSource(allowed, pipeline="p").units()) == []
+
+
+def test_detect_changes_reingests_an_overwritten_file(tmp_path: Path) -> None:
+    def unit_keys(detect: bool) -> list[str]:
+        spec = FileSourceSpec(type="file", path=str(tmp_path / "*.csv"), detect_changes=detect)
+        return [unit.unit_key for unit in FileSource(spec, pipeline="p").units()]
+
+    export = tmp_path / "export.csv"
+    export.write_text("id,paid\n1,false\n", encoding="utf-8")
+    plain, tracked = unit_keys(False), unit_keys(True)
+
+    assert unit_keys(True) == tracked  # same content, same unit: skipped on a rerun
+    export.write_text("id,paid\n1,true\n", encoding="utf-8")
+    assert unit_keys(False) == plain == ["export.csv"]  # default: the edit is invisible
+    assert unit_keys(True) != tracked and unit_keys(True)[0].startswith("export.csv@")
+
+
+def test_detect_changes_is_refused_with_a_parquet_sink(tmp_path: Path) -> None:
+    from pydantic import ValidationError
+
+    from arsenal_core.spec.models import PipelineSpec
+
+    raw: dict[str, object] = {
+        "name": "p",
+        "source": {"type": "file", "path": str(tmp_path / "*.csv"), "detect_changes": True},
+        "sink": {"type": "parquet", "path": str(tmp_path / "out")},
+    }
+    with pytest.raises(ValidationError, match="would then hold the old and the new rows"):
+        PipelineSpec.model_validate(raw)
+    raw["sink"] = {
+        "type": "duckdb",
+        "path": str(tmp_path / "o.duckdb"),
+        "table": "t",
+        "merge_key": ["id"],
+    }
+    assert PipelineSpec.model_validate(raw).source.type == "file"
