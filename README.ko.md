@@ -1,6 +1,7 @@
 # DE Arsenal
 
-> **노트북 한 대가 데이터 플랫폼이 된다.** 설치 하나, 명령 하나로 수집 → 검증 → 변환 → 쿼리.
+한 대의 머신에서 도는 데이터 파이프라인용 CLI 도구 모음이다. API·파일·DB에서 Parquet로
+수집하고, DuckDB로 변환하고, 결과를 쿼리한다. 파이프라인은 YAML 파일이고 띄울 서버가 없다.
 
 [English](README.md) | **한국어**
 
@@ -9,34 +10,59 @@
 [![CI](https://github.com/KooEric/de-arsenal/actions/workflows/ci.yml/badge.svg)](https://github.com/KooEric/de-arsenal/actions/workflows/ci.yml)
 [![License](https://img.shields.io/badge/license-Apache--2.0-blue)](LICENSE)
 
-새벽 3시에 죽은 수집 작업, 돌던 중에 만료된 토큰, 아무도 쿼리하지 못하는 CSV 폴더 —
-DE Arsenal은 이런 문제를 선언형 명령 하나로 처리한다. 서버도, 클러스터도, DAG 코드도 없다.
-
 ```bash
 uv tool install de-arsenal          # 또는: pip install de-arsenal
-arsenal init csv-cleanup            # 레시피로 시작
-arsenal run                         # 수집 → 검증 → 변환. 끊겨도 다시 실행하면 이어서
+arsenal init csv-cleanup            # input/에 샘플 CSV가 든 프로젝트를 만든다
+arsenal run                         # 수집 후 변환
 arsenal query "SELECT * FROM './data/clean/*.parquet' LIMIT 10"
 ```
 
-Databricks·Snowflake 수준의 **완성도**를, 정반대의 **형태**로. 거대 플랫폼이 백 가지를 80점으로 할 때
-우리는 한 가지를 100점으로 한다. 멱등·재개·검증이 기본값이고, 마진 없는 비용 구조는 아키텍처에서
-나온다([근거](docs/07-cost-efficiency.md)).
+이 네 줄은 적힌 그대로 실행된다. CI가 변경마다 같은 `init`과 `run`을 실행한다
+(`tests/e2e/test_recipes.py`).
+자기 데이터로 하려면 `input/sample.csv`를 바꾼다.
 
-## 현황 — v0.5.0
+## 하는 일
 
-| | |
-|---|---|
-| **안정** | 수집·변환·우산 CLI와 P1 확장 전부 — dlt/dbt 인터롭, schema drift 정책, 클라우드 sink, Python UDF, 관측성, 오케스트레이션, 백필, 데이터 계약 |
-| **Beta** (0.4) | **Hasta** — 폴링 마이크로배치 스트리밍·Postgres outbox CDC · **Ballista** — portable 변환을 Spark/Kubernetes에서 실행, Iceberg 출력 |
-| **Preview** (0.5) | **Aquila** — 파일 하나로 된 카탈로그: 데이터셋·스키마 이력·도구 간 lineage·계약·태그 |
-| **실험** | **Augur** — 자연어 질문을 SQL로, eval 하네스 포함 |
-| **업그레이드** | [0.4 → 0.5](docs/upgrade-0.5.md) (상태 마이그레이션 없음) · [0.3 → 0.4](docs/upgrade-0.4.md) · [CHANGELOG](CHANGELOG.md) |
+- **이어서 한다.** 페이지·파일·batch 하나의 쓰기가 끝날 때마다 기록한다. Ctrl-C나
+  `kill -9`로 멈춘 뒤 다시 실행하면 끝난 단위는 건너뛴다.
+- **중복을 만들지 않는다.** 출력 파일명과 upsert 키가 입력 단위에서 정해지므로, 같은
+  단위를 다시 처리하면 자기 자신을 덮어쓴다.
+- **SQL을 보여 준다.** `gladius compile`이 변환이 실행할 DuckDB SQL을 출력한다.
+- **애매한 입력은 조용히 넘어가지 않는다.** 매칭되는 파일이 없는 경로, 파라미터와 맞지
+  않는 페이지네이션 모드, 파일마다 타입이 다른 컬럼은 성공으로 끝나지 않고 에러나
+  경고가 된다.
 
-## 필요한 만큼 설치
+sink별·도구별로 무엇을 보장하고 무엇을 보장하지 않는지는 [docs/08-limits.md](docs/08-limits.md)에
+있다. 단일 노드 도구다. 측정된 수치는 노트북에서 1 GB Parquet를 웜 캐시로 변환한 DuckDB
+벤치마크 하나뿐이고([benchmarks/RESULTS.md](benchmarks/RESULTS.md)), 수집 벤치마크와 다른
+도구와의 비교는 아직 없다.
 
-도구마다 따로 설치할 수 있고, 우산 패키지는 배치 코어만 끌어온다. Spark·Kubernetes·Iceberg·Kafka
-클라이언트 같은 무거운 런타임은 기본 설치에 절대 들어가지 않는다.
+## 도구
+
+`arsenal`은 프로젝트 전체를 실행한다. 그 아래 도구들은 각자 따로 설치해 쓸 수 있고,
+서로 Parquet 파일로만 데이터를 주고받는다.
+
+| 도구 | 하는 일 | 패키지 | 상태 |
+|---|---|---|---|
+| **Arsenal** | 프로젝트 CLI: `init`, `run`, `status`, `query`, 시작용 레시피 3종 | `de-arsenal` | stable |
+| **Pugio** | 수집: REST, CSV/JSONL/Excel, DB, dlt 소스 → Parquet, DuckDB, Postgres, S3/GCS | `pugio` | stable |
+| **Gladius** | YAML 변환을 DuckDB SQL로 컴파일. 증분 실행, Python UDF, 즉석 쿼리 | `de-gladius` | stable |
+| **Onager** | 로컬 Parquet의 small-file compaction과 격리 백필 | `de-onager` | beta |
+| **Scutum** | 라이브러리: Arrow 데이터 계약과 파일 잠금 (Pugio가 사용) | `de-scutum` | beta |
+| **Scorpio** | 라이브러리: freshness 판정과 스트림 상태 (`status` 명령들이 사용) | `de-scorpio` | beta |
+| **Spatha** | 라이브러리: 의존성·신호·우선순위·실행 window로 지금 실행할 태스크를 고른다. 스케줄러 데몬은 없다 | `spatha` | beta |
+| **Hasta** | 스트리밍: cursor API 폴링 마이크로배치, Postgres outbox CDC | `de-hasta` | beta |
+| **Ballista** | Gladius 변환을 Spark/Kubernetes에서 실행하고 Iceberg에 커밋 | `de-ballista` | beta |
+| **Aquila** | SQLite 파일 하나로 된 카탈로그: 데이터셋, 스키마 이력, lineage, 계약, 태그 | `de-aquila` | preview |
+| **Augur** | 자연어 질문을 SQL로. eval 하네스 포함 | `de-augur` | experimental |
+| **Pilum** | Reverse ETL: 바뀐 레코드를 HTTP 끝점과 Slack으로, 변경당 한 번 보낸다 | `de-pilum` | experimental |
+
+**stable**: 같은 minor 안에서는 YAML 필드가 추가만 되고, 상태 파일은 앞으로 마이그레이션된다.
+**beta**: 동작하고 테스트되지만 이 저장소 밖 사용 사례가 적다.
+**preview / experimental**: 형식과 명령이 어느 릴리스에서든 바뀔 수 있다.
+1.0 이전이며 장기 API 약속은 없다. [CHANGELOG](CHANGELOG.md) 참고.
+
+## 설치
 
 | 하고 싶은 것 | 설치 |
 |---|---|
@@ -45,12 +71,29 @@ Databricks·Snowflake 수준의 **완성도**를, 정반대의 **형태**로. �
 | …+ 스트리밍·CDC (Hasta) | `uv tool install "de-arsenal[streaming]"` |
 | …+ Spark on Kubernetes 실행 (Ballista) | `uv tool install "de-arsenal[distributed]"` |
 | …+ 카탈로그 (Aquila) | `uv tool install "de-arsenal[catalog]"` |
+| …+ reverse ETL (Pilum) | `uv tool install "de-arsenal[dispatch]"` |
 | …+ dbt·dlt 프로젝트 | `"de-arsenal[dbt]"` · `"de-arsenal[dlt]"` |
-| 도구 하나만 | `pip install pugio` · `de-gladius` · `de-hasta` · `de-aquila` · … |
+| 도구 하나만 | `pip install pugio` · `de-gladius` · `de-hasta` · `de-aquila` · `de-pilum` · … |
 
-## 빠른 시작
+기본 설치는 Spark·Kubernetes·Iceberg·Postgres 드라이버를 끌어오지 않는다
+(`packages/arsenal/tests/test_base_install.py`가 확인한다).
+소스에서 쓰려면 clone 후 `uv sync`, 명령 앞에 `uv run`을 붙인다.
 
-**1. Pugio로 수집.** 중간에 죽여도(Ctrl-C) 다시 실행하면 이어서 한다. 다 끝난 뒤 다시 실행하면 아무 일도 없다.
+## 예제
+
+아래 블록은 모두 이 저장소를 clone한 상태에서 실행된다.
+
+**오프라인으로 수집·변환** ([examples/quickstart](examples/quickstart)):
+
+```bash
+cd examples/quickstart
+pugio run collect.yaml                 # orders.csv → ./data/orders
+gladius compile transform.yaml         # SQL 출력
+gladius run transform.yaml             # → ./data/orders_clean
+gladius query "SELECT * FROM './data/orders_clean/*.parquet'"
+```
+
+**REST API에서 수집** (GitHub 토큰 필요):
 
 ```bash
 export GITHUB_TOKEN=ghp_...
@@ -58,113 +101,48 @@ pugio run examples/github-issues.yaml
 pugio status examples/github-issues.yaml --cost --max-age-seconds 86400
 ```
 
-**2. Gladius로 변환.** 선언형 단계가 SQL로 컴파일되고, DuckDB에서 실행되기 전에 그 SQL을 읽어 볼 수 있다.
+**cursor API에서 스트리밍** (`[streaming]`):
 
 ```bash
-gladius compile examples/transform.yaml      # 실행될 SQL 그대로 — 마법 없음
-gladius run examples/transform.yaml
-gladius query "SELECT * FROM './data/issues_clean/*.parquet' LIMIT 10"
-```
-
-**3. 아니면 Arsenal이 프로젝트 전체를** `arsenal.yaml` 순서대로 돌린다.
-
-```bash
-arsenal init --list          # github-issues · csv-cleanup · api-to-postgres
-arsenal init csv-cleanup
-arsenal run
-arsenal status               # 스트림 상태·분산 run·카탈로그 — JSON, 경보가 있으면 exit 1
-```
-
-| 레시피 | 파이프라인 |
-|---|---|
-| `github-issues` | REST API → 정리된 테이블 |
-| `csv-cleanup` | CSV 폴더 → dedup / cast |
-| `api-to-postgres` | REST API → 검증 게이트 → Postgres upsert (`[postgres]` 필요) |
-
-**소스에서 쓰려면:** clone 후 `uv sync`, 위 명령 앞에 `uv run`을 붙인다.
-
-## 배치 너머
-
-**스트리밍** — cursor API나 Postgres outbox를, 크래시에도 살아남는 체크포인트로 받는다.
-
-```bash
-python examples/hasta/fake_orders_api.py &           # 실습용 로컬 cursor API
-hasta run examples/hasta/orders-stream.yaml          # Ctrl-C는 진행 중 batch를 커밋하고 멈춘다
+python examples/hasta/fake_orders_api.py &
+hasta run examples/hasta/orders-stream.yaml      # Ctrl-C는 진행 중 batch를 커밋하고 멈춘다
 hasta checkpoint show examples/hasta/orders-stream.yaml
 ```
 
-**분산 실행** — Gladius 변환을 Spark/Kubernetes에서 돌리고, 결과는 run마다 정확히 한 번 Iceberg에 커밋된다.
+**바뀐 레코드를 끝점으로 보내기** (`[dispatch]`):
 
 ```bash
-ballista plan big.yaml --profile spark.yaml --probe  # 실제 클러스터·스토리지·카탈로그부터 확인
-ballista run big.yaml --profile spark.yaml --input-version auto
+python examples/pilum/fake_alerts_api.py &
+export ALERTS_URL=http://127.0.0.1:8766/alerts
+pilum plan examples/pilum/alerts.yaml            # 무엇이 나갈지만 보여 준다. 보내지 않는다
+pilum run examples/pilum/alerts.yaml             # 2건 전송
+pilum run examples/pilum/alerts.yaml             # 0건: 바뀐 것이 없다
 ```
 
-**카탈로그** — 레포가 만드는 모든 데이터셋을 한곳에. 어떤 도구도 Aquila에 의존하지 않고, 스캔은 상태 DB에 쓰지 않는다.
+**프로젝트 카탈로그** (`[catalog]`). 한 번 이상 실행한 프로젝트 디렉터리에서:
 
 ```bash
 aquila scan
-aquila lineage orders_daily --direction up --format mermaid
-aquila history orders                                # 스키마 버전별 diff
-aquila tag orders pii=true && aquila search pii
+aquila search orders
 ```
 
-## 무기 체계
+Ballista는 Kubernetes 클러스터, 객체 스토리지, Iceberg 카탈로그가 있어야 한다. 준비 방법은
+[packages/ballista/README.md](packages/ballista/README.md)에 있다.
 
-사용자는 `arsenal` 하나만 알면 된다. 그 아래는 문제마다 하나씩인 독립 도구들이고, Arrow/Parquet 허브로
-느슨하게 맞물려 락인이 없다.
-
-| 무기 | 하는 일 | 패키지 | 상태 |
-|---|---|---|---|
-| **Arsenal** | 우산 CLI — `init` / `run` / `status` / `query`, 원클릭 레시피 3종 | `de-arsenal` | ✅ 안정 |
-| **Pugio** | 수집·적재 — REST·파일·DB·dlt, 재개 가능하고 멱등한 sink | `pugio` | ✅ 안정 |
-| **Gladius** | 선언형 변환을 DuckDB SQL로 컴파일, 증분 실행·UDF·즉석 쿼리 | `de-gladius` | ✅ 안정 |
-| **Scutum** | 데이터 계약, DLQ 정책, 재시도·backoff가 있는 파일 잠금 | `de-scutum` | ✅ 안정 |
-| **Scorpio** | freshness 경보, lineage, 스트림 상태와 run 요약 | `de-scorpio` | ✅ 안정 |
-| **Spatha** | 오케스트레이션 — 신호를 아는 DAG, 우선순위, 실행 window, 잠금, 명령 태스크 | `spatha` | ✅ 안정 |
-| **Onager** | 격리된 백필과 small-file compaction, 실행 중인 스트림 옆에서도 안전 | `de-onager` | ✅ 안정 |
-| **Hasta** | 스트리밍·CDC — 폴링 마이크로배치, Postgres outbox, fenced 체크포인트 | `de-hasta` | 🧪 beta |
-| **Ballista** | 분산 변환 — Spark on Kubernetes, Iceberg 커밋, DuckDB↔Spark 동치성 | `de-ballista` | 🧪 beta |
-| **Aquila** | 카탈로그·거버넌스 — 데이터셋 레지스트리, 스키마 이력, lineage, 계약, 검색 | `de-aquila` | 🧪 preview |
-| **Augur** | 레이크 위의 자연어 → SQL(스키마 RAG), 실패 모드 eval 하네스 | `de-augur` | 🧪 실험 |
-| **Pilum** | Reverse ETL — webhook·HTTP API·Slack으로 멱등 발사 | — | 📋 계획 (0.6) |
-
-Databricks 제품군과의 대응표: [docs/00-overview.md](docs/00-overview.md).
-
-## 원칙
-
-네 가지 약속을 동시에 지킨다. 하나를 위해 다른 하나를 희생하지 않는다.
-
-- **가볍게** — 도구 하나만 집어 바로 쓴다. `pip install pugio` 하나로도 완결된 시작이다.
-- **빠르게** — 벌크·벡터화·병렬. 작다고 느리지 않다.
-- **정확하게** — 멱등·재개·검증이 기본값. 끊겨도 중복도 누락도 없다.
-- **누구나 쉽게** — YAML, 가끔 SQL. 분석가가 직접 쓰고, 작성할 DAG 코드가 없다.
-
-무엇을 보장하는지, 그리고 무엇을 보장하지 않는지도 똑같이 분명하게: [docs/08-limits.md](docs/08-limits.md).
+`arsenal init` 레시피: `csv-cleanup`(CSV 폴더 → dedup·cast), `github-issues`(REST API →
+정리된 테이블), `api-to-postgres`(REST API → 검증 → Postgres upsert, `[postgres]` 필요).
 
 ## 문서
 
-설계 문서는 한국어로 쓰여 있고, YAML 레퍼런스와 CHANGELOG는 언어 중립이다.
-
-| 여기서 시작 | |
+| | |
 |---|---|
-| [docs/tools.md](docs/tools.md) | 도구별 사용 시점과 빠른 시작 |
-| [docs/reference/pipeline-schema.md](docs/reference/pipeline-schema.md) · [transform-schema.md](docs/reference/transform-schema.md) | 코드에서 생성한 YAML 필드 전체 |
-| [docs/08-limits.md](docs/08-limits.md) | 정직한 한계선 — 단일 노드 envelope, sink·도구별 보장 |
-| [CHANGELOG.md](CHANGELOG.md) · [업그레이드 0.5](docs/upgrade-0.5.md) · [업그레이드 0.4](docs/upgrade-0.4.md) | 변경 내역과 업그레이드 방법 |
+| [docs/tools.md](docs/tools.md) | 도구별 사용 시점과 짧은 시작 방법 |
+| [docs/reference/](docs/reference/) | 코드에서 생성한 YAML 필드 전체 |
+| [docs/08-limits.md](docs/08-limits.md) | 보장하는 것과 보장하지 않는 것 |
+| [CHANGELOG.md](CHANGELOG.md) · [0.6 업그레이드](docs/upgrade-0.6.md) | 변경 내역과 업그레이드 방법 |
+| [docs/README.md](docs/README.md) | 설계 문서, 결정 기록, 릴리스 절차 |
 
-| 설계 | |
-|---|---|
-| [00-overview](docs/00-overview.md) · [01-scope](docs/01-scope.md) · [roadmap](docs/roadmap.md) | 비전·포지셔닝·범위, 원본 문제 정의 |
-| [02-architecture](docs/02-architecture.md) · [03-tech-stack](docs/03-tech-stack.md) | 모노레포 구조, 공통 코어, 상태 모델, 기술 선택 |
-| [07-cost-efficiency](docs/07-cost-efficiency.md) · [09-oss-leverage](docs/09-oss-leverage.md) | 비용 구조, 오픈소스에서 빌려 오는 것과 그 이유 |
-
-| 개발·운영 | |
-|---|---|
-| [04-implementation-plan](docs/04-implementation-plan.md) · [plans/](docs/plans/) | 마일스톤별 작업 분해와 상세 TDD 계획 |
-| [05-testing-plan](docs/05-testing-plan.md) · [06-conventions](docs/06-conventions.md) | 테스트 전략, 코딩·커밋·CI 컨벤션 |
-| [10-augur-eval-protocol](docs/10-augur-eval-protocol.md) · [dogfooding](docs/dogfooding.md) | Augur 평가 절차, 2주 도그푸딩 runbook |
-| [release](docs/release.md) | 버전·빌드·PyPI 릴리스 절차 |
+레퍼런스와 CHANGELOG는 영어, 가이드와 설계 문서는 한국어다.
 
 ## 라이선스
 

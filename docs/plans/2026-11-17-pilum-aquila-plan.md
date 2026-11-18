@@ -236,4 +236,9 @@ pilum reset churn.yaml --confirm  # 원장 초기화 (다음 run이 전량 재�
 | AQ-3 | ✅ | 계약 해시 변경·스키마 불일치, 태그·FTS5 검색, deprecated 하류 경고 |
 | AQ-4 | ✅ | Augur `--aquila`(34 case eval 결과 동일), `arsenal status` catalog 블록, Scorpio freshness, Hasta/Ballista 스캐너 |
 | 0.5.0 릴리스 | 준비 완료 | 12개 패키지 0.5.0·핀 `>=0.5,<0.6`, CHANGELOG·[upgrade-0.5](../upgrade-0.5.md)·[release](../release.md) 갱신. 남은 것: `de-aquila` pending publisher 등록 → 최초 게시 → `v0.5.0` 태그 |
-| Pilum PL-0~ | 대기 | Aquila 0.5.0 출시 후 |
+| PL-0 | ✅ (0.6.0) | `packages/pilum` 골격, 독립 설치 테스트, [PL-ADR-1~5](../adr/README.md), release workflow 등록 |
+| PL-1 | ✅ 변경 있음 | diff 코어(insert/upsert/mirror)와 `pilum plan`. 원장은 StateStore v4가 아니라 전용 파일(PL-ADR-3) |
+| PL-2 | 부분 | generic HTTP·Slack, 멱등 header, rate limit, retry. **없음:** bulk 전송, OAuth 토큰 갱신 |
+| PL-3 | ✅ | DLQ·`replay`, 첫 실행 상한, mirror 삭제 비율 상한, 토큰 마스킹 |
+| PL-4 | 대기 | `arsenal run` 단계, Scorpio 메트릭, Spatha 태스크, Aquila 하류 등록 |
+| 상태 | experimental | 0.6.0에 `de-pilum` 첫 게시. 스펙·원장 형식은 0.x에서 바뀔 수 있다 |

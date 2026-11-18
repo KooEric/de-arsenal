@@ -14,6 +14,8 @@ DE Arsenal은 하나의 거대한 프레임워크가 아니라, Arrow/Parquet와
 | [Scorpio](../packages/scorpio/README.md) | 마지막 성공 시각을 기준으로 stale 상태를 판단할 때 | Python에서 `assess_freshness` 호출 | 외부 관측 플랫폼 없이 결정적인 freshness 판정을 만든다. |
 | [Spatha](../packages/spatha/README.md) | 의존성·우선순위·실행 window를 반영한 작업 실행이 필요할 때 | Python에서 `Workflow.run_ready` 호출 | 안정된 DAG 순서와 signal-aware 실행, 선택적 cross-process lock을 제공한다. |
 | [Augur](../packages/augur/README.md) | Parquet 레이크에 자연어로 묻고, 생성 SQL의 실패 모드를 재고 싶을 때 | `augur index` → `augur ask "..."` → `augur eval` | 스키마 RAG + SELECT-only 가드 + 실패 모드 자동 분류. 결과는 Parquet이라 `gladius query`로 집계한다. |
+| [Aquila](../packages/aquila/README.md) | 어떤 데이터셋이 어디 있고 무엇이 무엇을 읽는지 찾을 때 | `aquila scan` → `aquila search` | 파일 하나, 다른 도구가 의존하지 않음 |
+| [Pilum](../packages/pilum/README.md) | 변환 결과의 변경분을 HTTP 끝점·Slack으로 보낼 때 (experimental) | `pilum plan` → `pilum run` | 바뀐 레코드만, 2xx 뒤에만 기록 |
 | [arsenal-core](../packages/arsenal-core/README.md) | 자체 도구를 만들거나 상태·재시도 규약을 재사용할 때 | Python에서 `StateStore` 사용 | 결정적 unit ID와 SQLite 상태 저장소로 재개·멱등 기반을 제공한다. |
 
 ## 1. Arsenal — 대부분의 사용자에게 시작점
@@ -157,7 +159,23 @@ aquila tag orders pii=true && aquila search pii
 계약은 최신 스키마와 대조해 `aquila show`가 어긋남을 보고하고, deprecated
 데이터셋을 읽는 하류는 scan·show마다 경고된다. 상세: [packages/aquila/README.md](../packages/aquila/README.md).
 
-## 9. arsenal-core — 확장 도구를 위한 신뢰성 기반
+## 9. Pilum (`de-pilum`) — 바뀐 레코드를 밖으로 보내기 (experimental)
+
+Parquet 데이터셋이나 DuckDB 쿼리 결과를 HTTP 끝점·Slack webhook으로 보낸다. 실행마다 소스를
+로컬 원장과 비교해 새 키, 내용이 바뀐 키, (`mirror` 모드에서) 사라진 키만 보낸다.
+
+```bash
+pip install de-pilum                 # 또는 de-arsenal[dispatch]
+pilum plan dispatch.yaml             # 건수와 키 샘플. 보내지 않는다
+pilum run dispatch.yaml
+pilum status dispatch.yaml           # 원장 크기, 마지막 실행, DLQ
+```
+
+전달은 at-least-once다. 끝점이 `Idempotency-Key`로 중복을 걸러 줄 때만 정확히 한 번이 된다.
+원장이 유일한 기억이므로 끝점을 밖에서 고치면 Pilum은 모른다. 실행 가능한 예제는
+[examples/pilum](../examples/pilum), 상세는 [packages/pilum/README.md](../packages/pilum/README.md).
+
+## 10. arsenal-core — 확장 도구를 위한 신뢰성 기반
 
 일반 사용자는 직접 설치할 필요가 없지만, DE Arsenal에 새 source/sink/도구를
 붙일 때 공통 상태 모델과 재시도 규약을 재사용할 수 있다.

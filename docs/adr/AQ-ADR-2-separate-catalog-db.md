@@ -21,4 +21,4 @@
   바이트 단위로 확인한다.
 - 실행 중인 러너와 동시에 스캔해도 안전하다. 단 WAL DB의 아직 체크포인트되지 않은 마지막
   커밋은 이번 스캔에서 안 보일 수 있고, 다음 스캔에서 반영된다.
-- Pilum의 StateStore v4 마이그레이션과 번호가 충돌하지 않는다.
+- Pilum도 같은 원칙으로 전용 파일을 쓴다([PL-ADR-3](PL-ADR-3-separate-ledger-file.md)). StateStore는 v3 그대로다.

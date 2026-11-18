@@ -12,6 +12,66 @@ minor.
 
 ## [Unreleased]
 
+## [0.6.0] - TBD
+
+Minor release: a 13th package, **Pilum** (`de-pilum`, experimental reverse ETL),
+three more fixes for input that used to be lost or accepted without a word, and
+a first-run path that works as the README prints it. All 13 packages move to
+`0.6.0`; internal pins move to `>=0.6,<0.7`. No state migrations: StateStore
+stays v3 and `aquila.db` stays v2. Upgrade steps: [docs/upgrade-0.6.md](docs/upgrade-0.6.md).
+
+### ⚠️ Upgrade notes
+
+- **A file source whose `path` matches no files is now an error.** It used to
+  finish with `fetched=0`. Set `source.allow_empty: true` for a drop folder that
+  is sometimes empty.
+- **CSV columns with leading zeros now load as strings.** A column holding
+  `02139` or `007` was inferred as an integer and stored as `2139` and `7`. If
+  such a column really is numeric, pin it: `column_types: { seq: int64 }`.
+  Downstream `cast` steps and Postgres/DuckDB sink tables built on the old
+  integer type need the same decision.
+- **Pugio warns when files of one run disagree on a column's type**, and fails
+  the run under `schema_drift: block`. Pin the type with `source.column_types`.
+- **Status labels changed.** Onager, Scutum, Scorpio and Spatha are listed as
+  beta instead of stable. No code or API changed with the label.
+
+### Added
+
+- **Pilum** (`de-pilum`, `pilum` CLI, `de-arsenal[dispatch]`): sends records
+  from a Parquet dataset or a DuckDB query to an HTTP endpoint or a Slack
+  webhook, and sends each change once. `insert` / `upsert` / `mirror` modes, a
+  per-dispatch ledger written only after a 2xx, idempotency-key header,
+  retry with backoff, a dead-letter queue with `replay`, a first-run size limit
+  and a delete-share limit. Delivery is at-least-once unless the endpoint
+  deduplicates on the idempotency key. The ledger is its own SQLite file, not a
+  StateStore migration (PL-ADR-3). Not included: bulk requests, OAuth refresh,
+  `arsenal run` integration. See [packages/pilum/README.md](packages/pilum/README.md).
+- `source.column_types` for `type: file` (CSV): pin a column to `string`,
+  `int64`, `float64`, `bool`, `date` or `timestamp`.
+- `source.allow_empty` for `type: file`.
+- `pagination.stop_on: empty_page` for `offset` and `page` modes. The default,
+  `short_page`, stops at the first page with fewer than `size` rows; if the
+  server caps its page size below `size`, that is the first page. `empty_page`
+  costs one extra request and does not depend on the cap.
+- The `csv-cleanup` recipe ships `input/sample.csv`, so `arsenal init
+  csv-cleanup && arsenal run` works without adding data.
+- `docs/adr/` PL-ADR-1..5, `docs/README.md` (index of the design documents),
+  `schemas/dispatch.json` and its generated reference.
+
+### Fixed
+
+- **`arsenal init csv-cleanup` followed by `arsenal run` failed** with a raw
+  DuckDB `IO Error` and left an empty `data/clean.tmp` directory: the recipe had
+  no input and the collect step reported success with zero rows.
+- A transform whose input has no Parquet files now says which input is empty
+  instead of printing the compiled SQL, and removes its temporary directory.
+
+### Changed
+
+- The READMEs are rewritten around what the tools do and what has been
+  measured. Design-document links moved to `docs/README.md`.
+- `arsenal init` copies a recipe's subdirectories, not only its top-level files.
+
 ## [0.5.3] - 2026-11-18
 
 Patch release: two silent data-loss bugs found by running the tools against

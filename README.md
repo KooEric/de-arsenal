@@ -1,6 +1,8 @@
 # DE Arsenal
 
-> **One laptop is a data platform.** One install, one command: ingest → validate → transform → query.
+Command-line tools for data pipelines that run on one machine: ingest from APIs, files
+and databases into Parquet, transform with DuckDB, and query the result. Pipelines are
+YAML files. There is no server to run.
 
 **English** | [한국어](README.ko.md)
 
@@ -9,48 +11,90 @@
 [![CI](https://github.com/KooEric/de-arsenal/actions/workflows/ci.yml/badge.svg)](https://github.com/KooEric/de-arsenal/actions/workflows/ci.yml)
 [![License](https://img.shields.io/badge/license-Apache--2.0-blue)](LICENSE)
 
-Ingestion jobs that die at 3 AM, tokens that expire mid-run, a folder of CSVs nobody can query —
-DE Arsenal handles them with one declarative command. No servers, no clusters, no DAG code.
-
 ```bash
 uv tool install de-arsenal          # or: pip install de-arsenal
-arsenal init csv-cleanup            # start from a recipe
-arsenal run                         # ingest → validate → transform; interrupted? rerun to resume
+arsenal init csv-cleanup            # scaffolds a project with a sample CSV in input/
+arsenal run                         # ingest, then transform
 arsenal query "SELECT * FROM './data/clean/*.parquet' LIMIT 10"
 ```
 
-The **completeness** of a Databricks or Snowflake, in the **opposite shape**: where big platforms do a
-hundred things at 80%, we do one thing at 100%. Idempotency, resume and validation are defaults, and the
-zero-margin cost structure falls out of the architecture ([why](docs/07-cost-efficiency.md)).
+These four commands run as written; CI runs the same `init` and `run` on every change
+(`tests/e2e/test_recipes.py`). To use your own data, replace `input/sample.csv`.
 
-## Status — v0.5.0
+## What it does
 
-| | |
-|---|---|
-| **Stable** | Ingestion, transformation, the umbrella CLI and every P1 extension — dlt/dbt interop, schema-drift policies, cloud sinks, Python UDFs, observability, orchestration, backfill, data contracts |
-| **Beta** (0.4) | **Hasta** — polling microbatch streaming and Postgres outbox CDC · **Ballista** — portable transforms on Spark/Kubernetes with Iceberg output |
-| **Preview** (0.5) | **Aquila** — a file-backed catalog: datasets, schema history, cross-tool lineage, contracts, tags |
-| **Experimental** | **Augur** — natural-language questions to SQL, with an eval harness |
-| **Upgrading** | [0.4 → 0.5](docs/upgrade-0.5.md) (no state migration) · [0.3 → 0.4](docs/upgrade-0.4.md) · [CHANGELOG](CHANGELOG.md) |
+- **Resumes.** Each page, file or batch is recorded when its write finishes. Stop a
+  run with Ctrl-C or `kill -9` and run it again: finished units are skipped.
+- **Does not duplicate.** Output file names and upsert keys are derived from the input
+  unit, so a repeated unit overwrites itself.
+- **Shows its SQL.** `gladius compile` prints the DuckDB SQL a transform will run.
+- **Fails loudly on ambiguous input.** A path that matches no files, a paging mode
+  that cannot work with its parameter, and columns whose type differs between files
+  are errors or warnings, not silent successes.
 
-## Install what you need
+What is and is not guaranteed, per sink and per tool: [docs/08-limits.md](docs/08-limits.md).
+It is a single-node tool. The one measured data point is a warm-cache DuckDB transform
+of a 1 GB Parquet file on a laptop ([benchmarks/RESULTS.md](benchmarks/RESULTS.md));
+there is no ingestion benchmark and no comparison with other tools yet.
 
-Every tool installs on its own; the umbrella pulls in only the batch core. Heavy runtimes
-(Spark, Kubernetes, Iceberg, Kafka clients) are never part of the base install.
+## Tools
+
+`arsenal` runs a whole project. Each tool underneath also installs and runs on its own,
+and they exchange data only as Parquet files.
+
+| Tool | Does | Package | Status |
+|---|---|---|---|
+| **Arsenal** | Project CLI: `init`, `run`, `status`, `query`; three starter recipes | `de-arsenal` | stable |
+| **Pugio** | Ingestion: REST, CSV/JSONL/Excel, databases, dlt sources → Parquet, DuckDB, Postgres, S3/GCS | `pugio` | stable |
+| **Gladius** | YAML transforms compiled to DuckDB SQL; incremental runs, Python UDFs, ad-hoc queries | `de-gladius` | stable |
+| **Onager** | Small-file compaction and isolated backfills for local Parquet | `de-onager` | beta |
+| **Scutum** | Library: Arrow data contracts and a file lock (used by Pugio) | `de-scutum` | beta |
+| **Scorpio** | Library: freshness checks and stream health (used by `status` commands) | `de-scorpio` | beta |
+| **Spatha** | Library: pick runnable tasks from dependencies, signals, priority and time windows. No scheduler daemon | `spatha` | beta |
+| **Hasta** | Streaming: polling microbatches from a cursor API, Postgres outbox CDC | `de-hasta` | beta |
+| **Ballista** | Runs a Gladius transform on Spark/Kubernetes and commits to Iceberg | `de-ballista` | beta |
+| **Aquila** | Catalog in one SQLite file: datasets, schema history, lineage, contracts, tags | `de-aquila` | preview |
+| **Augur** | Natural-language questions to SQL, with an eval harness | `de-augur` | experimental |
+| **Pilum** | Reverse ETL: send changed records to HTTP endpoints and Slack, once per change | `de-pilum` | experimental |
+
+**stable**: YAML fields are only added within a minor series, and state files migrate
+forward. **beta**: works and is tested, but has little use outside this repo.
+**preview / experimental**: formats and commands may change in any release.
+The project is pre-1.0 and has no long-term API commitment; see the
+[CHANGELOG](CHANGELOG.md).
+
+## Install
 
 | You want | Install |
 |---|---|
 | Ingest, transform, query, recipes | `uv tool install de-arsenal` |
 | …plus a Postgres sink | `uv tool install "de-arsenal[postgres]"` |
-| …plus streaming & CDC (Hasta) | `uv tool install "de-arsenal[streaming]"` |
+| …plus streaming and CDC (Hasta) | `uv tool install "de-arsenal[streaming]"` |
 | …plus Spark-on-Kubernetes runs (Ballista) | `uv tool install "de-arsenal[distributed]"` |
 | …plus the catalog (Aquila) | `uv tool install "de-arsenal[catalog]"` |
+| …plus reverse ETL (Pilum) | `uv tool install "de-arsenal[dispatch]"` |
 | …plus dbt or dlt projects | `"de-arsenal[dbt]"` · `"de-arsenal[dlt]"` |
-| A single tool, nothing else | `pip install pugio` · `de-gladius` · `de-hasta` · `de-aquila` · … |
+| A single tool | `pip install pugio` · `de-gladius` · `de-hasta` · `de-aquila` · `de-pilum` · … |
 
-## Quickstart
+The base install does not pull in Spark, Kubernetes, Iceberg or Postgres drivers
+(`packages/arsenal/tests/test_base_install.py` checks this).
+From source: clone, `uv sync`, and prefix commands with `uv run`.
 
-**1. Ingest with Pugio.** Kill it mid-run (Ctrl-C) and rerun — it resumes. Rerun after it finishes — nothing happens.
+## Examples
+
+Every block below runs from a clone of this repository.
+
+**Ingest and transform, offline** ([examples/quickstart](examples/quickstart)):
+
+```bash
+cd examples/quickstart
+pugio run collect.yaml                 # orders.csv → ./data/orders
+gladius compile transform.yaml         # print the SQL
+gladius run transform.yaml             # → ./data/orders_clean
+gladius query "SELECT * FROM './data/orders_clean/*.parquet'"
+```
+
+**Ingest from a REST API** (needs a GitHub token):
 
 ```bash
 export GITHUB_TOKEN=ghp_...
@@ -58,113 +102,49 @@ pugio run examples/github-issues.yaml
 pugio status examples/github-issues.yaml --cost --max-age-seconds 86400
 ```
 
-**2. Transform with Gladius.** Declarative steps compile to SQL you can read before it runs on DuckDB.
+**Stream from a cursor API** (`[streaming]`):
 
 ```bash
-gladius compile examples/transform.yaml      # the exact SQL, no magic
-gladius run examples/transform.yaml
-gladius query "SELECT * FROM './data/issues_clean/*.parquet' LIMIT 10"
-```
-
-**3. Or let Arsenal run the whole project** from `arsenal.yaml`.
-
-```bash
-arsenal init --list          # github-issues · csv-cleanup · api-to-postgres
-arsenal init csv-cleanup
-arsenal run
-arsenal status               # stream health, distributed runs, catalog — JSON, exit 1 on alerts
-```
-
-| Recipe | Pipeline |
-|---|---|
-| `github-issues` | REST API → clean table |
-| `csv-cleanup` | folder of CSVs → dedup / cast |
-| `api-to-postgres` | REST API → validation gate → Postgres upsert (needs `[postgres]`) |
-
-**From source:** clone, run `uv sync`, and prefix the commands with `uv run`.
-
-## Beyond batch
-
-**Stream** a cursor API or a Postgres outbox, with checkpoints that survive crashes:
-
-```bash
-python examples/hasta/fake_orders_api.py &           # a local cursor API to play with
-hasta run examples/hasta/orders-stream.yaml          # Ctrl-C commits the batch in flight, then stops
+python examples/hasta/fake_orders_api.py &
+hasta run examples/hasta/orders-stream.yaml      # Ctrl-C commits the batch in flight
 hasta checkpoint show examples/hasta/orders-stream.yaml
 ```
 
-**Distribute** a Gladius transform on Spark/Kubernetes; the result is committed to Iceberg exactly once per run:
+**Send changed records to an endpoint** (`[dispatch]`):
 
 ```bash
-ballista plan big.yaml --profile spark.yaml --probe  # checks the live cluster, storage and catalog first
-ballista run big.yaml --profile spark.yaml --input-version auto
+python examples/pilum/fake_alerts_api.py &
+export ALERTS_URL=http://127.0.0.1:8766/alerts
+pilum plan examples/pilum/alerts.yaml            # what would be sent; sends nothing
+pilum run examples/pilum/alerts.yaml             # sends 2 records
+pilum run examples/pilum/alerts.yaml             # sends nothing: nothing changed
 ```
 
-**Catalog** everything the repo produces — no tool depends on it, and scans never write to state databases:
+**Catalog a project** (`[catalog]`), from any project directory that has run:
 
 ```bash
 aquila scan
-aquila lineage orders_daily --direction up --format mermaid
-aquila history orders                                # schema versions with diffs
-aquila tag orders pii=true && aquila search pii
+aquila search orders
 ```
 
-## The armory
+Ballista needs a Kubernetes cluster, object storage and an Iceberg catalog; its setup is
+in [packages/ballista/README.md](packages/ballista/README.md).
 
-You only need to know `arsenal`. Underneath are independent tools — one per problem — loosely coupled through
-an Arrow/Parquet hub, so there is no lock-in.
+Recipes for `arsenal init`: `csv-cleanup` (folder of CSVs → dedup and cast),
+`github-issues` (REST API → clean table), `api-to-postgres` (REST API → validation →
+Postgres upsert, needs `[postgres]`).
 
-| Weapon | What it does | Package | Status |
-|---|---|---|---|
-| **Arsenal** | Umbrella CLI — `init` / `run` / `status` / `query`, three one-command recipes | `de-arsenal` | ✅ stable |
-| **Pugio** | Ingestion & loading — REST, files, databases, dlt; resumable, idempotent sinks | `pugio` | ✅ stable |
-| **Gladius** | Declarative transforms compiled to DuckDB SQL; incremental runs, UDFs, ad-hoc queries | `de-gladius` | ✅ stable |
-| **Scutum** | Data contracts, DLQ policy, file locks with retry/backoff | `de-scutum` | ✅ stable |
-| **Scorpio** | Freshness alerts, lineage, stream health and run summaries | `de-scorpio` | ✅ stable |
-| **Spatha** | Orchestration — signal-aware DAG, priority, run windows, locks, command tasks | `spatha` | ✅ stable |
-| **Onager** | Isolated backfills and small-file compaction, safe next to live streams | `de-onager` | ✅ stable |
-| **Hasta** | Streaming & CDC — polling microbatches, Postgres outbox, fenced checkpoints | `de-hasta` | 🧪 beta |
-| **Ballista** | Distributed transforms — Spark on Kubernetes, Iceberg commits, DuckDB↔Spark equivalence | `de-ballista` | 🧪 beta |
-| **Aquila** | Catalog & governance — dataset registry, schema history, lineage, contracts, search | `de-aquila` | 🧪 preview |
-| **Augur** | Natural language → SQL over the lake (schema RAG) with a failure-mode eval harness | `de-augur` | 🧪 experimental |
-| **Pilum** | Reverse ETL — idempotent dispatch to webhooks, HTTP APIs and Slack | — | 📋 planned (0.6) |
+## Documentation
 
-The Databricks product line, mapped to these weapons: [docs/00-overview.md](docs/00-overview.md).
-
-## Principles
-
-Four promises, kept at the same time — we never trade one for another.
-
-- **Light** — pick up one tool and use it. `pip install pugio` is a complete start.
-- **Fast** — bulk, vectorized, parallel. Small doesn't mean slow.
-- **Correct** — idempotency, resume and validation by default. Interruptions leave no duplicates and no gaps.
-- **Easy for everyone** — YAML, occasionally SQL. Analysts use it directly; there is no DAG code to write.
-
-What we guarantee — and, just as explicitly, what we don't: [docs/08-limits.md](docs/08-limits.md).
-
-## Docs
-
-Design documents are written in Korean; the YAML references and the changelog are language-neutral.
-
-| Start here | |
+| | |
 |---|---|
-| [docs/tools.md](docs/tools.md) | When to use each tool, with quick starts |
-| [docs/reference/pipeline-schema.md](docs/reference/pipeline-schema.md) · [transform-schema.md](docs/reference/transform-schema.md) | Every YAML field, generated from the code |
-| [docs/08-limits.md](docs/08-limits.md) | Honest limits — single-node envelope, per-sink and per-tool guarantees |
-| [CHANGELOG.md](CHANGELOG.md) · [upgrade 0.5](docs/upgrade-0.5.md) · [upgrade 0.4](docs/upgrade-0.4.md) | What changed and how to upgrade |
+| [docs/tools.md](docs/tools.md) | When to use each tool, with a short start for each |
+| [docs/reference/](docs/reference/) | Every YAML field, generated from the code |
+| [docs/08-limits.md](docs/08-limits.md) | Guarantees and non-guarantees |
+| [CHANGELOG.md](CHANGELOG.md) · [upgrade to 0.6](docs/upgrade-0.6.md) | What changed and how to upgrade |
+| [docs/README.md](docs/README.md) | Design documents, decision records and release procedure |
 
-| Design | |
-|---|---|
-| [00-overview](docs/00-overview.md) · [01-scope](docs/01-scope.md) · [roadmap](docs/roadmap.md) | Vision, positioning, scope, the original problem statements |
-| [02-architecture](docs/02-architecture.md) · [03-tech-stack](docs/03-tech-stack.md) | Monorepo layout, shared core, state model, technology choices |
-| [07-cost-efficiency](docs/07-cost-efficiency.md) · [09-oss-leverage](docs/09-oss-leverage.md) | Cost structure; what we borrow from open source and why |
-
-| Building & operating | |
-|---|---|
-| [04-implementation-plan](docs/04-implementation-plan.md) · [plans/](docs/plans/) | Milestone work breakdown and detailed TDD plans |
-| [05-testing-plan](docs/05-testing-plan.md) · [06-conventions](docs/06-conventions.md) | Test strategy; coding, commit and CI conventions |
-| [10-augur-eval-protocol](docs/10-augur-eval-protocol.md) · [dogfooding](docs/dogfooding.md) | Evaluating Augur; a two-week dogfooding runbook |
-| [release](docs/release.md) | Versioning, build and PyPI release procedure |
+The reference and changelog are in English. The guides and design documents are in Korean.
 
 ## License
 

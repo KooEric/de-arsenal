@@ -1,4 +1,86 @@
-# v0.5.3 패치 릴리스 절차
+# v0.6.0 릴리스 절차
+
+13번째 패키지 **Pilum**(`de-pilum`, experimental)이 처음 배포된다. 내역은
+[CHANGELOG](../CHANGELOG.md), 사용자 절차는 [upgrade-0.6.md](upgrade-0.6.md).
+
+**minor인 이유**: 새 배포 패키지가 들어가고, 파일 소스의 동작 세 가지가 호환되지 않게 바뀐다
+(매칭 0건은 에러, 앞자리 0 컬럼은 문자열, 파일 간 타입 불일치는 경고). 교차 핀을
+`>=0.6,<0.7`로 옮긴다. 상태 마이그레이션은 없다(StateStore v3, `aquila.db` v2 그대로).
+
+## 확정 정책
+
+- 배포 패키지 13개를 v0.6.0으로 동기화한다: `arsenal-core`, `de-arsenal`, `pugio`,
+  `de-gladius`, `de-scorpio`, `de-scutum`, `de-onager`, `spatha`, `de-augur`, `de-hasta`,
+  `de-ballista`, `de-aquila`, **`de-pilum`** (굵은 것은 PyPI 첫 게시).
+- `de-arsenal` 기본 설치는 Pilum을 끌어오지 않는다. `de-arsenal[dispatch]` extra다.
+- `de-pilum`은 워크스페이스 패키지 중 `arsenal-core`에만 의존한다.
+- 상태 표기: Arsenal·Pugio·Gladius **stable**, Onager·Scutum·Scorpio·Spatha·Hasta·Ballista
+  **beta**, Aquila **preview**, Augur·Pilum **experimental**.
+
+## 절차
+
+1. 이 PR CI green → `main` 머지
+2. `main`에서 검증
+
+   ```bash
+   uv sync
+   uv run python scripts/check_release_metadata.py   # "13 packages at v0.6.0"
+   uv run ruff check . && uv run ruff format --check .
+   uv run pyright
+   uv run python scripts/gen_schema_docs.py --check
+   uv run pytest
+   uv build --all-packages && ls dist/ | wc -l       # sdist + wheel × 13 = 26
+   ```
+
+3. 수동 점검
+   - [ ] 새 디렉터리에서 README 첫 블록 그대로: `arsenal init csv-cleanup` → `arsenal run` →
+         `arsenal query ...`가 3행을 보여 준다.
+   - [ ] `de_arsenal` wheel에 `arsenal/recipes/csv-cleanup/input/sample.csv`가 들어 있다
+         (`unzip -l dist/de_arsenal-0.6.0-*.whl | grep sample.csv`).
+   - [ ] `examples/pilum`의 주석대로 실행해 두 번째 `pilum run`이 0건을 보낸다.
+   - [ ] CHANGELOG의 `## [0.6.0] - TBD`를 실제 날짜로 바꾼다.
+4. PyPI 준비 — 신규 배포명 1개 (계정 소유자). PyPI **Publishing → Pending publishers**에 등록한다.
+
+   | 필드 | 값 |
+   |---|---|
+   | PyPI project name | `de-pilum` |
+   | Owner / Repository | `KooEric` / `de-arsenal` |
+   | Workflow name | `release.yml` |
+   | Environment name | `pypi` |
+
+5. 검증 전용 실행 → `de-pilum` 최초 게시 → 태그
+
+   ```bash
+   gh workflow run release.yml -f version=0.6.0 -f publish_package=none
+   gh workflow run release.yml -f version=0.6.0 -f publish_package=de-pilum
+   git tag v0.6.0 && git push origin v0.6.0
+   ```
+
+   태그 실행이 나머지 12개를 게시하고, 먼저 게시된 `de-pilum`은 `skip-existing`으로 건너뛴다.
+
+6. 게시 확인 — 13개 모두 `200`, 새 venv 설치
+
+   ```bash
+   for p in arsenal-core de-arsenal pugio de-gladius de-scorpio de-scutum de-onager spatha \
+            de-augur de-hasta de-ballista de-aquila de-pilum; do
+     curl -s -o /dev/null -w "$p %{http_code}\n" "https://pypi.org/pypi/$p/0.6.0/json"
+   done
+   uv tool install --force "de-arsenal[streaming,distributed,catalog,dispatch]==0.6.0"
+   arsenal --help && pilum --help
+   ```
+
+7. GitHub Release `v0.6.0`
+
+   ```bash
+   gh release create v0.6.0 --title v0.6.0 --notes-file <(sed -n '/^## \[0.6.0\]/,/^## \[0.5.3\]/p' CHANGELOG.md | sed '$d')
+   ```
+
+실패 시: PyPI에 올라간 버전은 덮어쓸 수 없다. 일부만 게시된 상태에서 결함이 나오면 13개 전체를
+0.6.1로 다시 릴리스하고 0.6.0은 yank한다.
+
+---
+
+# v0.5.3 패치 릴리스 절차 (참고: 마지막 patch)
 
 실데이터 도그푸딩에서 찾은 조용한 데이터 손실 두 건의 수정이다. 내역은
 [CHANGELOG](../CHANGELOG.md#053---2026-11-18).
