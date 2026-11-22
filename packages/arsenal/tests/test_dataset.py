@@ -99,3 +99,95 @@ def test_parquet_schema_change_preserves_publication(
         ],
     )
     assert result.exit_code == 0 and json.loads(result.output) == {"sample": 7}
+
+
+def _jsonl(path: Path, rows: list[dict[str, Any]]) -> None:
+    path.write_text("".join(json.dumps(row) + "\n" for row in rows), encoding="utf-8")
+
+
+def _published_types() -> dict[str, str]:
+    with duckdb.connect(".arsenal/dataset.duckdb", read_only=True) as db:
+        return {row[0]: row[1] for row in db.execute("DESCRIBE published").fetchall()}
+
+
+def test_jsonl_column_that_is_null_in_every_row_is_not_a_schema_change(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.chdir(tmp_path)
+    runner = CliRunner()
+    snapshot = tmp_path / "cards.jsonl"
+    _jsonl(snapshot, [{"id": "a", "fee": 100, "url": "x"}, {"id": "b", "fee": 200, "url": None}])
+    first = runner.invoke(app, ["dataset", "apply", "--files", "*.jsonl", "--key", "id"])
+    assert first.exit_code == 0, first.output
+    assert _published_types() == {"id": "VARCHAR", "fee": "BIGINT", "url": "VARCHAR"}
+
+    _jsonl(snapshot, [{"id": "a", "fee": None, "url": None}, {"id": "b", "fee": None, "url": None}])
+    preview = runner.invoke(app, ["dataset", "preview"])
+    assert preview.exit_code == 0, preview.output
+    changes = json.loads(preview.output)["changes"]
+    assert (changes["added"]["count"], changes["removed"]["count"]) == (0, 0)
+    assert changes["updated"]["count"] == 2
+    assert changes["updated"]["examples"][0]["before"]["fee"] in (100, 200)
+    assert changes["updated"]["examples"][0]["after"]["fee"] is None
+    assert runner.invoke(app, ["dataset", "apply"]).exit_code == 0
+    # The emptied columns keep the types they were published with.
+    assert _published_types() == {"id": "VARCHAR", "fee": "BIGINT", "url": "VARCHAR"}
+
+    _jsonl(snapshot, [{"id": "a", "fee": 300, "url": "y"}, {"id": "b", "fee": None, "url": None}])
+    back = runner.invoke(app, ["dataset", "apply"])
+    assert back.exit_code == 0, back.output
+    assert json.loads(back.output)["changes"]["updated"]["count"] == 1
+    assert runner.invoke(app, ["status"]).exit_code == 0
+
+
+def test_jsonl_column_first_published_empty_takes_its_type_from_later_values(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.chdir(tmp_path)
+    runner = CliRunner()
+    snapshot = tmp_path / "cards.jsonl"
+    _jsonl(snapshot, [{"id": "a", "fee": None}])
+    assert (
+        runner.invoke(app, ["dataset", "apply", "--files", "*.jsonl", "--key", "id"]).exit_code == 0
+    )
+    _jsonl(snapshot, [{"id": "a", "fee": 100}, {"id": "b", "fee": 200}])
+    result = runner.invoke(app, ["dataset", "apply"])
+    assert result.exit_code == 0, result.output
+    changes = json.loads(result.output)["changes"]
+    assert (changes["added"]["count"], changes["updated"]["count"]) == (1, 1)
+    assert _published_types()["fee"] == "BIGINT"
+
+
+def test_jsonl_real_type_change_is_still_refused(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.chdir(tmp_path)
+    runner = CliRunner()
+    snapshot = tmp_path / "cards.jsonl"
+    _jsonl(snapshot, [{"id": "a", "fee": 100}])
+    assert (
+        runner.invoke(app, ["dataset", "apply", "--files", "*.jsonl", "--key", "id"]).exit_code == 0
+    )
+    _jsonl(snapshot, [{"id": "a", "fee": "free"}])
+    refused = runner.invoke(app, ["dataset", "apply"])
+    assert refused.exit_code == 1
+    assert "자료형" in refused.output
+    assert _published_types()["fee"] == "BIGINT"
+    with duckdb.connect(".arsenal/dataset.duckdb", read_only=True) as db:
+        assert db.execute("SELECT fee FROM published").fetchall() == [(100,)]
+
+
+def test_jsonl_files_of_one_snapshot_may_differ_in_an_empty_column(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.chdir(tmp_path)
+    runner = CliRunner()
+    _jsonl(tmp_path / "part-1.jsonl", [{"id": "a", "fee": None}])
+    _jsonl(tmp_path / "part-2.jsonl", [{"id": "b", "fee": 200}])
+    _jsonl(tmp_path / "part-3.jsonl", [{"id": "c", "fee": None}])
+    result = runner.invoke(app, ["dataset", "apply", "--files", "*.jsonl", "--key", "id"])
+    assert result.exit_code == 0, result.output
+    assert json.loads(result.output)["result"]["rows"] == 3
+    assert _published_types()["fee"] == "BIGINT"
+    _jsonl(tmp_path / "part-3.jsonl", [{"id": "c", "fee": "free"}])
+    assert runner.invoke(app, ["dataset", "apply"]).exit_code == 1

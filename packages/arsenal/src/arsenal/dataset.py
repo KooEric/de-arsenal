@@ -50,6 +50,34 @@ def metadata(db: duckdb.DuckDBPyConnection) -> dict[str, Any]:
     )
 
 
+def column_types(db: duckdb.DuckDBPyConnection, table: str) -> dict[str, str]:
+    return {row[0]: row[1] for row in db.execute(f"DESCRIBE {table}").fetchall()}
+
+
+def align(db: duckdb.DuckDBPyConnection, left: str, right: str) -> bool:
+    """Give two temporary tables the same column types where one side holds no values.
+
+    A reader that types a column from its values (JSON) gives a column that is NULL in
+    every row a placeholder type. Such a column takes the other side's type, preferring
+    ``left``. A column with values on both sides and different types is a real schema
+    change: nothing is done for it and the result is False.
+    """
+    a, b = column_types(db, left), column_types(db, right)
+    if a.keys() != b.keys():
+        return False
+    for name in a:
+        if a[name] == b[name]:
+            continue
+        col = quote_ident(name)
+        if not db.execute(f"SELECT count({col}) FROM {right}").fetchall()[0][0]:
+            db.execute(f"ALTER TABLE {right} ALTER {col} TYPE {a[name]}")
+        elif not db.execute(f"SELECT count({col}) FROM {left}").fetchall()[0][0]:
+            db.execute(f"ALTER TABLE {left} ALTER {col} TYPE {b[name]}")
+        else:
+            return False
+    return True
+
+
 def read_inputs(db: duckdb.DuckDBPyConnection, paths: list[str]) -> None:
     suffixes = {Path(p).suffix.lower() for p in paths}
     if suffixes == {".csv"}:
@@ -62,12 +90,18 @@ def read_inputs(db: duckdb.DuckDBPyConnection, paths: list[str]) -> None:
         raise FatalError("한 작업에는 같은 형식의 CSV, JSONL 또는 Parquet 파일을 지정하세요.")
     # Read individually: a reordered header must never shift values into another column.
     for index, path in enumerate(paths):
-        stmt = "CREATE TEMP TABLE raw AS" if index == 0 else "INSERT INTO raw BY NAME"
-        if index:
-            fields = db.execute(f"DESCRIBE SELECT * FROM {reader}", [path]).fetchall()
-            if {r[:2] for r in fields} != {r[:2] for r in db.execute("DESCRIBE raw").fetchall()}:
-                raise FatalError(f"파일 간 열 또는 자료형이 다릅니다. 열 구성을 확인하세요: {path}")
-        db.execute(f"{stmt} SELECT * FROM {reader}", [path])
+        if index == 0:
+            db.execute(f"CREATE TEMP TABLE raw AS SELECT * FROM {reader}", [path])
+            continue
+        fields = db.execute(f"DESCRIBE SELECT * FROM {reader}", [path]).fetchall()
+        if {r[:2] for r in fields} == {r[:2] for r in db.execute("DESCRIBE raw").fetchall()}:
+            db.execute(f"INSERT INTO raw BY NAME SELECT * FROM {reader}", [path])
+            continue
+        db.execute(f"CREATE TEMP TABLE part AS SELECT * FROM {reader}", [path])
+        if not align(db, "raw", "part"):
+            raise FatalError(f"파일 간 열 또는 자료형이 다릅니다. 열 구성을 확인하세요: {path}")
+        db.execute("INSERT INTO raw BY NAME SELECT * FROM part")
+        db.execute("DROP TABLE part")
 
 
 def profile(db: duckdb.DuckDBPyConnection, table: str, rules: Rules) -> dict[str, Any]:
@@ -103,34 +137,39 @@ def compare(
 ) -> dict[str, Any]:
     if not previous:
         db.execute("CREATE TEMP TABLE published AS FROM candidate LIMIT 0")
-    schema = db.execute("DESCRIBE published").fetchall()
-    if {r[:2] for r in schema} != {r[:2] for r in db.execute("DESCRIBE candidate").fetchall()}:
-        raise FatalError("게시된 결과와 열 또는 자료형이 다릅니다. 입력 스키마를 확인하세요.")
+    base = "published"
+    if column_types(db, "published") != column_types(db, "candidate"):
+        # Compare against a copy: the published table is read-only during a preview.
+        db.execute("CREATE TEMP TABLE baseline AS FROM published")
+        if not align(db, "baseline", "candidate"):
+            raise FatalError("게시된 결과와 열 또는 자료형이 다릅니다. 입력 스키마를 확인하세요.")
+        base = "baseline"
+    schema = db.execute(f"DESCRIBE {base}").fetchall()
     columns = ", ".join(quote_ident(row[0]) for row in schema)
     if not rules.key:
         return {
             label: diff(db, f"SELECT {columns} FROM {a} EXCEPT ALL SELECT {columns} FROM {b}")
             for label, a, b in (
-                ("added", "candidate", "published"),
-                ("removed", "published", "candidate"),
+                ("added", "candidate", base),
+                ("removed", base, "candidate"),
             )
         }
     key = quote_ident(rules.key)
-    for table in ("candidate", "published"):
+    for label, table in (("candidate", "candidate"), ("published", base)):
         invalid = db.execute(
             f"SELECT {key} FROM {table} GROUP BY {key} HAVING {key} IS NULL OR count(*) > 1 LIMIT 1"
         ).fetchone()
         if invalid:
             raise FatalError(
-                f"{rules.key} 식별값이 비었거나 중복됩니다 ({table}). 예: {invalid[0]!r}"
+                f"{rules.key} 식별값이 비었거나 중복됩니다 ({label}). 예: {invalid[0]!r}"
             )
     return {
-        "added": diff(db, f"FROM candidate ANTI JOIN published USING ({key})"),
-        "removed": diff(db, f"FROM published ANTI JOIN candidate USING ({key})"),
+        "added": diff(db, f"FROM candidate ANTI JOIN {base} USING ({key})"),
+        "removed": diff(db, f"FROM {base} ANTI JOIN candidate USING ({key})"),
         "updated": diff(
             db,
             "SELECT struct_pack(*COLUMNS(p.*)) AS before, struct_pack(*COLUMNS(c.*)) AS after "
-            "FROM published p JOIN candidate c "
+            f"FROM {base} p JOIN candidate c "
             f"USING ({key}) WHERE "
             + " OR ".join(
                 f"p.{quote_ident(r[0])} IS DISTINCT FROM c.{quote_ident(r[0])}" for r in schema
