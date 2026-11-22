@@ -63,18 +63,19 @@ one. Nothing was written to D1.
 The real data had no hard deletes between the two states, so `removed` was
 exercised only by editing the local file.
 
-## Limits found
+## Found on this run
 
-- **A column that is NULL in every row breaks a JSONL snapshot.** JSON types are
-  inferred per file, so an all-NULL column reads as a different type from the
-  published one and the apply is refused as a schema change. Seen by nulling
-  `image_url` in all 3,365 rows. Write a `.csv` snapshot instead when a nullable
-  column can be entirely empty: CSV is read as text throughout, and the same
-  change is then reported as 2,458 updates. The cost is that every published
-  column is text.
+- **Fixed in 0.6.8: a column that is NULL in every row broke a JSONL snapshot.**
+  JSON types are inferred per file, so an all-NULL column read as a different
+  type from the published one and 0.6.7 refused the apply as a schema change.
+  Seen by nulling `image_url` in all 3,365 rows. From 0.6.8 the column keeps its
+  published type and the same change is reported as 2,458 updates; putting the
+  values back is another 2,458 updates. On 0.6.7, write a `.csv` snapshot
+  instead, at the cost of every published column being text.
 - **A refused apply leaves `arsenal dataset status` in `failed`** (exit 1) until
-  the next successful apply, even though the publication itself is unchanged. A
-  scheduled status check will alert on it.
+  the next successful apply. This is intended: the publication is unchanged, but
+  the new input was not published, and a scheduled status check should say so.
+  Preview again and apply to clear it.
 - **Timestamps are compared as written.** The older state stored
   `2026-11-16 14:26:16` and the current one `2026-11-17T06:09:55.264Z`; both
   parse for the data period, but a format change alone counts as an update.

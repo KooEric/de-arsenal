@@ -205,7 +205,7 @@ The clean second run is what makes it safe to repeat or schedule.
 - **Stay on the stable tools** for anything people depend on: Arsenal, Pugio
   and Gladius keep their YAML fields within a minor version. Hasta, Ballista,
   Onager are beta; Aquila, Augur, Pilum and the Redshift and Iceberg sinks can
-  change in any release. Pin the installed version (`de-arsenal==0.6.7`) on
+  change in any release. Pin the installed version (`de-arsenal==0.6.8`) on
   the machine that runs the schedule.
 - **Personal data.** Collected rows, set-aside rows under `.arsenal/dlq/` and
   the output are all plain files on this disk. Say so when the data has names,
