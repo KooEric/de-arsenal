@@ -32,6 +32,21 @@ Scans also warn when **two specs write the same location**, and they drop the
 edges and contracts of spec files that were deleted from a scanned directory
 (scanning a single file never removes anything else).
 
+## Dataset publications
+
+From a dataset job folder, run `aquila scan` after `arsenal dataset apply`,
+then `aquila lineage published --direction up --format mermaid`. The job needs
+no YAML. Aquila opens `.arsenal/dataset.duckdb` read-only using the DuckDB
+Python package in the scanner environment. A parent-directory scan also finds
+nested jobs. Use `aquila search published` to select a specific output by URI.
+
+The input edge represents the file set used for the last successful publication.
+Its output node shows the commit time, row count and available event-time range.
+A separate status node shows the latest apply attempt and its error on failure.
+JSON lineage includes the file list, saved rules, version and scan timestamp.
+Run a fresh scan to refresh the graph; check its skipped sources if a writer
+holds the database lock. Opening the catalog upgrades its schema to version 3.
+
 ## Remote schemas (opt-in)
 
 - `--remote` reads the footer of remote Parquet datasets through pyarrow's

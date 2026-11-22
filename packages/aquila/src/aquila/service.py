@@ -11,6 +11,7 @@ from scorpio import assess_freshness
 
 from aquila.lineage import find_cycles
 from aquila.model import ScanResult, SourceFile
+from aquila.publications import scan_publication
 from aquila.remote import (
     REMOTE_PARQUET_SCHEMES,
     TableLoader,
@@ -43,7 +44,12 @@ def collect(
 
     result = ScanResult(roots=[str(p.resolve()) for p in paths if p.is_dir()])
     files = list(iter_spec_files(paths))
-    parsed = [(f, load_yaml(f)) for f in files]
+    parsed: list[tuple[Path, dict[str, Any] | None]] = []
+    for path in files:
+        if path.name == "dataset.duckdb" and path.parent.name == ".arsenal":
+            scan_publication(path.resolve(), result)
+        else:
+            parsed.append((path, load_yaml(path)))
     ballista: set[Path] = set()
     for path, raw in parsed:
         if raw is not None and classify(raw) == "arsenal":

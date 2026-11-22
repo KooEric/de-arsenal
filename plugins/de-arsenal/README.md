@@ -27,10 +27,18 @@ Then say what you want:
 | `operate` | Schedules, secrets, failure and staleness alerts |
 | `doctor` | Errors and wrong numbers, by symptom |
 
-Each skill is a `SKILL.md` in the Agent Skills format, so the `skills/`
-directory can also be copied into any agent that reads that format. The
-profiler path in `ingest` uses `${CLAUDE_PLUGIN_ROOT}`; elsewhere, point it at
-`skills/ingest/scripts/profile_file.py`.
+## Install the portable skill
+
+From the repository root run `python3 scripts/build_skill.py`. This builds
+`dist/de-arsenal.zip` with one entry point, the seven guides and their helpers.
+
+- In ChatGPT, use **Plugins → Skills → Create → Upload from your computer** if enabled for your workspace. [ChatGPT Skills](https://help.openai.com/en/articles/20001066-skills-in-chatgpt)
+- In Claude, use **Customize → Skills → + → Create skill → Upload a skill** and enable it. [Claude Skills](https://support.claude.com/en/articles/12512180-use-skills-in-claude)
+- For Codex, extract the ZIP into the data project's `.agents/skills/` directory. Its entry point is `.agents/skills/de-arsenal/SKILL.md`.
+
+In a shell-enabled session, try “샘플 CSV로 프로젝트를 만들고 중복 제거 전후 건수를 보여 줘.”
+Install the CLI on the execution machine with `uv tool install de-arsenal==0.6.7`.
+A recurring job needs a persistent project directory on that machine.
 
 ## What was checked
 

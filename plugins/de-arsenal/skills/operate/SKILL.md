@@ -5,6 +5,17 @@ description: Run a DE Arsenal project on a schedule and find out when it fails o
 
 # Operate
 
+For publication lineage, run `aquila scan` in the job directory, check skipped
+sources, then `aquila lineage published --direction up --format mermaid`.
+Explain the published data period and latest attempt separately. JSON lineage
+also lists the input files from the successful publication.
+
+For a job using `.arsenal/dataset.duckdb`, run `arsenal status` in its folder.
+Report last success, the event-time range if configured, and any recorded error.
+For a scheduled dataset refresh run `arsenal dataset apply` with the saved rules.
+Retain the input folder and DuckDB file between runs. A nonzero status after the
+configured input-change interval means the input contents have stopped changing.
+
 The person says when and where ("every morning on this PC, tell me on Slack if
 it breaks"); you set it up and show them one test alert.
 

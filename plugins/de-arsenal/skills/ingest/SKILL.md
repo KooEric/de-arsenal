@@ -17,8 +17,14 @@ in the first hundred rows, and guessing costs a rerun.
 
 ### 1. Profile
 
+For delimited text, resolve `PROFILE_FILE` to the bundled script's absolute
+path. In the Claude Code plugin use
+`${CLAUDE_PLUGIN_ROOT}/skills/ingest/scripts/profile_file.py`. In the portable
+skill use `scripts/profile_file.py` beside the root SKILL.md. For Excel and
+JSONL inspect a sheet or JSON records directly.
+
 ```bash
-python ${CLAUDE_PLUGIN_ROOT}/skills/ingest/scripts/profile_file.py path/to/file.csv
+python "$PROFILE_FILE" path/to/file.csv
 ```
 
 It reports encoding, delimiter, header line, columns that must stay text,
@@ -59,7 +65,7 @@ sink:
 alone. Keep originals outside the folder the glob reads:
 
 ```bash
-python ${CLAUDE_PLUGIN_ROOT}/skills/ingest/scripts/profile_file.py original/sales.tsv \
+python "$PROFILE_FILE" original/sales.tsv \
   --normalize input/sales.csv
 ```
 

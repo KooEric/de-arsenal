@@ -5,6 +5,10 @@ description: Diagnose a DE Arsenal pipeline that failed, loaded the wrong number
 
 # Doctor
 
+For a job using `.arsenal/dataset.duckdb`, inspect `arsenal status`. A failed
+publication retains the last successful snapshot. Use the recorded error and
+`arsenal dataset preview` to check the corrected inputs before applying again.
+
 Answer in the person's terms: what went wrong with their data, what you
 changed, and the numbers now. Keep tool vocabulary out unless they ask.
 

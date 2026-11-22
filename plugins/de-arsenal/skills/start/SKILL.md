@@ -10,6 +10,32 @@ end up with a table they can trust, specs they can read, and a short account of
 what happened to their data. Nobody is required to learn what a sink or a merge
 key is before getting a result, and nobody is locked out of the files either.
 
+## Review and publish changing local data
+
+For a folder of CSV, JSONL or Parquet files, use `arsenal dataset --help` to
+check whether the installed CLI includes the dataset workflow. It is available
+from DE Arsenal 0.6.7. Use a separate working directory for each job.
+Existing API and database projects can review their collected Parquet files here.
+
+1. Run `arsenal dataset preview --files 'input/*.csv'`. Keep repeated observations
+   by default. Add `--distinct` for agreed exact-row deduplication, `--key`
+   for a known unique identifier, `--measure` for a meaningful numeric total,
+   and `--time-column` for the date range. Set `--max-age-hours` only when the
+   user expects input contents to change on that cadence.
+2. Explain the source/result counts, optional totals, and the actual excluded
+   or revised examples relevant to the user. Without a key, changes are row
+   additions/removals including duplicate counts. Ask about ambiguous identity
+   or unexpected removals before publishing.
+3. Publish with `arsenal dataset apply`, repeating the preview options and adding
+   `--expect <version from preview>`. The successful run saves those rules.
+   The next preview needs no options. A removed source file removes its rows
+   from the next snapshot. If all files are missing, publication fails.
+4. Read `arsenal status` in the job folder for last success, observed data period,
+   input freshness and recovery. A failed apply preserves the last published
+   table. To answer questions run `arsenal query "ATTACH '.arsenal/dataset.duckdb'
+   AS ds (READ_ONLY); SELECT * FROM ds.published LIMIT 10"` as one command.
+   Keep this DuckDB file on persistent storage.
+
 ## How the conversation goes
 
 1. **They say what they want**, in their own words.
@@ -179,7 +205,7 @@ The clean second run is what makes it safe to repeat or schedule.
 - **Stay on the stable tools** for anything people depend on: Arsenal, Pugio
   and Gladius keep their YAML fields within a minor version. Hasta, Ballista,
   Onager are beta; Aquila, Augur, Pilum and the Redshift and Iceberg sinks can
-  change in any release. Pin the installed version (`de-arsenal==0.6.6`) on
+  change in any release. Pin the installed version (`de-arsenal==0.6.7`) on
   the machine that runs the schedule.
 - **Personal data.** Collected rows, set-aside rows under `.arsenal/dlq/` and
   the output are all plain files on this disk. Say so when the data has names,

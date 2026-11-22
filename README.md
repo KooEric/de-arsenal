@@ -21,6 +21,29 @@ arsenal query "SELECT * FROM './data/clean/*.parquet' LIMIT 10"
 These four commands run as written; CI runs the same `init` and `run` on every change
 (`tests/e2e/test_recipes.py`). To use your own data, replace `input/sample.csv`.
 
+## Run your first pipeline in chat
+
+> Create a project with the sample CSV and show me how many rows remain after deduplication.
+
+Use the skill in ChatGPT, Claude or Codex. Give it a file and describe the result
+you want. For recurring work, keep the project on the machine that runs the job.
+[Skill setup](plugins/de-arsenal/README.md)
+
+### Review a changing file dataset
+
+With DE Arsenal 0.6.7, use one working directory per dataset. Run
+`arsenal dataset preview --files 'input/*.jsonl'` to compare source, proposed
+result and currently published rows. Publish with the same options using
+`arsenal dataset apply --files 'input/*.jsonl' --expect <preview-version>`.
+Later previews reuse the saved rules. CSV and Parquet are also supported.
+Repeated observations are preserved by default. Use `--key` for identified
+records, `--distinct` for exact deduplication, `--measure` for a numeric total
+and `--time-column` for event-time coverage. A successful publication replaces
+the complete snapshot in `.arsenal/dataset.duckdb` (table `published`).
+Removed files drop out of the snapshot. Empty input matches and failed checks
+preserve the previous publication. `arsenal status` shows its last success and
+any failure. Set `--max-age-hours` to alert on time since changed input was published.
+
 ## What it does
 
 - **Resumes.** Each page, file or batch is recorded when its write finishes. Stop a
