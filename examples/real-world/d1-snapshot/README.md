@@ -79,9 +79,37 @@ exercised only by editing the local file.
 - **Timestamps are compared as written.** The older state stored
   `2026-11-16 14:26:16` and the current one `2026-11-17T06:09:55.264Z`; both
   parse for the data period, but a format change alone counts as an update.
-- **Whole-table reads.** Every run reads every row through the D1 API (1,000
-  per request). Fine for thousands of rows; a table of 100,000+ rows costs that
-  many row reads per run against the D1 quota. Not measured here.
+- **Whole-table reads.** Every run reads every row through the D1 API, 1,000 per
+  request. Measured below on a 105,484-row table: one row read at D1 per row.
 - **Not run:** reading the same table through an application's own REST API
   with a Pugio `rest` source, a schedule, and tables with a composite key (the
   script pages on one column).
+
+## Cost of a large table (2026-11-22, de-arsenal 0.6.8 from PyPI)
+
+A 105,484-row, 3-column table from the same production database, on a 4 vCPU Linux
+machine. Nothing was written to D1.
+
+| Step | Result |
+|---|---|
+| Export | 106 requests, 105,484 rows read at D1, 57 s, 13.6 MB of JSONL, 26 MB peak memory |
+| First preview, then apply | 7.4 s and 1.1 s, about 240 MB peak memory; store 4.5 MB |
+| Preview with nothing changed | 1.0 s, file `unchanged`, 0 changes |
+| Preview after removing 2 rows and editing 101 in the local file | 1.0 s: `removed` 2, `updated` 101 |
+| Apply that change | 1.1 s, 270 MB peak memory; store 8.7 MB |
+
+The export is the slow part and it is network time: about half a second per request.
+The row reads count against the D1 plan's allowance on every run, so a daily run of
+this table reads about 3.2 million rows a month. Check that figure against your plan.
+
+The store grew from 4.5 MB to 8.7 MB after the second apply. Whether it keeps growing
+with every apply was not measured.
+
+**The exporter read far more than this before it was fixed.** Its first version paged with
+`WHERE (?1 IS NULL OR key > ?1)`, which SQLite cannot answer with an index seek, so every
+page scanned from the first row: page 1 read 1,000 rows at D1 and page 2 read 2,000.
+Extrapolated to this table that is about 5.8 million row reads for one export instead of
+105,484; that full run was not made. The 3,365-row table above cost about 12,700 reads
+instead of 3,365 and went unnoticed. The script now uses a plain `key > ?` seek and
+prints the request and row-read counts D1 reports, so a regression shows up in its output.
+
