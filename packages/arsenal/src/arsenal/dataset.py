@@ -34,7 +34,7 @@ def fingerprints(pattern: str) -> dict[str, str]:
         path = Path(name)
         if path.is_file():
             with path.open("rb") as stream:
-                result[name] = hashlib.file_digest(stream, "sha256").hexdigest()
+                result[path.as_posix()] = hashlib.file_digest(stream, "sha256").hexdigest()
     if not result:
         raise FatalError(f"입력 파일이 없습니다. 파일 도착 여부와 경로를 확인하세요: {pattern}")
     return result
