@@ -18,7 +18,7 @@ from typing import Any
 from aquila.model import ScanResult, schema_hash
 from aquila.uri import dataset_id, default_name
 
-SCHEMA_VERSION = 2
+SCHEMA_VERSION = 3
 
 _V1 = (
     """CREATE TABLE datasets (
@@ -142,6 +142,25 @@ class CatalogStore:
                     self._conn.execute(statement)
                 self._conn.execute("PRAGMA user_version=2")
 
+        if version < 3:
+            with self._conn:
+                self._conn.execute(
+                    "CREATE TABLE publications (dataset_id TEXT PRIMARY KEY "
+                    "REFERENCES datasets(dataset_id), "
+                    "source_path TEXT NOT NULL, snapshot TEXT NOT NULL, scanned_at TEXT NOT NULL)"
+                )
+                self._conn.execute("PRAGMA user_version=3")
+
+    def publications(self, nodes: Iterable[str]) -> dict[str, dict[str, Any]]:
+        wanted = set(nodes)
+        return {
+            ident: dict(json.loads(snapshot), scanned_at=scanned_at)
+            for ident, snapshot, scanned_at in self._conn.execute(
+                "SELECT dataset_id, snapshot, scanned_at FROM publications"
+            )
+            if ident in wanted
+        }
+
     def close(self) -> None:
         self._conn.close()
 
@@ -172,6 +191,11 @@ class CatalogStore:
             removed_edges, removed_contracts = self._drop_deleted_specs(scan.roots, scan.spec_paths)
             report.removed_edges += removed_edges
             report.removed_contracts = removed_contracts
+            for uri, publication in scan.publications.items():
+                self._conn.execute(
+                    "INSERT OR REPLACE INTO publications VALUES (?,?,?,?)",
+                    (dataset_id(uri), publication["source_path"], json.dumps(publication), now),
+                )
             for schema in scan.schemas:
                 if self._upsert_schema(
                     dataset_id(schema.uri), schema.snapshot, schema.origin, schema.observed_at
@@ -279,6 +303,11 @@ class CatalogStore:
             self._conn.execute(
                 "DELETE FROM contracts WHERE dataset_id=? AND contract_path=?", contract
             )
+        for ident, path in self._conn.execute(
+            "SELECT dataset_id, source_path FROM publications"
+        ).fetchall():
+            if gone(path):
+                self._conn.execute("DELETE FROM publications WHERE dataset_id=?", (ident,))
         return len(edges), len(contracts)
 
     def _upsert_schema(self, ident: str, snapshot: str, origin: str, seen: str) -> bool:

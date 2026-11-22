@@ -21,6 +21,40 @@ arsenal query "SELECT * FROM './data/clean/*.parquet' LIMIT 10"
 (`tests/e2e/test_recipes.py`).
 자기 데이터로 하려면 `input/sample.csv`를 바꾼다.
 
+## 대화로 첫 파이프라인 실행하기
+
+> 샘플 CSV로 프로젝트를 만들고, 중복 제거 전후 건수와 결과 파일 위치를 알려 줘.
+
+ChatGPT·Claude·Codex에서 이 요청으로 시작할 수 있다. 에이전트가 프로젝트를 만들고
+실행 결과를 조회한다. 내 파일로 작업할 때는 파일과 원하는 결과를 알려 준다.
+반복 작업은 데이터와 실행 기록을 보관할 PC에서 돌린다. [스킬 설치 방법](plugins/de-arsenal/README.md)
+
+### 파일 결과를 반영하기 전에 검토하기
+
+0.6.7에서 작업별 폴더 하나를 열고 아래 명령을 실행한다. YAML 작성 없이
+CSV, JSONL 또는 Parquet 파일을 검토할 수 있다. 센서 관측, 이벤트 로그, 설문 응답 등에서
+같은 행이 여러 번 나올 수 있어 기본값은 모든 행을 보존한다.
+
+```bash
+arsenal dataset preview --files 'input/*.csv'
+arsenal dataset apply --files 'input/*.csv' --expect "$version"  # version에 미리보기 값을 담는다
+arsenal dataset preview   # 다음 파일부터는 저장한 규칙을 사용
+arsenal status
+```
+
+식별 열이 있으면 `--key`로 수정 전후를 보고, 완전히 같은 행을 한 번만 남길 때는
+`--distinct`를 사용한다. `--measure`는 지정한 수치 열의 합계, `--time-column`은
+데이터 기간을 표시한다. 첫 게시에는 미리보기와 같은 옵션을 전달한다.
+`--max-age-hours`는 마지막으로 입력 내용 변경을 반영한 시점부터 지연을 판정한다.
+폴더에서 빠진 파일의 행은 다음 게시 결과에서 제외된다. 전체 입력이 사라지거나
+검증에 실패하면 마지막 성공 결과를 유지한다. 결과는 작업 폴더의
+`.arsenal/dataset.duckdb` 안에 있는 `published` 테이블이다.
+
+게시 경로를 보려면 작업 폴더에서 `aquila scan` 후
+`aquila lineage published --direction up --format mermaid`를 실행한다.
+그래프에는 마지막 정상 결과의 게시 시각·행 수·데이터 기간과 최근 게시 시도의 성공·실패가 표시된다.
+JSON 출력에는 그 결과에 사용한 파일 목록과 규칙도 포함된다.
+
 ## 하는 일
 
 - **이어서 한다.** 페이지·파일·batch 하나의 쓰기가 끝날 때마다 기록한다. Ctrl-C나

@@ -70,7 +70,7 @@ def test_scanning_a_single_file_never_drops_other_specs(lakehouse: Path, tmp_pat
     assert report.removed_edges == 0 and store.counts()["edges"] == 4
 
 
-def test_a_v1_catalog_migrates_to_v2_and_keeps_its_rows(lakehouse: Path, tmp_path: Path) -> None:
+def test_a_v1_catalog_migrates_and_keeps_its_rows(lakehouse: Path, tmp_path: Path) -> None:
     db = tmp_path / "old.db"
     con = sqlite3.connect(db)
     for statement in _V1:
@@ -88,7 +88,7 @@ def test_a_v1_catalog_migrates_to_v2_and_keeps_its_rows(lakehouse: Path, tmp_pat
 
     assert store.resolve("legacy") is not None and store.counts()["edges"] == 4
     store.close()
-    assert sqlite3.connect(db).execute("PRAGMA user_version").fetchone()[0] == 2
+    assert sqlite3.connect(db).execute("PRAGMA user_version").fetchone()[0] == 3
 
 
 def test_remote_parquet_footer_through_an_injected_filesystem(tmp_path: Path) -> None:

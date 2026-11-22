@@ -5,6 +5,10 @@ description: Answer a question about collected data in ordinary words by writing
 
 # Ask
 
+For a folder published with `arsenal dataset apply`, read `arsenal status` for
+coverage and query the published snapshot with
+`arsenal query "ATTACH '.arsenal/dataset.duckdb' AS ds (READ_ONLY); SELECT * FROM ds.published LIMIT 5"`.
+
 The person asks in words and gets an answer in words, with the number, how it
 was computed, and what it does not include. You write the SQL; they do not
 need to see it unless they ask.

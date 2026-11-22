@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from collections.abc import Iterable
 from dataclasses import dataclass
-from typing import Literal
+from typing import Any, Literal
 
 from aquila.store import Edge
 
@@ -108,13 +108,52 @@ def find_cycles(edges: Iterable[Edge]) -> list[list[str]]:
     return sorted(groups)
 
 
-def to_mermaid(graph: LineageGraph, names: dict[str, str]) -> str:
+def _label(text: str) -> str:
+    # Mermaid numeric entities keep user-controlled names and error text inside labels.
+    return "".join(
+        f"#{ord(ch)};" if ch in '#"<>&|[]{}\\' else ch for ch in " ".join(text.splitlines())
+    )
+
+
+def to_mermaid(
+    graph: LineageGraph,
+    names: dict[str, str],
+    publications: dict[str, dict[str, Any]] | None = None,
+) -> str:
     lines = ["flowchart LR"]
     for node in sorted(graph.nodes, key=lambda n: names.get(n, n)):
-        label = names.get(node, node).replace('"', "'")
+        label = _label(names.get(node, node))
+        publication = (publications or {}).get(node)
+        if publication:
+            if publication["published_at"]:
+                published = _label(publication["published_at"])
+                label += f"<br/>Published: {published} ({publication['rows']} rows)"
+                if publication["period_start"] is not None:
+                    start = _label(publication["period_start"])
+                    end = _label(publication["period_end"])
+                    label += f"<br/>Data period: {start} – {end}"
+                else:
+                    label += "<br/>Data period unavailable"
+            else:
+                label += "<br/>No successful publication"
+            attempt = publication["latest_attempt"]
+            status = attempt["status"]
+            detail = f"Latest apply: {status}<br/>{_label(attempt['at'])}"
+            if attempt["error"]:
+                detail += "<br/>" + _label(attempt["error"][:200])
+            lines.append(f'  a{node}["{detail}"]:::{status}')
+            lines.append(f"  a{node} -.->|attempt status| n{node}")
         style = ":::root" if node == graph.root else ""
         lines.append(f'  n{node}["{label}"]{style}')
     for edge in graph.edges:
-        lines.append(f"  n{edge.upstream_id} -->|{edge.via}| n{edge.downstream_id}")
+        via = "dataset apply" if edge.via.startswith("dataset:apply-") else edge.via
+        lines.append(f"  n{edge.upstream_id} -->|{via}| n{edge.downstream_id}")
+    if publications:
+        lines.extend(
+            [
+                "  classDef failed fill:#fee2e2,color:#7f1d1d,stroke:#b91c1c",
+                "  classDef succeeded fill:#dcfce7,color:#14532d,stroke:#15803d",
+            ]
+        )
     lines.append("  classDef root stroke-width:3px")
     return "\n".join(lines)

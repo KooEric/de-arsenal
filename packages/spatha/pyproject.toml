@@ -1,6 +1,6 @@
 [project]
 name = "spatha"
-version = "0.6.6"
+version = "0.6.7"
 description = "Spatha — deterministic dependency DAG planning"
 readme = "README.md"
 requires-python = ">=3.11"

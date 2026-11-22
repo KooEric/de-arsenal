@@ -310,3 +310,11 @@ def test_check_warns_when_file_source_matches_nothing(tmp_path: Path) -> None:
     result = runner.invoke(app, ["check", "--project", str(tmp_path)])
     assert result.exit_code == 0, result.output
     assert "warn   collect.yaml: source.path './input/*.csv' matches no files yet" in result.output
+
+
+def test_jsonl_query_serializes_integer_sum_and_date() -> None:
+    result = CliRunner().invoke(
+        app, ["query", "SELECT sum(9::BIGINT) AS n, DATE '2026-01-01' AS day", "--format", "jsonl"]
+    )
+    assert result.exit_code == 0, result.output
+    assert json.loads(result.output) == {"n": 9, "day": "2026-01-01"}

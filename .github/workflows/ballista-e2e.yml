@@ -43,22 +43,21 @@ jobs:
       - run: uv python install 3.11
       - run: uv sync
 
-      - name: Install Spark client (spark-submit)
-        run: |
-          base="https://archive.apache.org/dist/spark/spark-${SPARK_VERSION}"
-          name="spark-${SPARK_VERSION}-bin-hadoop3"
-          curl -fsSLo "$RUNNER_TEMP/$name.tgz" "$base/$name.tgz"
-          curl -fsSLo "$RUNNER_TEMP/$name.tgz.sha512" "$base/$name.tgz.sha512"
-          (cd "$RUNNER_TEMP" && sha512sum -c "$name.tgz.sha512")
-          tar -xzf "$RUNNER_TEMP/$name.tgz" -C "$RUNNER_TEMP"
-          echo "$RUNNER_TEMP/$name/bin" >> "$GITHUB_PATH"
-
       - name: Build worker image
         run: |
           for package in arsenal-core de-gladius de-ballista; do
             uv build --package "$package" --wheel --out-dir packages/ballista/docker/wheels
           done
           docker build --build-arg SPARK_VERSION="$SPARK_VERSION" -t "$IMAGE" packages/ballista/docker
+
+      - name: Use the worker image's Spark client for submission
+        run: |
+          container=$(docker create "$IMAGE")
+          trap 'docker rm "$container" >/dev/null' EXIT
+          docker cp "$container:/opt/spark" "$RUNNER_TEMP/spark-client"
+          echo "$RUNNER_TEMP/spark-client/bin" >> "$GITHUB_PATH"
+          echo "SPARK_HOME=$RUNNER_TEMP/spark-client" >> "$GITHUB_ENV"
+          "$RUNNER_TEMP/spark-client/bin/spark-submit" --version
 
       - uses: helm/kind-action@v1
         with:

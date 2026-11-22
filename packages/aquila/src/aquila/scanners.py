@@ -9,6 +9,7 @@ only their owning tool may write them (P2-ADR-7).
 from __future__ import annotations
 
 import hashlib
+import os
 import sqlite3
 from collections.abc import Iterator
 from datetime import UTC, datetime
@@ -38,13 +39,19 @@ def iter_spec_files(paths: list[Path]) -> Iterator[Path]:
         if path.is_file():
             yield path
             continue
-        for candidate in sorted(path.rglob("*")):
-            if candidate.suffix not in {".yaml", ".yml"} or not candidate.is_file():
-                continue
-            relative = candidate.relative_to(path).parts[:-1]
-            if any(part in _SKIP_DIRS or part.startswith(".") for part in relative):
-                continue
-            yield candidate
+        for base, directories, names in os.walk(path):
+            folder = Path(base)
+            if ".arsenal" in directories:
+                publication = folder / ".arsenal" / "dataset.duckdb"
+                if publication.is_file():
+                    yield publication
+            directories[:] = sorted(
+                d for d in directories if d not in _SKIP_DIRS and not d.startswith(".")
+            )
+            for name in sorted(names):
+                candidate = folder / name
+                if candidate.suffix in {".yaml", ".yml"} and candidate.is_file():
+                    yield candidate
 
 
 def classify(raw: dict[str, Any]) -> str | None:

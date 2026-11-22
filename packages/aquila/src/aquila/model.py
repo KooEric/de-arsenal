@@ -75,6 +75,7 @@ class SourceFile:
 
 @dataclass
 class ScanResult:
+    publications: dict[str, dict[str, Any]] = field(default_factory=lambda: {})
     datasets: dict[str, DatasetObservation] = field(default_factory=lambda: {})
     edges: list[EdgeObservation] = field(default_factory=lambda: [])
     schemas: list[SchemaObservation] = field(default_factory=lambda: [])

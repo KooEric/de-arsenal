@@ -173,14 +173,20 @@ def lineage(
             store.edges(), dataset.dataset_id, direction=_direction(direction), depth=depth
         )
         names = {d.dataset_id: d.name for d in store.datasets()}
+        publications = store.publications(graph.nodes)
     finally:
         store.close()
     if fmt == "mermaid":
-        typer.echo(to_mermaid(graph, names))
+        typer.echo(to_mermaid(graph, names, publications))
         return
     _emit(
         {
             "root": names[graph.root],
+            **(
+                {"publications": {names[k]: v for k, v in publications.items()}}
+                if publications
+                else {}
+            ),
             "nodes": sorted(names.get(n, n) for n in graph.nodes),
             "edges": [
                 {"from": names.get(e.upstream_id), "to": names.get(e.downstream_id), "via": e.via}

@@ -12,6 +12,19 @@ minor.
 
 ## [Unreleased]
 
+## [0.6.7] - 2026-11-22
+
+- Preview and publish CSV, JSONL and Parquet snapshots with `arsenal dataset`.
+  Saved rules support key-based comparisons, event-time ranges and freshness checks.
+  A failed apply retains the last successful publication.
+- Aquila discovers dataset publications and renders the current output and latest
+  attempt separately in JSON and Mermaid lineage. Opening an Aquila catalog
+  upgrades its schema to v3. Back up the catalog before opening it if you need to
+  use it with an older Aquila release.
+- Build the portable Agent Skills ZIP with `python3 scripts/build_skill.py`.
+  The Claude plugin and portable skill share the collection and operations guides.
+
+
 ## [0.6.6] - 2026-11-22
 
 A check for hand-edited specs, a freshness check that fails when it should, and agent skills.

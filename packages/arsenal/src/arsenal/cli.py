@@ -19,7 +19,7 @@ import duckdb
 import pyarrow.csv as pa_csv
 import typer
 
-from arsenal import stages
+from arsenal import dataset, stages
 from arsenal.project import ArsenalProject, DbtProjectRef, DistributedRef, StreamRef, load_project
 from arsenal_core.errors import ArsenalError, FatalError
 from arsenal_core.spec import load_pipeline
@@ -261,12 +261,22 @@ def status(project: Path = Path(".")) -> None:
     """Streams and distributed runs in arsenal.yaml: health, checkpoint, run state (JSON)."""
     try:
         proj_dir = project if project.is_absolute() else project.absolute()
+        dataset_path = proj_dir / dataset.STORE
+        summary = dataset.status_report(dataset_path) if dataset_path.exists() else None
+        if summary is not None and not (proj_dir / "arsenal.yaml").exists():
+            alert = summary["state"] != "published"
+            dataset.emit({"project": proj_dir.name, "dataset": summary, "alert": alert})
+            if alert:
+                raise typer.Exit(1)
+            return
         proj = load_project(proj_dir / "arsenal.yaml")
         _check_optional_tools(proj)
         with _chdir(proj_dir):
             streams = [stages.stream_status(ref) for ref in proj.streams]
             distributed = [stages.distributed_status(proj.name, ref) for ref in proj.distributed]
         catalog = stages.catalog_status(proj_dir)
+    except duckdb.Error as exc:
+        raise _fatal(FatalError(str(exc))) from exc
     except ArsenalError as e:
         raise _fatal(e) from e
     alerts = [s for s in streams if stages.needs_attention(s)] + [
@@ -278,6 +288,9 @@ def status(project: Path = Path(".")) -> None:
         "distributed": distributed,
         "alert": bool(alerts) or bool(catalog and catalog["alert"]),
     }
+    if summary is not None:
+        payload["dataset"] = summary
+        payload["alert"] |= summary["state"] != "published"
     if catalog is not None:
         payload["catalog"] = catalog
     typer.echo(json.dumps(payload, sort_keys=True, default=str))
@@ -300,14 +313,20 @@ def query(sql: str, fmt: str = typer.Option("table", "--format")) -> None:
             result, sys.stdout.buffer
         )
     elif fmt == "jsonl":
-        for row in result.to_pylist():
-            typer.echo(json.dumps(row))
+        # DuckDB serializes its numeric and temporal types without dropping decimal precision.
+        with duckdb.connect() as con:
+            con.register("query_result", result)
+            rows = con.execute("SELECT to_json(struct_pack(*COLUMNS(*))) FROM query_result")
+            while batch := rows.fetchmany(1024):
+                for (line,) in batch:
+                    typer.echo(line)
     else:
         typer.echo(f"error: unsupported --format: {fmt!r} (table | csv | jsonl)", err=True)
         raise typer.Exit(1)
 
 
 # 개별 도구는 서브커맨드로 그대로 노출 — 우산은 감싸되 가리지 않는다
+app.add_typer(dataset.app, name="dataset")
 app.add_typer(pugio_app, name="collect", help="수집 (pugio)")
 app.add_typer(gladius_app, name="transform", help="변환·쿼리 (gladius)")
 
