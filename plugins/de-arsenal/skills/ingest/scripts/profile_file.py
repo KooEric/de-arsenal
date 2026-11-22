@@ -27,7 +27,20 @@ from collections import Counter
 from pathlib import Path
 
 ENCODINGS = ["utf-8-sig", "cp949", "utf-16", "latin-1"]
-NULL_TOKENS = {"NA", "N/A", "n/a", "NULL", "null", "None", "-", "--", "?", "없음", "미상", "해당없음"}
+NULL_TOKENS = {
+    "NA",
+    "N/A",
+    "n/a",
+    "NULL",
+    "null",
+    "None",
+    "-",
+    "--",
+    "?",
+    "없음",
+    "미상",
+    "해당없음",
+}
 SAMPLE_BYTES = 4_000_000
 INT_RE = re.compile(r"^[+-]?\d+$")
 LEADING_ZERO_RE = re.compile(r"^0\d+$")
@@ -180,9 +193,10 @@ def blockers(rep: dict) -> list[str]:
 def normalize(src: Path, dst: Path, rep: dict) -> int:
     dst.parent.mkdir(parents=True, exist_ok=True)
     written = 0
-    with src.open("r", encoding=rep["codec"], newline="") as fin, dst.open(
-        "w", encoding="utf-8", newline=""
-    ) as fout:
+    with (
+        src.open("r", encoding=rep["codec"], newline="") as fin,
+        dst.open("w", encoding="utf-8", newline="") as fout,
+    ):
         reader = csv.reader(fin, delimiter=rep["delimiter_char"])
         writer = csv.writer(fout)
         width = None
@@ -204,9 +218,13 @@ def normalize(src: Path, dst: Path, rep: dict) -> int:
 
 
 def main() -> int:
-    ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
+    ap = argparse.ArgumentParser(
+        description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter
+    )
     ap.add_argument("file", type=Path)
-    ap.add_argument("--skip-rows", type=int, default=None, help="lines above the header (default: detect)")
+    ap.add_argument(
+        "--skip-rows", type=int, default=None, help="lines above the header (default: detect)"
+    )
     ap.add_argument("--normalize", type=Path, default=None, help="write a UTF-8 comma CSV here")
     ap.add_argument("--json", action="store_true", help="print the report as JSON only")
     args = ap.parse_args()
@@ -251,7 +269,8 @@ def main() -> int:
         print("\nPugio cannot read this file as it is:")
         for b in blocked:
             print(f"  - {b}")
-        print(f"\nrewrite it first:\n  python {sys.argv[0]} {args.file} --normalize input/{args.file.stem}.csv")
+        target = f"input/{args.file.stem}.csv"
+        print(f"\nrewrite it first:\n  python {sys.argv[0]} {args.file} --normalize {target}")
         return 1
     print("\nsuggested source block:\n")
     print(suggest_yaml(rep, str(args.file)))

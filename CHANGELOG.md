@@ -12,6 +12,16 @@ minor.
 
 ## [Unreleased]
 
+## [0.6.6] - 2026-11-22
+
+A check for hand-edited specs, a freshness check that fails when it should, and agent skills.
+All 13 packages move to `0.6.6`; internal pins stay `>=0.6,<0.7`. No state migrations.
+
+### ⚠️ Upgrade notes
+
+- `pugio status --max-age-seconds` now exits 1 when the pipeline is stale. A script that ran it
+  only for its output and stops on a non-zero exit (`set -e`, a CI step) will now stop there.
+
 ### Added
 
 - `arsenal check` validates `arsenal.yaml` and every pipeline and transform it lists, reports all

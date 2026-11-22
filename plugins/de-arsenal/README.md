@@ -34,7 +34,7 @@ profiler path in `ingest` uses `${CLAUDE_PLUGIN_ROOT}`; elsewhere, point it at
 
 ## What was checked
 
-Every command and spec in these skills was run against DE Arsenal 0.6.5 on
+Every command and spec in these skills was run against DE Arsenal 0.6.5 and the 0.6.6 source tree on
 Linux: CP949 CSV with leading zeros and `NA`, a tab-delimited file with title
 lines, validation with `split` and `quarantine`, DLQ list and retry, schema
 drift, a contract, a DuckDB sink, SQL steps with a join and an aggregate, and
