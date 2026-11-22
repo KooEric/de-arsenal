@@ -113,14 +113,14 @@ written to D1.
   size for the wide table. A table ten times this size would need several gigabytes; that
   was not run.
 - **The store does not keep growing.** Over seven applies of the wide table it moved
-  between 12.8 MB and 25.8 MB: each apply writes the new table before the old one's blocks
-  are released, and the freed blocks are reused by the next. Expect up to twice the size
-  of one published table.
+  between 12.8 MB and 25.8 MB, and at the end 51 of its 103 blocks were free. That fits
+  an apply writing the new table before the old one's blocks are released and reused,
+  though the mechanism was not traced. Expect up to twice the size of one published table.
 
 **The exporter read far more than this before it was fixed.** Its first version paged with
 `WHERE (?1 IS NULL OR key > ?1)`, which SQLite cannot answer with an index seek, so every
 page scanned from the first row: page 1 read 1,000 rows at D1 and page 2 read 2,000.
-Extrapolated to this table that is about 5.8 million row reads for one export instead of
+Extrapolated to the narrow table that is about 5.8 million row reads for one export instead of
 105,484; that full run was not made. The 3,365-row table above cost about 12,700 reads
 instead of 3,365 and went unnoticed. The script now uses a plain `key > ?` seek and
 prints the request and row-read counts D1 reports, so a regression shows up in its output.
