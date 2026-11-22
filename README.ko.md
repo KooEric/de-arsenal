@@ -21,42 +21,71 @@ arsenal query "SELECT * FROM './data/clean/*.parquet' LIMIT 10"
 (`tests/e2e/test_recipes.py`).
 자기 데이터로 하려면 `input/sample.csv`를 바꾼다.
 
-## 대화로 첫 파이프라인 실행하기
+## 쓰는 방법 세 가지
 
-> 샘플 CSV로 프로젝트를 만들고, 중복 제거 전후 건수와 결과 파일 위치를 알려 줘.
+| 가진 것 | 쓰는 것 | 볼 곳 |
+|---|---|---|
+| 주기적으로 수집하고 정리할 소스 | YAML 스펙으로 된 프로젝트를 `arsenal run`으로 실행 | 위의 네 줄, 그다음 [예제](#예제) |
+| 게시된 결과를 바꾸기 전에 검토해야 하는 파일이나 테이블 스냅샷 | `arsenal dataset`. YAML이 필요 없다 | [검토한 뒤 게시하기](#검토한-뒤-게시하기) |
+| 말로 하는 요청 | 에이전트 스킬. 스펙을 대신 쓰고 실행한다 | [에이전트에게 말로 시키기](#에이전트에게-말로-시키기) |
 
-ChatGPT·Claude·Codex에서 이 요청으로 시작할 수 있다. 에이전트가 프로젝트를 만들고
-실행 결과를 조회한다. 내 파일로 작업할 때는 파일과 원하는 결과를 알려 준다.
-반복 작업은 데이터와 실행 기록을 보관할 PC에서 돌린다. [스킬 설치 방법](plugins/de-arsenal/README.md)
+세 방법 모두 작업 폴더에 평범한 파일을 남긴다. 스펙, 출력, 진행 기록이 전부 파일이다.
 
-### 파일 결과를 반영하기 전에 검토하기
+## 검토한 뒤 게시하기
 
-0.6.8에서 작업별 폴더 하나를 열고 아래 명령을 실행한다. YAML 작성 없이
-CSV, JSONL 또는 Parquet 파일을 검토할 수 있다. 센서 관측, 이벤트 로그, 설문 응답 등에서
-같은 행이 여러 번 나올 수 있어 기본값은 모든 행을 보존한다.
+계속 바뀌는 CSV·JSONL·Parquet 폴더가 있을 때, `arsenal dataset`은 새 파일이 무엇을 바꾸는지
+먼저 보여 주고 그다음에 교체한다. 데이터셋 하나에 작업 폴더 하나를 쓴다.
 
 ```bash
-arsenal dataset preview --files 'input/*.csv'
-arsenal dataset apply --files 'input/*.csv' --expect "$version"  # version에 미리보기 값을 담는다
-arsenal dataset preview   # 다음 파일부터는 저장한 규칙을 사용
-arsenal status
+arsenal dataset preview --files 'input/*.csv' --key id    # 아무것도 쓰지 않는다. 변경 내용과 version을 출력
+arsenal dataset apply   --files 'input/*.csv' --key id --expect <version>
+arsenal dataset preview                                    # 다음부터는 저장된 규칙을 쓴다
+arsenal status                                             # 마지막 성공, 데이터 기간, 실패 여부
 ```
 
-식별 열이 있으면 `--key`로 수정 전후를 보고, 완전히 같은 행을 한 번만 남길 때는
-`--distinct`를 사용한다. `--measure`는 지정한 수치 열의 합계, `--time-column`은
-데이터 기간을 표시한다. 첫 게시에는 미리보기와 같은 옵션을 전달한다.
-`--max-age-hours`는 마지막으로 입력 내용 변경을 반영한 시점부터 지연을 판정한다.
-0.6.8부터 JSONL에서 모든 행이 NULL인 컬럼은 스키마 변경으로 거부되지 않고 게시된 타입을
-그대로 쓴다. DB 테이블을 이 방식으로 게시하는 방법과 운영 테이블로 돌린 기록은
-[Cloudflare D1 예제](examples/real-world/d1-snapshot/README.md)에 있다.
-폴더에서 빠진 파일의 행은 다음 게시 결과에서 제외된다. 전체 입력이 사라지거나
-검증에 실패하면 마지막 성공 결과를 유지한다. 결과는 작업 폴더의
-`.arsenal/dataset.duckdb` 안에 있는 `published` 테이블이다.
+미리보기는 파일을 마지막 게시 결과와 비교해 `added`, `removed`를 세고, `--key`가 있으면
+`updated`를 전후 값과 함께 보여 준다. `apply`는 게시된 스냅샷 전체를 한 트랜잭션으로
+교체한다(`.arsenal/dataset.duckdb`의 `published` 테이블). `--expect`는 내가 본 미리보기 이후에
+파일이나 게시 결과가 바뀌었으면 게시를 거부한다.
 
-게시 경로를 보려면 작업 폴더에서 `aquila scan` 후
-`aquila lineage published --direction up --format mermaid`를 실행한다.
-그래프에는 마지막 정상 결과의 게시 시각·행 수·데이터 기간과 최근 게시 시도의 성공·실패가 표시된다.
-JSON 출력에는 그 결과에 사용한 파일 목록과 규칙도 포함된다.
+| 옵션 | 효과 |
+|---|---|
+| `--key <열>` | 이 열로 행을 맞춰서, 수정된 행이 `updated`로 보인다. 값이 유일하고 비어 있지 않아야 한다 |
+| `--distinct` | 모든 열이 같은 행을 하나만 남긴다. 없으면 반복된 행을 그대로 둔다 |
+| `--time-column <열>` | 데이터가 덮는 첫 시각과 마지막 시각을 보고한다 |
+| `--measure <열>` | 숫자 열의 합계와 그 변화를 보고한다 |
+| `--max-age-hours <n>` | 바뀐 입력이 이 시간 넘게 게시되지 않으면 `arsenal status`가 exit 1을 낸다 |
+
+- 폴더에서 빠진 파일은 다음 게시에서 제외된다. 원본에서 지워진 행은 `removed`로 보고된다.
+- 실패하거나 거부된 게시는 마지막 성공 결과를 그대로 둔다. `arsenal status`는 다음 성공한
+  게시 전까지 `failed`를 보고한다.
+- 게시된 것과 열이나 타입이 다르면 거부한다. 한 스냅샷에서 모든 행이 비어 있는 열은 타입
+  변경으로 보지 않는다.
+- `de-arsenal[catalog]`이 있으면 `aquila scan` 뒤에
+  `aquila lineage published --direction up --format mermaid`가 입력에서 게시 결과까지의 경로를
+  행 수, 데이터 기간, 최근 시도와 함께 그린다.
+
+DB 테이블을 이렇게 게시하려면 먼저 스냅샷 파일로 내보낸다.
+[Cloudflare D1 예제](examples/real-world/d1-snapshot/README.md)에 읽기 전용 내보내기 스크립트와
+운영 테이블로 돌린 기록이 있다.
+
+## 에이전트에게 말로 시키기
+
+> 이 폴더의 엑셀 파일들을 하나로 합치고 중복을 빼 줘.
+
+에이전트 스킬이 데이터를 살펴보고, 스펙을 쓰고, 실행한 뒤 행 수로 보고한다. 스펙은 평범한
+YAML로 남는다. 사람이 직접 고칠 수 있고, `arsenal check`가 아무것도 실행하지 않고 모든 스펙을
+검증한다.
+
+```text
+/plugin marketplace add KooEric/de-arsenal
+/plugin install de-arsenal@de-arsenal
+```
+
+이 두 줄은 Claude Code에 스킬 7개(`start`, `ingest`, `transform`, `ask`, `trust`, `operate`,
+`doctor`)를 설치한다. 같은 문서로 ChatGPT·Claude·Codex용 휴대용 스킬 하나도 만들 수 있다. 설치
+방법과 실행해 본 범위는 [plugins/de-arsenal/README.md](plugins/de-arsenal/README.md)에 있다.
+반복 작업은 그 작업을 돌리는 머신에 프로젝트를 둔다.
 
 ## 하는 일
 
@@ -80,7 +109,7 @@ sink별·도구별로 무엇을 보장하고 무엇을 보장하지 않는지는
 
 | 도구 | 하는 일 | 패키지 | 상태 |
 |---|---|---|---|
-| **Arsenal** | 프로젝트 CLI: `init`, `check`, `run`, `status`, `query`, 시작용 레시피 3종 | `de-arsenal` | stable |
+| **Arsenal** | 프로젝트 CLI: `init`, `check`, `run`, `status`, `query`. 파일을 검토하고 게시하는 `dataset`. 시작용 레시피 3종 | `de-arsenal` | stable |
 | **Pugio** | 수집: REST, CSV/JSONL/Excel, DB, dlt 소스 → Parquet, DuckDB, Postgres, S3/GCS, Redshift·Iceberg(둘 다 experimental) | `pugio` | stable |
 | **Gladius** | YAML 변환을 DuckDB SQL로 컴파일. 증분 실행, Python UDF, 즉석 쿼리 | `de-gladius` | stable |
 | **Onager** | 로컬 Parquet의 small-file compaction과 격리 백필 | `de-onager` | beta |
@@ -89,7 +118,7 @@ sink별·도구별로 무엇을 보장하고 무엇을 보장하지 않는지는
 | **Spatha** | 라이브러리: 의존성·신호·우선순위·실행 window로 지금 실행할 태스크를 고른다. 스케줄러 데몬은 없다 | `spatha` | beta |
 | **Hasta** | 스트리밍: cursor API 폴링 마이크로배치, Postgres outbox CDC | `de-hasta` | beta |
 | **Ballista** | Gladius 변환을 Spark/Kubernetes에서 실행하고 Iceberg에 커밋 | `de-ballista` | beta |
-| **Aquila** | SQLite 파일 하나로 된 카탈로그: 데이터셋, 스키마 이력, lineage, 계약, 태그 | `de-aquila` | preview |
+| **Aquila** | SQLite 파일 하나로 된 카탈로그: 데이터셋, 스키마 이력, lineage(`arsenal dataset` 게시 포함), 계약, 태그 | `de-aquila` | preview |
 | **Augur** | 자연어 질문을 SQL로. eval 하네스 포함 | `de-augur` | experimental |
 | **Pilum** | Reverse ETL: 바뀐 레코드를 HTTP 끝점과 Slack으로, 변경당 한 번 보낸다 | `de-pilum` | experimental |
 
@@ -175,7 +204,7 @@ Ballista는 Kubernetes 클러스터, 객체 스토리지, Iceberg 카탈로그�
 
 ## 실데이터로 검증한 것
 
-테스트가 전부 통과하는 것으로는 부족했다. 실데이터에서만 드러난 버그 때문에 릴리스가 두 번
+테스트가 전부 통과하는 것으로는 부족했다. 실데이터에서만 드러난 버그 때문에 릴리스가 세 번
 필요했다. 이 절은 실제 API와 파일에 무엇을 돌렸고, 무엇이 깨졌고, 무엇이 아직 증명되지 않았는지의
 기록이다. 실험 환경은 Linux 4 vCPU, 15 GB RAM이다. 모든 숫자는 실제 실행 결과이고, 재현용 스펙은
 [experiments/real-data/](experiments/real-data/README.md), 전체 보고서는
@@ -186,7 +215,8 @@ Ballista는 Kubernetes 클러스터, 객체 스토리지, Iceberg 카탈로그�
 | 크래시를 주입한 실행 중 중복·누락으로 끝난 경우 | 4개 실험(1, 2, 4, 5) 중 **0** |
 | 실데이터로 찾은 조용한 데이터 손실 버그 (모두 수정) | **5건** (0.5.3에서 2건, 0.6.0에서 3건) |
 | 가장 큰 실제 적재 | 955만 행 4.0초, 1,970만 행 변환 5.96초 |
-| 자동 테스트 | 791개. CI가 Linux·macOS·Windows, Python 3.11·3.12에서 실행 |
+| 운영 DB 테이블을 검토·게시 경로로 | 3,365행. 실제 두 상태 사이에 추가 793, 수정 2,559, 삭제 0 |
+| 자동 테스트 | 804개. CI가 Linux·macOS·Windows, Python 3.11·3.12에서 실행 |
 
 ### 실험
 
@@ -265,6 +295,21 @@ rows=24000 distinct=24000 min=1 max=24000 gaps=0 dups=0
 **7. 자연어 → SQL (Augur).** `gemini-3.1-flash-lite`로 평가 34건 중 34건 정답. 모델이 완벽하다는
 뜻이 아니라 평가 세트(작은 테이블 3개)가 너무 쉽다는 뜻으로 읽는다.
 
+**8. 운영 Cloudflare D1 테이블을 `arsenal dataset`으로** (PyPI의 0.6.7). 3,365행 × 20열의
+카탈로그 테이블을 키 기준 스냅샷으로 내보냈다. 테이블의 실제 두 상태를 차례로 게시했고, DB에는
+아무것도 쓰지 않았다.
+
+| 단계 | 결과 |
+|---|---|
+| 과거 상태 게시 후 현재 상태 미리보기 | 2,572행 게시. 그다음 추가 793, 삭제 0, 수정 2,559 |
+| 수정의 내용 | 비활성화(`active` 1 → 0) 384건, 이름 변경 43건, 시각만 바뀐 것 86건 |
+| 변경 없이 다시 내보내기 | 파일이 바이트 단위로 같고 변경 0건 |
+| 로컬 파일에서 2행 삭제, 2행 수정 | `removed` 2, `updated` 2. 키와 바뀐 필드를 짚었다 |
+| JSONL 스냅샷에서 한 열을 전부 NULL로 | 0.6.7은 스키마 변경으로 거부했다. 0.6.8에서 수정: 수정 2,458건으로 보고 |
+
+실제 데이터에는 지워진 행이 없어서 `removed`는 로컬 파일로만 확인했다. 상세와 내보내기
+스크립트는 [examples/real-world/d1-snapshot](examples/real-world/d1-snapshot/README.md)에 있다.
+
 ### 실데이터만 찾아낸 버그
 
 아래는 전부 exit code 0과 성공 메시지로 끝났다.
@@ -276,6 +321,9 @@ rows=24000 distinct=24000 min=1 max=24000 gaps=0 dups=0
 | README 첫 네 줄이 실패 | `csv-cleanup` 레시피에 입력이 없었고, 수집은 0행으로 성공을 보고했고, 변환은 DuckDB 원문 에러로 죽었다 | 새 설치에서 exit 1 | 0.6.0: 샘플 데이터 포함, 빈 입력 경로는 에러 |
 | CSV 컬럼의 앞자리 0이 사라짐 | 우편번호 컬럼이 정수로 추론됐다 | `01234`가 `1234`로 저장 | 0.6.0: 그런 컬럼은 문자열로 유지. `column_types`로 타입 고정 |
 | 평범한 CSV가 Postgres에 들어가지 않음 | sink가 날짜, 시간대 없는 timestamp, 작은 정수, 전부 빈 컬럼을 거부했다 | 실제 Postgres 16에서 `unsupported arrow type` | 0.6.0: 네 가지 모두 적재 |
+
+조용하지 않고 에러로 드러난 것이 하나 더 있다. `arsenal dataset`이 한 열이 전부 비어 있는 JSONL
+스냅샷을 거부했고(실험 8), 0.6.8에서 고쳤다.
 
 확인한 한계 두 가지도 0.6.0에서 다뤘다.
 
@@ -315,9 +363,12 @@ rows=24000 distinct=24000 min=1 max=24000 gaps=0 dups=0
 | | |
 |---|---|
 | [docs/tools.md](docs/tools.md) | 도구별 사용 시점과 짧은 시작 방법 |
+| [plugins/de-arsenal/README.md](plugins/de-arsenal/README.md) | 에이전트 스킬: 설치, 스킬별 역할, 실행해 본 범위 |
 | [docs/reference/](docs/reference/) | 코드에서 생성한 YAML 필드 전체 |
 | [docs/08-limits.md](docs/08-limits.md) | 보장하는 것과 보장하지 않는 것 |
 | [docs/11-real-data-experiments.md](docs/11-real-data-experiments.md) · [experiments/](experiments/real-data/README.md) | 실제 API·데이터(GitHub, GitLab, 공항 CSV, NYC 택시) 실험 결과, 찾은 버그와 확인한 한계 |
+| [examples/real-world/](examples/real-world/) | GitHub, Notion, Slack, Stripe, 공공데이터포털 수집 스펙과 Cloudflare D1 스냅샷 내보내기 |
+| [examples/deploy/](examples/deploy/README.md) | cron, GitHub Actions, 컨테이너로 주기 실행 |
 | [CHANGELOG.md](CHANGELOG.md) · [0.6 업그레이드](docs/upgrade-0.6.md) | 변경 내역과 업그레이드 방법 |
 | [docs/README.md](docs/README.md) | 설계 문서, 결정 기록, 릴리스 절차 |
 
