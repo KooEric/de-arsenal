@@ -1,0 +1,9 @@
+{
+  "name": "de-arsenal",
+  "description": "Build and run data pipelines on one machine by describing what you want: files, APIs and databases in, clean tables out. Uses the DE Arsenal CLI.",
+  "version": "0.1.0",
+  "author": { "name": "KooEric" },
+  "homepage": "https://github.com/KooEric/de-arsenal",
+  "repository": "https://github.com/KooEric/de-arsenal",
+  "license": "Apache-2.0"
+}

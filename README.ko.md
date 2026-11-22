@@ -43,7 +43,7 @@ sink별·도구별로 무엇을 보장하고 무엇을 보장하지 않는지는
 
 | 도구 | 하는 일 | 패키지 | 상태 |
 |---|---|---|---|
-| **Arsenal** | 프로젝트 CLI: `init`, `run`, `status`, `query`, 시작용 레시피 3종 | `de-arsenal` | stable |
+| **Arsenal** | 프로젝트 CLI: `init`, `check`, `run`, `status`, `query`, 시작용 레시피 3종 | `de-arsenal` | stable |
 | **Pugio** | 수집: REST, CSV/JSONL/Excel, DB, dlt 소스 → Parquet, DuckDB, Postgres, S3/GCS, Redshift·Iceberg(둘 다 experimental) | `pugio` | stable |
 | **Gladius** | YAML 변환을 DuckDB SQL로 컴파일. 증분 실행, Python UDF, 즉석 쿼리 | `de-gladius` | stable |
 | **Onager** | 로컬 Parquet의 small-file compaction과 격리 백필 | `de-onager` | beta |

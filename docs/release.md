@@ -1,3 +1,32 @@
+# v0.6.6 패치 릴리스 절차
+
+손으로 고친 스펙을 실행 전에 검증하는 `arsenal check`, stale일 때 exit 1을 내도록 고친
+`pugio status --max-age-seconds`, 그리고 에이전트 스킬 플러그인(`plugins/de-arsenal`)이다.
+내역은 [CHANGELOG](../CHANGELOG.md).
+
+**patch인 이유**: 새 명령 하나를 추가하고, 문서(`examples/deploy/README.md`)가 이미 exit 1로
+적고 있던 동작을 문서대로 고친다. YAML 필드와 상태 파일은 바뀌지 않는다. 교차 핀
+`>=0.6,<0.7`을 유지하고, 상태 마이그레이션과 신규 PyPI 프로젝트가 없다.
+
+**사용자 고지 (CHANGELOG Upgrade notes와 같음):** `pugio status --max-age-seconds`를 출력만
+보려고 돌리던 스크립트가 `set -e`나 CI 단계 안에 있으면 stale일 때 거기서 멈춘다.
+
+1. 이 PR CI green → `main` 머지
+2. `main`에서 검증: 아래 0.6.0 절차의 2번과 같다. 기대값은 "13 packages at v0.6.6", 산출물 26개.
+3. 수동 점검
+   - [ ] 새 디렉터리에서 `arsenal init csv-cleanup` → `arsenal check`가 `all specs valid`를
+         내고, `collect.yaml`의 `type: parquet`를 오타로 바꾸면 exit 1이 된다.
+   - [ ] Claude Code에서 `/plugin marketplace add KooEric/de-arsenal` →
+         `/plugin install de-arsenal@de-arsenal`이 되고 스킬 7개가 보인다. 매니페스트는 JSON
+         문법만 확인했고 실제 설치는 해 본 적이 없다.
+   - [ ] CHANGELOG `## [0.6.6]`의 날짜 (PR에서 2026-11-22로 기입. 태그가 다른 날이면 고친다).
+4. `git tag v0.6.6 && git push origin v0.6.6` (계정 소유자). 신규 프로젝트가 없으므로 수동 최초 게시는 필요 없다.
+5. 게시 확인: 13개 패키지의 `https://pypi.org/pypi/<name>/0.6.6/json`이 모두 `200`.
+6. 출시 후 권장: 스킬을 실제 REST API와 DB 소스, cron에 한 번씩 써 본다. 스킬의 그 부분은
+   스키마 문서와 `examples/deploy`를 보고 썼고 실행된 적이 없다.
+
+---
+
 # v0.6.5 패치 릴리스 절차
 
 Trino에서 읽기 위한 두 가지 추가다: Iceberg sink(`pugio[iceberg]`)와 `pugio ddl`.

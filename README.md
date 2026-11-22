@@ -44,7 +44,7 @@ and they exchange data only as Parquet files.
 
 | Tool | Does | Package | Status |
 |---|---|---|---|
-| **Arsenal** | Project CLI: `init`, `run`, `status`, `query`; three starter recipes | `de-arsenal` | stable |
+| **Arsenal** | Project CLI: `init`, `check`, `run`, `status`, `query`; three starter recipes | `de-arsenal` | stable |
 | **Pugio** | Ingestion: REST, CSV/JSONL/Excel, databases, dlt sources → Parquet, DuckDB, Postgres, S3/GCS, Redshift and Iceberg (both experimental) | `pugio` | stable |
 | **Gladius** | YAML transforms compiled to DuckDB SQL; incremental runs, Python UDFs, ad-hoc queries | `de-gladius` | stable |
 | **Onager** | Small-file compaction and isolated backfills for local Parquet | `de-onager` | beta |

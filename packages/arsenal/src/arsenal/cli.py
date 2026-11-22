@@ -4,6 +4,7 @@
 """
 
 import contextlib
+import glob
 import importlib
 import json
 import os
@@ -24,6 +25,7 @@ from arsenal_core.errors import ArsenalError, FatalError
 from arsenal_core.spec import load_pipeline
 from gladius import engine as gladius_engine
 from gladius.cli import app as gladius_app
+from gladius.compile import compile_sql
 from gladius.loader import load_transform
 from pugio.cli import app as pugio_app
 from pugio.runner import run_pipeline as _pugio_run_pipeline
@@ -197,6 +199,61 @@ def run(project: Path = Path(".")) -> None:
     if proj.distributed:
         parts.append(f"{len(proj.distributed)} distributed run(s) submitted")
     typer.echo("done: " + ", ".join(parts))
+
+
+def _check_pipeline(path: Path) -> tuple[str, list[str]]:
+    """Load one pipeline spec. Returns (summary, warnings); raises ArsenalError if invalid."""
+    spec = load_pipeline(path)
+    warnings: list[str] = []
+    source = spec.source
+    if (
+        source.type == "file"
+        and not source.allow_empty
+        and not glob.glob(source.path, recursive=True)
+    ):
+        warnings.append(f"source.path '{source.path}' matches no files yet")
+    return f"{source.type} -> {spec.sink.type}", warnings
+
+
+@app.command()
+def check(project: Path = Path(".")) -> None:
+    """Validate arsenal.yaml and the specs it lists. Runs nothing and writes nothing."""
+    proj_dir = project if project.is_absolute() else project.absolute()
+    try:
+        proj = load_project(proj_dir / "arsenal.yaml")
+    except ArsenalError as e:
+        raise _fatal(e) from e
+    errors = 0
+    with _chdir(proj_dir):
+        for path in proj.pipelines:
+            try:
+                summary, warnings = _check_pipeline(path)
+            except ArsenalError as e:
+                errors += 1
+                typer.echo(f"error  {path.name}: {e}", err=True)
+                continue
+            typer.echo(f"ok     {path.name}: {summary}")
+            for warning in warnings:
+                typer.echo(f"warn   {path.name}: {warning}")
+        for transform in proj.transforms:
+            if isinstance(transform, DbtProjectRef):
+                typer.echo(f"skip   {transform.dbt.name}: dbt projects are not checked")
+                continue
+            try:
+                compile_sql(load_transform(transform))
+            except ArsenalError as e:
+                errors += 1
+                typer.echo(f"error  {transform.name}: {e}", err=True)
+                continue
+            typer.echo(f"ok     {transform.name}: compiles")
+        for stream in proj.streams:
+            typer.echo(f"skip   {stream.spec.name}: stream specs are not checked")
+        for distributed in proj.distributed:
+            typer.echo(f"skip   {distributed.transform.name}: distributed runs are not checked")
+    if errors:
+        typer.echo(f"{errors} file(s) with errors", err=True)
+        raise typer.Exit(1)
+    typer.echo("all specs valid")
 
 
 @app.command()

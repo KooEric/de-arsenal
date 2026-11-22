@@ -1,3 +1,4 @@
+import time
 from pathlib import Path
 
 import respx
@@ -65,6 +66,18 @@ def test_status_freshness_command(tmp_path: Path) -> None:
     result = runner.invoke(app, ["status", str(spec), "--max-age-seconds", "3600"])
     assert result.exit_code == 0
     assert "freshness: status=fresh" in result.output
+
+
+@respx.mock
+def test_status_exits_nonzero_when_stale(tmp_path: Path) -> None:
+    respx.get("https://api.test/items").respond(json=[{"id": 1}])
+    spec = write_spec(tmp_path)
+    runner.invoke(app, ["run", str(spec)])
+    time.sleep(0.01)
+    result = runner.invoke(app, ["status", str(spec), "--max-age-seconds", "0.001"])
+    assert result.exit_code == 1
+    assert "freshness: status=stale" in result.output
+    assert "alert: freshness" in result.output
 
 
 def test_invalid_spec_exits_nonzero(tmp_path: Path) -> None:

@@ -1,0 +1,11 @@
+{
+  "name": "de-arsenal",
+  "owner": { "name": "KooEric" },
+  "plugins": [
+    {
+      "name": "de-arsenal",
+      "source": "./plugins/de-arsenal",
+      "description": "Build and run data pipelines on one machine by describing what you want: files, APIs and databases in, clean tables out."
+    }
+  ]
+}

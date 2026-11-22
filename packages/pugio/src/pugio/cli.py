@@ -45,7 +45,7 @@ def status(
         None,
         "--max-age-seconds",
         min=0.001,
-        help="freshness 경보 임계값; stale이면 alert를 출력한다",
+        help="freshness 경보 임계값; stale이면 alert를 출력하고 exit 1",
     ),
 ) -> None:
     """unit 상태 요약. ``--cost``로 P0 단위 지표의 누적값도 표시한다."""
@@ -87,6 +87,7 @@ def status(
         )
         if freshness.alert:
             typer.echo(f"alert: freshness {freshness.message}", err=True)
+            raise typer.Exit(1)
 
 
 @app.command()
