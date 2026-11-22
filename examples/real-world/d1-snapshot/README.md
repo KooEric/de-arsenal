@@ -87,28 +87,40 @@ exercised only by editing the local file.
 
 ## Cost of a large table (2026-11-22, de-arsenal 0.6.8 from PyPI)
 
-A 105,484-row, 3-column table from the same production database, on a 4 vCPU Linux
-machine. Nothing was written to D1.
+Two tables from the same production database, on a 4 vCPU Linux machine. Nothing was
+written to D1.
 
-| Step | Result |
-|---|---|
-| Export | 106 requests, 105,484 rows read at D1, 57 s, 13.6 MB of JSONL, 26 MB peak memory |
-| First preview, then apply | 7.4 s and 1.1 s, about 240 MB peak memory; store 4.5 MB |
-| Preview with nothing changed | 1.0 s, file `unchanged`, 0 changes |
-| Preview after removing 2 rows and editing 101 in the local file | 1.0 s: `removed` 2, `updated` 101 |
-| Apply that change | 1.1 s, 270 MB peak memory; store 8.7 MB |
+| | Narrow table | Wide table |
+|---|---:|---:|
+| Rows × columns | 105,484 × 3 | 127,331 × 13 |
+| Export: requests | 106 | 128 |
+| Export: rows read at D1 | 105,484 | 127,331 |
+| Export: time | 57 s | 103 s |
+| Export: JSONL size | 13.6 MB | 64.8 MB |
+| Export: peak memory | 26 MB | 28 MB |
+| First preview (includes a cold start) | 7.4 s | 7.6 s |
+| Preview with nothing changed | 1.0 s | 1.8 s |
+| Preview after removing 2 rows and editing about 100 locally | 1.0 s, counts exact | 1.9 s, counts exact |
+| Apply | 1.1 s | 2.0 to 2.4 s |
+| Preview and apply: peak memory | about 240 to 270 MB | about 415 to 460 MB |
+| Store after the first apply | 4.5 MB | 12.8 MB |
 
-The export is the slow part and it is network time: about half a second per request.
-The row reads count against the D1 plan's allowance on every run, so a daily run of
-this table reads about 3.2 million rows a month. Check that figure against your plan.
-
-The store grew from 4.5 MB to 8.7 MB after the second apply. Whether it keeps growing
-with every apply was not measured.
+- **The export is the slow part and it is network time**: 0.5 to 0.8 s per request of
+  1,000 rows. Its memory does not grow with the table.
+- **Row reads at D1 equal the row count**, on every run. A daily run of both tables reads
+  about 7 million rows a month. Check that against your plan's allowance.
+- **Preview and apply load the whole snapshot into memory**: roughly 7 times the JSONL
+  size for the wide table. A table ten times this size would need several gigabytes; that
+  was not run.
+- **The store does not keep growing.** Over seven applies of the wide table it moved
+  between 12.8 MB and 25.8 MB, and at the end 51 of its 103 blocks were free. That fits
+  an apply writing the new table before the old one's blocks are released and reused,
+  though the mechanism was not traced. Expect up to twice the size of one published table.
 
 **The exporter read far more than this before it was fixed.** Its first version paged with
 `WHERE (?1 IS NULL OR key > ?1)`, which SQLite cannot answer with an index seek, so every
 page scanned from the first row: page 1 read 1,000 rows at D1 and page 2 read 2,000.
-Extrapolated to this table that is about 5.8 million row reads for one export instead of
+Extrapolated to the narrow table that is about 5.8 million row reads for one export instead of
 105,484; that full run was not made. The 3,365-row table above cost about 12,700 reads
 instead of 3,365 and went unnoticed. The script now uses a plain `key > ?` seek and
 prints the request and row-read counts D1 reports, so a regression shows up in its output.
