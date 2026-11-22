@@ -15,7 +15,9 @@ stopped, so a schedule that fires again after a crash is the retry.
 
 ## Before scheduling
 
-1. `arsenal run` succeeds by hand, twice, and the second does no new work.
+1. `arsenal check` passes and `arsenal run` succeeds by hand, twice, the second
+   doing no new work. Schedule `arsenal check && arsenal run` so a bad hand
+   edit fails before any data moves.
 2. Secrets are environment variables named in the YAML (`dsn_env: PG_DSN`,
    `token_env: API_TOKEN`, `${VAR}` in a URL). None are written in a file that
    could be committed.
@@ -67,14 +69,19 @@ A job can succeed every night and still deliver nothing new. Schedule a second
 check a little after the run:
 
 ```bash
-pugio status collect.yaml --max-age-seconds 90000 2>&1 | grep -q "status=stale" && echo STALE
-arsenal status                                    # streams and distributed runs, JSON
+pugio status collect.yaml --max-age-seconds 90000    # exits 1 when stale (0.6.6+)
+arsenal status                                       # streams and distributed runs, JSON
 ```
 
-90000 seconds is 25 hours: a daily job with an hour of slack. Test the output
-for `status=stale` as above rather than the exit code: `pugio status` prints
-the alert but exits 0 when data is stale. Send `STALE` to the same alert as a
-failed run.
+90000 seconds is 25 hours: a daily job with an hour of slack. Wire the
+non-zero exit to the same alert as a failed run.
+
+On 0.6.5 and earlier the command prints the alert but exits 0, so test the
+output instead:
+
+```bash
+pugio status collect.yaml --max-age-seconds 90000 2>&1 | grep -q "status=stale" && echo STALE
+```
 
 ## Day-to-day commands
 

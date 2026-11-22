@@ -9,7 +9,8 @@ A transform reads Parquet, applies steps in order, and writes Parquet. Each
 step becomes one SQL clause, and the SQL can always be shown before it runs.
 The person describes the result in words ("drop the cancelled ones, one row
 per order, amounts as numbers"); you write the steps and report what changed
-in row counts. They do not need to read the YAML.
+in row counts. The file is theirs to edit too: re-read it before changing it,
+keep their steps and comments, and run `gladius compile` after any edit.
 
 ## Look first
 

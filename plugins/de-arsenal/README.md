@@ -2,7 +2,9 @@
 
 Agent skills that let someone build and run a data pipeline by describing it in
 words. The agent inspects the data, writes the DE Arsenal specs, runs them, and
-reports back with row counts. The person does not need to read or write YAML.
+reports back with row counts. The specs stay ordinary YAML files: anyone can
+edit them by hand, the agent re-reads them before changing anything, and
+`arsenal check` validates them after either has.
 
 ```text
 /plugin marketplace add KooEric/de-arsenal
@@ -36,7 +38,7 @@ Every command and spec in these skills was run against DE Arsenal 0.6.5 on
 Linux: CP949 CSV with leading zeros and `NA`, a tab-delimited file with title
 lines, validation with `split` and `quarantine`, DLQ list and retry, schema
 drift, a contract, a DuckDB sink, SQL steps with a join and an aggregate, and
-the staleness check. REST and database sources, cron, Task Scheduler, GitHub
+the staleness check, and `arsenal check` on valid and broken specs. REST and database sources, cron, Task Scheduler, GitHub
 Actions and the container were written from the schema reference and
 `examples/deploy` and were not run here.
 

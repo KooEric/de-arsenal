@@ -14,6 +14,8 @@ change nothing until the cause is named.
 ## Facts to collect
 
 ```bash
+arsenal check                                # is every spec valid? (0.6.6+)
+git diff                                     # what was edited since it last worked
 arsenal run                                  # the exact error text
 pugio status collect.yaml --cost             # done / failed / running, rows
 pugio dlq list collect.yaml                  # set aside, with reasons
@@ -28,6 +30,9 @@ where the number changes. The cause is there.
 
 | Symptom | Likely cause | Fix |
 |---|---|---|
+| `invalid pipeline spec ...: sink.type: ...` or `invalid YAML` | A hand edit: misspelled field, wrong indentation, tab character | The message names the field. Fix that line only; keep the rest of their edit |
+| `invalid transform spec` with a dozen `Field required` lines for one step | A misspelled step name (`dedupe:` for `dedup:`); the validator lists every step type it tried | Read only the `Extra inputs are not permitted` lines: they name the word that was typed |
+| Everything re-collected after an edit | The pipeline's `name` or `state_dir` was changed | Change it back, or accept the re-collection |
 | `pipeline '...' is busy (lease held by ...)` | Another run is going, or the last one was killed and its lease has not expired | Wait for the time shown and rerun. Do not delete `.arsenal/` |
 | `source.path '...' matches no files` | Wrong path, or run from another directory (paths are relative to where the command runs) | Fix the path or `cd`; `allow_empty: true` only for a folder that is legitimately empty |
 | Run succeeds with `fetched=0 written=0` | Everything was already collected. This is the normal second run | Nothing. If new data was expected, see the next rows |

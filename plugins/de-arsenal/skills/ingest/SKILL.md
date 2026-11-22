@@ -7,7 +7,8 @@ description: Get data into a DE Arsenal project from CSV, Excel or JSONL files, 
 
 The person points at the data in words ("the Excel exports in this folder",
 "our orders API"). You inspect it, write the spec, run it, and tell them what
-came in. They do not need to read the YAML.
+came in. The spec is theirs to read and edit afterwards: comment the settings
+whose reason is not obvious, and re-read the file before changing it again.
 
 Look at the data before writing the spec. Most collection problems are visible
 in the first hundred rows, and guessing costs a rerun.
