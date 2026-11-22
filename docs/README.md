@@ -9,7 +9,18 @@
 | [tools.md](tools.md) | 도구별 사용 시점과 빠른 시작 |
 | [reference/](reference/) | YAML 필드 레퍼런스 (코드에서 생성, 수정 금지) |
 | [08-limits.md](08-limits.md) | 보장하는 것과 보장하지 않는 것 |
+| [../CHANGELOG.md](../CHANGELOG.md) | 버전별 변경 내역 (0.6.6 `arsenal check`, 0.6.7 `arsenal dataset`) |
 | [upgrade-0.6.md](upgrade-0.6.md) · [upgrade-0.5.md](upgrade-0.5.md) · [upgrade-0.4.md](upgrade-0.4.md) | 버전별 업그레이드 절차 |
+| [../plugins/de-arsenal/README.md](../plugins/de-arsenal/README.md) | 에이전트 스킬: Claude Code 플러그인 설치, 휴대용 스킬 ZIP |
+| [../examples/deploy/](../examples/deploy/README.md) | cron, GitHub Actions, 컨테이너로 주기 실행 |
+
+## 실데이터 검증
+
+| 문서 | 내용 |
+|---|---|
+| [11-real-data-experiments.md](11-real-data-experiments.md) · [../experiments/real-data/](../experiments/real-data/README.md) | 실제 API와 파일로 돌린 실험, 찾은 버그, 확인한 한계 (0.5.2~0.6.0) |
+| [../examples/real-world/d1-snapshot/](../examples/real-world/d1-snapshot/README.md) | Cloudflare D1 테이블 → `arsenal dataset` 게시. 운영 테이블로 수정·삭제 전달을 확인한 기록과 한계 (0.6.7) |
+| [../examples/real-world/](../examples/real-world/) | GitHub, Notion, Slack, Stripe, 공공데이터포털 수집 스펙 |
 
 ## 설계
 

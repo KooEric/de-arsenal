@@ -67,6 +67,18 @@ Arsenal(Pugio/Gladius)은 분산 엔진을 만들지 않는다([설계 원칙 1]
 - **스키마 드리프트 비교는 실행의 첫 non-empty batch만 이전 실행과 비교한다.** REST 소스의
   페이지 간 타입 차이는 보고하지 않는다.
 
+## 파일 데이터셋 게시(`arsenal dataset`)에서 알아 둘 것 (0.6.7)
+
+- **매번 전체 스냅샷을 비교한다.** 원본에서 삭제된 행은 `removed`로 보이고 `apply`하면 게시
+  결과에서도 사라진다. 변경분만 받는 증분 방식이 아니므로, 큰 테이블은 실행마다 전체를 읽는다.
+- **JSONL은 파일마다 타입을 추론한다.** 한 스냅샷에서 어떤 컬럼이 전부 NULL이면 게시된 결과와
+  타입이 달라져 스키마 변경으로 거부된다. 그런 컬럼이 있을 수 있으면 CSV 스냅샷을 쓴다(전부
+  문자열로 읽는다).
+- **거부된 `apply`는 `dataset status`를 `failed`로 남긴다.** 게시 결과는 그대로지만, 다음 성공한
+  `apply` 전까지 상태 검사는 exit 1이다.
+- 운영 Cloudflare D1 테이블로 확인한 기록은
+  [examples/real-world/d1-snapshot](../examples/real-world/d1-snapshot/README.md)에 있다.
+
 ## sink별 멱등 보장 범위
 
 Scutum 설계 원칙("끝점 능력별 멱등 전략을 명시", [roadmap.md](roadmap.md) Scutum
