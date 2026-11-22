@@ -31,7 +31,7 @@ you want. For recurring work, keep the project on the machine that runs the job.
 
 ### Review a changing file dataset
 
-With DE Arsenal 0.6.7, use one working directory per dataset. Run
+With DE Arsenal 0.6.8, use one working directory per dataset. Run
 `arsenal dataset preview --files 'input/*.jsonl'` to compare source, proposed
 result and currently published rows. Publish with the same options using
 `arsenal dataset apply --files 'input/*.jsonl' --expect <preview-version>`.
@@ -43,6 +43,10 @@ the complete snapshot in `.arsenal/dataset.duckdb` (table `published`).
 Removed files drop out of the snapshot. Empty input matches and failed checks
 preserve the previous publication. `arsenal status` shows its last success and
 any failure. Set `--max-age-hours` to alert on time since changed input was published.
+From 0.6.8 a JSONL column that is NULL in every row keeps its published type instead of
+being refused as a schema change. To publish a database table this way, see the
+[Cloudflare D1 example](examples/real-world/d1-snapshot/README.md), which records a run
+against a production table.
 
 ## What it does
 
