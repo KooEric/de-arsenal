@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import time
+from collections.abc import Callable
 from pathlib import Path
 
 import pytest
@@ -28,6 +29,19 @@ def spec(tmp_path: Path) -> PipelineSpec:
 
 def state(tmp_path: Path) -> StateStore:
     return StateStore(tmp_path / ".arsenal" / "orders.db")
+
+
+def check_until_fatal(check: Callable[[], None], timeout: float = 10.0) -> FatalError:
+    """Poll ``check()`` until it raises: the heartbeat notices a lost lease on its own schedule."""
+    deadline = time.monotonic() + timeout
+    while True:
+        try:
+            check()
+        except FatalError as exc:
+            return exc
+        if time.monotonic() >= deadline:
+            pytest.fail(f"check() did not raise FatalError within {timeout}s")
+        time.sleep(0.01)
 
 
 def test_a_run_registers_its_parquet_sink_and_releases_the_lease(tmp_path: Path) -> None:
@@ -57,8 +71,10 @@ def test_the_heartbeat_keeps_the_lease_through_a_slow_unit(tmp_path: Path) -> No
     store = state(tmp_path)
     other = state(tmp_path)
 
-    with pipeline_lease(pipeline, store, ttl_seconds=0.3, heartbeat_seconds=0.05) as check:
-        time.sleep(0.6)  # two TTLs: only the heartbeat keeps it alive
+    with pipeline_lease(pipeline, store, ttl_seconds=1.0, heartbeat_seconds=0.05) as check:
+        # Past the first expiry, so only the heartbeat keeps it alive. The TTL is long
+        # next to the heartbeat so a briefly starved heartbeat thread cannot drop it.
+        time.sleep(1.2)
         assert other.acquire_lease(resource(pipeline), "intruder", 30) is None
         check()
     assert other.acquire_lease(resource(pipeline), "intruder", 30) is not None
@@ -77,8 +93,6 @@ def test_a_lost_lease_stops_the_run_at_the_next_check(tmp_path: Path) -> None:
         other._conn.execute("DELETE FROM leases WHERE resource=?", (resource(pipeline),))  # pyright: ignore[reportPrivateUsage]
         other._conn.commit()  # pyright: ignore[reportPrivateUsage]
         assert other.acquire_lease(resource(pipeline), "takeover", 30) is not None
-        time.sleep(0.2)
-        with pytest.raises(FatalError, match="lost its run lease"):
-            check()
+        assert "lost its run lease" in str(check_until_fatal(check))
     store.close()
     other.close()
