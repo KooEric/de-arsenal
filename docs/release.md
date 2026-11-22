@@ -1,3 +1,22 @@
+# v0.6.8 패치 릴리스 절차
+
+`arsenal dataset`이 전부 NULL인 컬럼이 있는 JSONL 스냅샷을 스키마 변경으로 거부하던 문제의
+수정과, Cloudflare D1 테이블을 스냅샷으로 내보내는 예제다. 내역은 [CHANGELOG](../CHANGELOG.md).
+
+**patch인 이유**: 거부되던 입력 하나를 받아들이게 하는 수정이다. 명령, 옵션, 저장 형식
+(`.arsenal/dataset.duckdb`)은 바뀌지 않는다. 교차 핀 `>=0.6,<0.7`을 유지하고, 상태
+마이그레이션과 신규 PyPI 프로젝트가 없다.
+
+1. 이 PR CI green → `main` 머지
+2. `main`에서 검증: 아래 0.6.0 절차의 2번과 같다. 기대값은 "13 packages at v0.6.8", 산출물 26개.
+3. CHANGELOG `## [0.6.8]`의 날짜 (PR에서 2026-11-22로 기입. 태그가 다른 날이면 고친다).
+4. `git tag v0.6.8 && git push origin v0.6.8` (계정 소유자). 신규 프로젝트가 없으므로 수동 최초 게시는 필요 없다.
+5. 게시 확인: 13개 패키지의 `https://pypi.org/pypi/<name>/0.6.8/json`이 모두 `200`.
+6. 출시 후 권장: PyPI에서 설치한 0.6.8로 `examples/real-world/d1-snapshot`의 JSONL 경로를 한 번
+   돌리고, 한 컬럼을 전부 NULL로 만든 스냅샷이 `updated`로 보고되는지 확인한다.
+
+---
+
 # v0.6.6 패치 릴리스 절차
 
 손으로 고친 스펙을 실행 전에 검증하는 `arsenal check`, stale일 때 exit 1을 내도록 고친

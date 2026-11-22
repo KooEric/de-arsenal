@@ -12,6 +12,26 @@ minor.
 
 ## [Unreleased]
 
+## [0.6.8] - 2026-11-22
+
+A fix for JSONL snapshots found on a production Cloudflare D1 table, and an example for
+publishing a D1 table. All 13 packages move to `0.6.8`; internal pins stay `>=0.6,<0.7`.
+No state migrations.
+
+### Fixed
+
+- `arsenal dataset` no longer refuses a JSONL snapshot because a column is NULL in every row.
+  JSON types are inferred from values, so such a column arrived with a placeholder type and the
+  apply failed as a schema change although only values had changed. The column now takes the
+  published type (or, when the published column was the empty one, the incoming type), and the
+  difference is reported as updated rows. The same applies between the files of one snapshot.
+  A column that has values on both sides and different types is still refused.
+
+### Added
+
+- `examples/real-world/d1-snapshot`: a read-only script that writes a Cloudflare D1 table as a
+  snapshot for `arsenal dataset`, with the record of a run against a production table.
+
 ## [0.6.7] - 2026-11-22
 
 - Preview and publish CSV, JSONL and Parquet snapshots with `arsenal dataset`.

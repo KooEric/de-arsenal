@@ -29,7 +29,7 @@ For a specific task, read the relevant guide:
 - [Schedule and monitor](references/operate.md)
 - [Diagnose a failure or unexpected count](references/doctor.md)
 
-Use a shell with DE Arsenal 0.6.7 and access to the inputs. In a hosted chat,
+Use a shell with DE Arsenal 0.6.7 or later and access to the inputs. In a hosted chat,
 use uploaded files available to that session. If execution is unavailable,
 deliver the project files and the exact local verification command, and identify
 which checks still need to run. For recurring jobs use the user's persistent
