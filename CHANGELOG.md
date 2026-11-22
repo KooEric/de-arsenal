@@ -12,6 +12,20 @@ minor.
 
 ## [Unreleased]
 
+### Added
+
+- `arsenal check` validates `arsenal.yaml` and every pipeline and transform it lists, reports all
+  broken files in one pass and exits 1 if any are invalid. It runs nothing and writes nothing.
+  A file source whose path matches no files is reported as a warning.
+- Agent skills plugin under `plugins/de-arsenal` (`start`, `ingest`, `transform`, `ask`, `trust`,
+  `operate`, `doctor`) with a marketplace manifest.
+
+### Fixed
+
+- `pugio status --max-age-seconds` exits 1 when the pipeline is stale. It printed the alert and
+  exited 0, so a scheduled freshness check never fired. `examples/deploy/README.md` already
+  described the exit code as 1.
+
 ## [0.6.5] - 2026-11-18
 
 Two ways to make a pipeline's output readable from Trino. All 13 packages move

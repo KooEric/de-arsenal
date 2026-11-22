@@ -260,3 +260,53 @@ def test_load_project_non_utf8_manifest_raises_fatal_error(tmp_path: Path) -> No
     (tmp_path / "arsenal.yaml").write_bytes(b"name: \xff\xfe not utf-8\n")
     with pytest.raises(FatalError, match="UTF-8"):
         load_project(tmp_path / "arsenal.yaml")
+
+
+def _write_project(tmp_path: Path, collect: str, transform: str) -> None:
+    (tmp_path / "arsenal.yaml").write_text(MANIFEST, encoding="utf-8")
+    (tmp_path / "collect.yaml").write_text(collect, encoding="utf-8")
+    (tmp_path / "transform.yaml").write_text(transform, encoding="utf-8")
+
+
+GOOD_COLLECT = """\
+name: c
+source: { type: file, path: ./input/*.csv }
+sink: { type: parquet, path: ./data/raw }
+"""
+GOOD_TRANSFORM = """\
+name: t
+input: ./data/raw
+steps:
+  - dedup: [id]
+output: ./data/clean
+"""
+
+
+def test_check_passes_valid_project_and_runs_nothing(tmp_path: Path) -> None:
+    _write_project(tmp_path, GOOD_COLLECT, GOOD_TRANSFORM)
+    (tmp_path / "input").mkdir()
+    (tmp_path / "input" / "a.csv").write_text("id\n1\n", encoding="utf-8")
+    result = runner.invoke(app, ["check", "--project", str(tmp_path)])
+    assert result.exit_code == 0, result.output
+    assert "ok     collect.yaml: file -> parquet" in result.output
+    assert "ok     transform.yaml: compiles" in result.output
+    assert not (tmp_path / "data").exists()
+    assert not (tmp_path / ".arsenal").exists()
+
+
+def test_check_reports_every_broken_file_and_exits_nonzero(tmp_path: Path) -> None:
+    bad_collect = GOOD_COLLECT.replace("type: parquet", "type: parkay")
+    bad_transform = GOOD_TRANSFORM.replace("dedup: [id]", "dedupe: [id]")
+    _write_project(tmp_path, bad_collect, bad_transform)
+    result = runner.invoke(app, ["check", "--project", str(tmp_path)])
+    assert result.exit_code == 1
+    assert "error  collect.yaml" in result.output
+    assert "error  transform.yaml" in result.output
+    assert "2 file(s) with errors" in result.output
+
+
+def test_check_warns_when_file_source_matches_nothing(tmp_path: Path) -> None:
+    _write_project(tmp_path, GOOD_COLLECT, GOOD_TRANSFORM)
+    result = runner.invoke(app, ["check", "--project", str(tmp_path)])
+    assert result.exit_code == 0, result.output
+    assert "warn   collect.yaml: source.path './input/*.csv' matches no files yet" in result.output
