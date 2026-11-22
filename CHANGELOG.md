@@ -12,6 +12,13 @@ minor.
 
 ## [Unreleased]
 
+### Fixed
+
+- `examples/real-world/d1-snapshot/d1_snapshot.py` read each page from the start of the table.
+  Its paging predicate could not use the key index, so an export of n rows cost about
+  n × pages / 2 row reads at D1 instead of n. It now seeks by key and prints the request and
+  row-read counts D1 reports. Measured on a 105,484-row table: 106 requests, 105,484 rows read.
+
 ## [0.6.8] - 2026-11-22
 
 A fix for JSONL snapshots found on a production Cloudflare D1 table, and an example for

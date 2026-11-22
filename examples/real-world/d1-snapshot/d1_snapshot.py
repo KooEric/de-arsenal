@@ -31,6 +31,9 @@ PAGE = 1000
 IDENT = re.compile(r"^[A-Za-z_][A-Za-z0-9_]*$")
 
 
+STATS = {"requests": 0, "rows_read": 0}
+
+
 def query(account: str, database: str, token: str, sql: str, params: list[Any]) -> list[dict]:
     request = urllib.request.Request(
         f"{API}/accounts/{account}/d1/database/{database}/query",
@@ -44,20 +47,24 @@ def query(account: str, database: str, token: str, sql: str, params: list[Any]) 
         raise SystemExit(f"error: D1 API returned {exc.code}: {exc.read()[:300]!r}") from exc
     if not body.get("success"):
         raise SystemExit(f"error: D1 query failed: {body.get('errors')}")
-    return body["result"][0]["results"]
+    result = body["result"][0]
+    STATS["requests"] += 1
+    STATS["rows_read"] += result.get("meta", {}).get("rows_read", 0)
+    return result["results"]
 
 
 def rows(account: str, database: str, token: str, table: str, key: str):
-    sql = (
-        f'SELECT * FROM "{table}" WHERE (?1 IS NULL OR "{key}" > ?1) ORDER BY "{key}" LIMIT {PAGE}'
-    )
-    last = None
-    while True:
-        page = query(account, database, token, sql, [last])
-        if not page:
-            return
+    # Two statements, not one with `(?1 IS NULL OR key > ?1)`: SQLite cannot seek the index
+    # through that OR, so every page would scan from the first row and a table of n rows
+    # would cost about n * pages / 2 row reads instead of n.
+    first = f'SELECT * FROM "{table}" ORDER BY "{key}" LIMIT {PAGE}'
+    after = f'SELECT * FROM "{table}" WHERE "{key}" > ?1 ORDER BY "{key}" LIMIT {PAGE}'
+    page = query(account, database, token, first, [])
+    while page:
         yield from page
-        last = page[-1][key]
+        if len(page) < PAGE:
+            return
+        page = query(account, database, token, after, [page[-1][key]])
 
 
 def main() -> int:
@@ -94,7 +101,10 @@ def main() -> int:
         print(f"error: {table} returned no rows; the previous snapshot was kept", file=sys.stderr)
         return 1
     os.replace(partial, out)
-    print(f"{table}: {count} rows -> {out}")
+    print(
+        f"{table}: {count} rows -> {out} "
+        f"({STATS['requests']} requests, {STATS['rows_read']} rows read at D1)"
+    )
     return 0
 
 
