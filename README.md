@@ -21,32 +21,75 @@ arsenal query "SELECT * FROM './data/clean/*.parquet' LIMIT 10"
 These four commands run as written; CI runs the same `init` and `run` on every change
 (`tests/e2e/test_recipes.py`). To use your own data, replace `input/sample.csv`.
 
-## Run your first pipeline in chat
+## Three ways to use it
 
-> Create a project with the sample CSV and show me how many rows remain after deduplication.
+| You have | Use | Section |
+|---|---|---|
+| Sources to collect and clean on a schedule | A project of YAML specs, run with `arsenal run` | The four commands above, then [Examples](#examples) |
+| Files or a table snapshot that must be reviewed before they replace the published result | `arsenal dataset`, no YAML | [Review, then publish](#review-then-publish) |
+| A request in plain words | The agent skills, which write and run the specs for you | [Describe it to an agent](#describe-it-to-an-agent) |
 
-Use the skill in ChatGPT, Claude or Codex. Give it a file and describe the result
-you want. For recurring work, keep the project on the machine that runs the job.
-[Skill setup](plugins/de-arsenal/README.md)
+All three write ordinary files in the working directory: specs, output and bookkeeping.
 
-### Review a changing file dataset
+## Review, then publish
 
-With DE Arsenal 0.6.8, use one working directory per dataset. Run
-`arsenal dataset preview --files 'input/*.jsonl'` to compare source, proposed
-result and currently published rows. Publish with the same options using
-`arsenal dataset apply --files 'input/*.jsonl' --expect <preview-version>`.
-Later previews reuse the saved rules. CSV and Parquet are also supported.
-Repeated observations are preserved by default. Use `--key` for identified
-records, `--distinct` for exact deduplication, `--measure` for a numeric total
-and `--time-column` for event-time coverage. A successful publication replaces
-the complete snapshot in `.arsenal/dataset.duckdb` (table `published`).
-Removed files drop out of the snapshot. Empty input matches and failed checks
-preserve the previous publication. `arsenal status` shows its last success and
-any failure. Set `--max-age-hours` to alert on time since changed input was published.
-From 0.6.8 a JSONL column that is NULL in every row keeps its published type instead of
-being refused as a schema change. To publish a database table this way, see the
-[Cloudflare D1 example](examples/real-world/d1-snapshot/README.md), which records a run
-against a production table.
+For a folder of CSV, JSONL or Parquet files that keeps changing, `arsenal dataset` shows
+what the new files would change before anything is replaced. Use one working directory
+per dataset.
+
+```bash
+arsenal dataset preview --files 'input/*.csv' --key id    # writes nothing; prints the change and a version
+arsenal dataset apply   --files 'input/*.csv' --key id --expect <version>
+arsenal dataset preview                                    # later runs reuse the saved rules
+arsenal status                                             # last success, data period, any failure
+```
+
+The preview compares the files with the last publication and counts rows `added`,
+`removed` and, with `--key`, `updated` with their before and after values. `apply`
+replaces the whole published snapshot in one transaction (`.arsenal/dataset.duckdb`,
+table `published`). `--expect` refuses the apply if the files or the publication changed
+after the preview you looked at.
+
+| Option | Effect |
+|---|---|
+| `--key <column>` | Rows are matched on this column, so edits show as `updated`. It must be unique and never empty |
+| `--distinct` | Keep one copy of rows that are identical in every column. Without it, repeated rows are kept |
+| `--time-column <column>` | Report the first and last timestamp the data covers |
+| `--measure <column>` | Report the total of a numeric column and how it changed |
+| `--max-age-hours <n>` | `arsenal status` exits 1 when changed input has not been published for this long |
+
+- A file removed from the folder drops out of the next publication. A row deleted at the
+  source is reported as `removed`.
+- A failed or refused apply keeps the last successful publication. `arsenal status`
+  reports `failed` until the next successful apply.
+- Columns or types that differ from the published ones are refused. A column that is
+  empty in every row of one snapshot is not a type change.
+- With `de-arsenal[catalog]`, `aquila scan` then
+  `aquila lineage published --direction up --format mermaid` draws the path from input
+  to publication with its row count, data period and latest attempt.
+
+To publish a database table this way, export it as a snapshot file first. The
+[Cloudflare D1 example](examples/real-world/d1-snapshot/README.md) has a read-only
+exporter and the record of a run against a production table.
+
+## Describe it to an agent
+
+> Combine the Excel files in this folder into one table and remove the duplicates.
+
+The agent skills inspect the data, write the specs, run them and report in row counts.
+The specs stay ordinary YAML: you can edit them by hand, and `arsenal check` validates
+every spec without running anything.
+
+```text
+/plugin marketplace add KooEric/de-arsenal
+/plugin install de-arsenal@de-arsenal
+```
+
+That installs seven skills in Claude Code (`start`, `ingest`, `transform`, `ask`, `trust`,
+`operate`, `doctor`). The same guides build into one portable skill for ChatGPT, Claude
+and Codex. Setup, and what has and has not been run, are in
+[plugins/de-arsenal/README.md](plugins/de-arsenal/README.md). For recurring work, keep
+the project on the machine that runs the job.
 
 ## What it does
 
@@ -71,7 +114,7 @@ and they exchange data only as Parquet files.
 
 | Tool | Does | Package | Status |
 |---|---|---|---|
-| **Arsenal** | Project CLI: `init`, `check`, `run`, `status`, `query`; three starter recipes | `de-arsenal` | stable |
+| **Arsenal** | Project CLI: `init`, `check`, `run`, `status`, `query`; `dataset` to review and publish files; three starter recipes | `de-arsenal` | stable |
 | **Pugio** | Ingestion: REST, CSV/JSONL/Excel, databases, dlt sources → Parquet, DuckDB, Postgres, S3/GCS, Redshift and Iceberg (both experimental) | `pugio` | stable |
 | **Gladius** | YAML transforms compiled to DuckDB SQL; incremental runs, Python UDFs, ad-hoc queries | `de-gladius` | stable |
 | **Onager** | Small-file compaction and isolated backfills for local Parquet | `de-onager` | beta |
@@ -80,7 +123,7 @@ and they exchange data only as Parquet files.
 | **Spatha** | Library: pick runnable tasks from dependencies, signals, priority and time windows. No scheduler daemon | `spatha` | beta |
 | **Hasta** | Streaming: polling microbatches from a cursor API, Postgres outbox CDC | `de-hasta` | beta |
 | **Ballista** | Runs a Gladius transform on Spark/Kubernetes and commits to Iceberg | `de-ballista` | beta |
-| **Aquila** | Catalog in one SQLite file: datasets, schema history, lineage, contracts, tags | `de-aquila` | preview |
+| **Aquila** | Catalog in one SQLite file: datasets, schema history, lineage (including `arsenal dataset` publications), contracts, tags | `de-aquila` | preview |
 | **Augur** | Natural-language questions to SQL, with an eval harness | `de-augur` | experimental |
 | **Pilum** | Reverse ETL: send changed records to HTTP endpoints and Slack, once per change | `de-pilum` | experimental |
 
@@ -168,7 +211,7 @@ Postgres upsert, needs `[postgres]`).
 
 ## Tested on real data
 
-The test suite passing was not enough: two releases were needed for bugs that only real
+The test suite passing was not enough: three releases were needed for bugs that only real
 data showed. This section is the record of what was run against real APIs and files,
 what broke, and what is still unproven. Environment for the experiments: Linux, 4 vCPU,
 15 GB RAM. Every number is from an actual run; specs to repeat them are in
@@ -180,7 +223,8 @@ what broke, and what is still unproven. Environment for the experiments: Linux, 
 | Crash-injected runs that ended with a duplicate or a missing row | **0** of 4 experiments (1, 2, 4, 5) |
 | Silent data-loss bugs found by real data, all fixed | **5** (0.5.3: 2, 0.6.0: 3) |
 | Largest real load | 9.55M rows in 4.0 s; 19.7M rows transformed in 5.96 s |
-| Automated tests | 791, run in CI on Linux, macOS and Windows with Python 3.11 and 3.12 |
+| A production database table through review and publish | 3,365 rows: 793 added, 2,559 updated and 0 removed between two real states |
+| Automated tests | 804, run in CI on Linux, macOS and Windows with Python 3.11 and 3.12 |
 
 ### Experiments
 
@@ -262,6 +306,21 @@ bound for the engine, not an expected production rate).
 `gemini-3.1-flash-lite`. Read as "the evaluation set is too easy" (3 small tables), not
 as "the model is perfect".
 
+**8. A production Cloudflare D1 table through `arsenal dataset`** (0.6.7 from PyPI). A
+catalog table of 3,365 rows and 20 columns, exported as a snapshot by key. Two real
+states of the table were published in turn; nothing was written to the database.
+
+| Step | Result |
+|---|---|
+| Publish the older state, preview the current one | 2,572 rows published; then 793 added, 0 removed, 2,559 updated |
+| Of the updates | 384 soft deletes (`active` 1 → 0), 43 renames, 86 that changed only a timestamp |
+| Export again with nothing changed | Byte-identical file, 0 changes |
+| Remove 2 rows and edit 2 in the local file | `removed` 2 and `updated` 2, naming keys and fields |
+| Null one column in every row of the JSONL snapshot | 0.6.7 refused it as a schema change. Fixed in 0.6.8: 2,458 updates |
+
+The real data had no hard deletes, so `removed` was exercised only on the local file.
+Details and the exporter: [examples/real-world/d1-snapshot](examples/real-world/d1-snapshot/README.md).
+
 ### Bugs that only real data found
 
 Every one of these ended with exit code 0 and a success message.
@@ -273,6 +332,9 @@ Every one of these ended with exit code 0 and a success message.
 | The README's first four commands failed | The `csv-cleanup` recipe shipped no input, the ingest step reported success with 0 rows, and the transform died on a raw DuckDB error | exit 1 on a fresh install | 0.6.0: sample data ships; an empty input path is an error |
 | Leading zeros vanished from CSV columns | A zip code column was inferred as an integer | `01234` stored as `1234` | 0.6.0: such columns stay strings; `column_types` pins a type |
 | A plain CSV could not be loaded into Postgres | The sink refused dates, naive timestamps, small integers and all-empty columns | `unsupported arrow type` on a real Postgres 16 | 0.6.0: all four load |
+
+One more failed loudly instead of silently: `arsenal dataset` refused a JSONL snapshot whose
+column was empty in every row (experiment 8), fixed in 0.6.8.
 
 Two limits were confirmed and addressed in 0.6.0:
 
@@ -313,9 +375,12 @@ Two limits were confirmed and addressed in 0.6.0:
 | | |
 |---|---|
 | [docs/tools.md](docs/tools.md) | When to use each tool, with a short start for each |
+| [plugins/de-arsenal/README.md](plugins/de-arsenal/README.md) | Agent skills: install, what each skill does, what was run |
 | [docs/reference/](docs/reference/) | Every YAML field, generated from the code |
 | [docs/08-limits.md](docs/08-limits.md) | Guarantees and non-guarantees |
 | [docs/11-real-data-experiments.md](docs/11-real-data-experiments.md) · [experiments/](experiments/real-data/README.md) | Results on real APIs and data (GitHub, GitLab, airports CSV, NYC taxi), bugs found, limits confirmed |
+| [examples/real-world/](examples/real-world/) | Specs for GitHub, Notion, Slack, Stripe and data.go.kr; the Cloudflare D1 snapshot exporter |
+| [examples/deploy/](examples/deploy/README.md) | Running on a schedule with cron, GitHub Actions or a container |
 | [CHANGELOG.md](CHANGELOG.md) · [upgrade to 0.6](docs/upgrade-0.6.md) | What changed and how to upgrade |
 | [docs/README.md](docs/README.md) | Design documents, decision records and release procedure |
 
