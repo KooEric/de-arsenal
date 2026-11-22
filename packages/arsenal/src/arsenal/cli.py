@@ -314,10 +314,12 @@ def query(sql: str, fmt: str = typer.Option("table", "--format")) -> None:
         )
     elif fmt == "jsonl":
         # DuckDB serializes its numeric and temporal types without dropping decimal precision.
-        rows = duckdb.sql("SELECT to_json(struct_pack(*COLUMNS(*))) FROM result")
-        while batch := rows.fetchmany(1024):
-            for (line,) in batch:
-                typer.echo(line)
+        with duckdb.connect() as con:
+            con.register("query_result", result)
+            rows = con.execute("SELECT to_json(struct_pack(*COLUMNS(*))) FROM query_result")
+            while batch := rows.fetchmany(1024):
+                for (line,) in batch:
+                    typer.echo(line)
     else:
         typer.echo(f"error: unsupported --format: {fmt!r} (table | csv | jsonl)", err=True)
         raise typer.Exit(1)
