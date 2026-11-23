@@ -43,6 +43,24 @@ _DUCKDB_RETRYABLE: tuple[type[duckdb.Error], ...] = (
     duckdb.TransactionException,
 )
 
+# duckdb는 ATTACH 단계의 인증 실패·대상 부재도 IOException으로 올린다. 서버가 돌려준
+# 원문으로 가려 FatalError로 보낸다 — 재시도해도 절대 성공하지 않는다
+# (sinks/postgres.py의 connect 단계 판별과 같은 원칙).
+_DUCKDB_FATAL_MARKERS = (
+    "password authentication failed",  # postgres 28P01
+    "no pg_hba.conf entry",  # postgres 28000
+    "access denied for user",  # mysql 1045
+    "unknown database",  # mysql 1049
+)
+_DUCKDB_MISSING_TARGET = re.compile(r'(database|role) "[^"]+" does not exist')
+
+
+def _is_fatal_scanner_error(message: str) -> bool:
+    lowered = message.lower()
+    if any(marker in lowered for marker in _DUCKDB_FATAL_MARKERS):
+        return True
+    return _DUCKDB_MISSING_TARGET.search(message) is not None
+
 
 def _qi(name: str) -> str:
     """식별자를 안전하게 인용 — 영숫자/언더스코어만 허용해 SQL 인젝션을 막는다."""
@@ -76,7 +94,7 @@ def _raise_classified_duckdb(e: duckdb.Error, *, context: str, dsn: str | None =
     message = str(e)
     if dsn:
         message = message.replace(dsn, "<redacted-dsn>")
-    if isinstance(e, _DUCKDB_RETRYABLE):
+    if isinstance(e, _DUCKDB_RETRYABLE) and not _is_fatal_scanner_error(message):
         raise RetryableError(f"{context}: {message}") from e
     raise FatalError(f"{context}: {message}") from e
 
