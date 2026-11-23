@@ -11,6 +11,7 @@ from typing import Any
 import duckdb
 import typer
 
+from arsenal.dataset_postgres import parse_target, publish
 from arsenal_core.errors import FatalError
 from gladius.compile.ident import quote_ident
 
@@ -29,6 +30,8 @@ class Rules:
     time_column: str | None = None
     measure: str | None = None
     max_age_hours: float | None = None
+    postgres_table: str | None = None
+    postgres_dsn_env: str | None = None
 
 
 def fingerprints(pattern: str) -> dict[str, str]:
@@ -267,6 +270,8 @@ def execute(
     measure: str | None,
     max_age_hours: float | None,
     expect: str | None = None,
+    postgres_table: str | None = None,
+    postgres_dsn_env: str | None = None,
 ) -> dict[str, Any]:
     if apply:
         STORE.parent.mkdir(parents=True, exist_ok=True)
@@ -287,6 +292,8 @@ def execute(
                         time_column=time_column,
                         measure=measure,
                         max_age_hours=max_age_hours,
+                        postgres_table=postgres_table,
+                        postgres_dsn_env=postgres_dsn_env,
                     ).items()
                     if v is not None
                 }
@@ -294,7 +301,10 @@ def execute(
             if not values.get("files"):
                 raise FatalError("첫 실행에는 --files 'input/*.csv'처럼 입력을 지정하세요.")
             rules = Rules(**values)
+            target = parse_target(rules.postgres_table, rules.postgres_dsn_env)
             report = assess(db, rules, previous)
+            if target is not None:
+                report["publish"] = {"postgres": target.name}
             token_inputs = [previous.get("version"), report["rules"], report["fingerprints"]]
             report["version"] = hashlib.sha256(
                 json.dumps(token_inputs, sort_keys=True).encode()
@@ -314,6 +324,10 @@ def execute(
                 if not previous:
                     db.execute("DROP TABLE published")  # empty temporary comparison baseline
                 db.execute("CREATE OR REPLACE TABLE published AS FROM candidate")
+                if target is not None:
+                    # Postgres commits first. If it fails, the DuckDB publication rolls back
+                    # too, so both keep the previous snapshot.
+                    report["published_to"] = {"postgres": publish(db, "published", target)}
                 db.execute("CREATE TABLE IF NOT EXISTS runs (id BIGINT, report VARCHAR)")
                 db.execute(
                     "INSERT INTO runs SELECT coalesce(max(id),0)+1, ? FROM runs",
@@ -391,6 +405,12 @@ def preview(
     time_column: str | None = None,
     measure: str | None = None,
     max_age_hours: float | None = typer.Option(None, min=0),
+    postgres_table: str | None = typer.Option(
+        None, help="함께 게시할 Postgres 테이블 (schema.table)"
+    ),
+    postgres_dsn_env: str | None = typer.Option(
+        None, help="Postgres 접속 문자열이 든 환경변수 이름"
+    ),
 ) -> None:
     """원본과 게시 예정 결과, 마지막 게시 이후 차이를 확인합니다."""
     handle(
@@ -401,6 +421,8 @@ def preview(
         time_column=time_column,
         measure=measure,
         max_age_hours=max_age_hours,
+        postgres_table=postgres_table,
+        postgres_dsn_env=postgres_dsn_env,
     )
 
 
@@ -413,6 +435,12 @@ def apply(
     measure: str | None = None,
     max_age_hours: float | None = typer.Option(None, min=0),
     expect: str | None = None,
+    postgres_table: str | None = typer.Option(
+        None, help="함께 게시할 Postgres 테이블 (schema.table)"
+    ),
+    postgres_dsn_env: str | None = typer.Option(
+        None, help="Postgres 접속 문자열이 든 환경변수 이름"
+    ),
 ) -> None:
     """현재 파일 집합을 게시합니다. --expect로 미리 본 버전을 지정할 수 있습니다."""
     handle(
@@ -424,6 +452,8 @@ def apply(
         measure=measure,
         max_age_hours=max_age_hours,
         expect=expect,
+        postgres_table=postgres_table,
+        postgres_dsn_env=postgres_dsn_env,
     )
 
 

@@ -280,3 +280,33 @@ def test_excel_without_extra_says_how_to_install(
     (tmp_path / "ledger.xlsx").write_bytes(b"x")
     result = _dataset("preview", "--files", "*.xlsx", success=False)
     assert "de-arsenal[excel]" in result["output"]
+
+
+@pytest.mark.parametrize(
+    "args",
+    [
+        ["--postgres-table", "ledger.payroll"],
+        ["--postgres-dsn-env", "PG"],
+        ["--postgres-table", "payroll", "--postgres-dsn-env", "PG"],
+    ],
+)
+def test_postgres_target_needs_schema_table_and_dsn_env(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, args: list[str]
+) -> None:
+    monkeypatch.chdir(tmp_path)
+    (tmp_path / "a.csv").write_text("id\n1\n")
+    result = _dataset("preview", "--files", "*.csv", *args, success=False)
+    assert "--postgres" in result["output"]
+
+
+def test_postgres_dsn_env_must_be_set_before_apply(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.chdir(tmp_path)
+    monkeypatch.delenv("ARSENAL_UNSET_PG", raising=False)
+    (tmp_path / "a.csv").write_text("id\n1\n")
+    args = ["--postgres-table", "ledger.t", "--postgres-dsn-env", "ARSENAL_UNSET_PG"]
+    result = _dataset("apply", "--files", "*.csv", *args, success=False)
+    assert "ARSENAL_UNSET_PG" in result["output"]
+    status = json.loads(CliRunner().invoke(app, ["status"]).output)["dataset"]
+    assert status["state"] == "failed"

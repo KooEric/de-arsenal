@@ -77,7 +77,7 @@ def _classify_operational_error(
     return RetryableError
 
 
-def _pg_type(field: pa.Field) -> sql.SQL:
+def pg_column_type(field: pa.Field) -> sql.SQL:
     """고정 화이트리스트만 반환한다 — sql.SQL은 LiteralString만 받는 안전 API라서,
     호출부마다 리터럴로 감싸 반환해야 임의 문자열이 SQL 조각으로 흘러들지 않는다.
 
@@ -155,7 +155,9 @@ class PostgresSink:
             con.close()
 
     def _ensure_table(self, con: psycopg.Connection, schema: pa.Schema) -> None:
-        columns = [sql.SQL("{} {}").format(sql.Identifier(f.name), _pg_type(f)) for f in schema]
+        columns = [
+            sql.SQL("{} {}").format(sql.Identifier(f.name), pg_column_type(f)) for f in schema
+        ]
         pk = sql.SQL(", ").join(sql.Identifier(k) for k in self._spec.merge_key)
         stmt = sql.SQL("CREATE TABLE IF NOT EXISTS {table} ({cols}, PRIMARY KEY ({pk}))").format(
             table=sql.Identifier(self._spec.table),

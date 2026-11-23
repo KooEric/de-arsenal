@@ -57,6 +57,7 @@ after the preview you looked at.
 | `--time-column <column>` | Report the first and last timestamp the data covers |
 | `--measure <column>` | Report the total of a numeric column and how it changed |
 | `--max-age-hours <n>` | `arsenal status` exits 1 when changed input has not been published for this long |
+| `--postgres-table <schema.table>` with `--postgres-dsn-env <VAR>` | `apply` also replaces that Postgres table's rows with the snapshot, in one transaction. Needs `de-arsenal[postgres]`; the schema must exist |
 
 - Excel workbooks (`.xlsx`, `.xlsm`, `.xlsb`, `.xls`) need `de-arsenal[excel]`. The first
   sheet is read as text, like CSV, so leading zeros survive. `~$` lock files are skipped.
