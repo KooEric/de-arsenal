@@ -301,9 +301,7 @@ class PostgresChangeSink:
             from pugio.sinks.postgres import (
                 _classify_operational_error as classify_operational_error,  # pyright: ignore[reportPrivateUsage]
             )
-            from pugio.sinks.postgres import (
-                _pg_type as postgres_type_for_arrow_field,  # pyright: ignore[reportPrivateUsage]
-            )
+            from pugio.sinks.postgres import pg_column_type as postgres_type_for_arrow_field
         except ImportError as exc:  # pragma: no cover - install-extra guard
             raise FatalError("postgres CDC sink requires pugio[postgres]") from exc
 

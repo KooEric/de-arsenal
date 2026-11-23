@@ -55,6 +55,7 @@ arsenal status                                             # 마지막 성공, �
 | `--time-column <열>` | 데이터가 덮는 첫 시각과 마지막 시각을 보고한다 |
 | `--measure <열>` | 숫자 열의 합계와 그 변화를 보고한다 |
 | `--max-age-hours <n>` | 바뀐 입력이 이 시간 넘게 게시되지 않으면 `arsenal status`가 exit 1을 낸다 |
+| `--postgres-table <schema.table>`과 `--postgres-dsn-env <변수>` | `apply`가 그 Postgres 테이블의 행도 스냅샷으로 한 트랜잭션 안에서 교체한다. `de-arsenal[postgres]`가 필요하고 스키마는 미리 있어야 한다 |
 
 - Excel(`.xlsx`·`.xlsm`·`.xlsb`·`.xls`)은 `de-arsenal[excel]`이 필요하다. 첫 시트를 CSV처럼
   문자열로 읽어 앞자리 0이 남는다. `~$` 잠금 파일은 건너뛴다.

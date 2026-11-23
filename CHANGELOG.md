@@ -12,6 +12,16 @@ minor.
 
 ## [Unreleased]
 
+### Added
+
+- `arsenal dataset apply --postgres-table schema.table --postgres-dsn-env VAR` also publishes the
+  snapshot to a Postgres table, so others can query a reviewed ledger in the company database.
+  The table's rows are replaced in one transaction (DELETE + INSERT), so views and grants on it
+  survive and readers see the previous snapshot until commit. A Postgres failure fails the apply
+  and the DuckDB publication rolls back with it. The schema is never created, and an existing
+  table with other columns or types is refused. Later runs reuse the saved target. Needs the
+  `postgres` extra.
+
 ## [0.6.9] - 2026-11-23
 
 Fixes from running DE Arsenal against Excel ledgers at work: `arsenal dataset` reads Excel,
