@@ -12,6 +12,20 @@ minor.
 
 ## [Unreleased]
 
+### Fixed
+
+- `arsenal status` now reports the batch pipelines listed under `pipelines:` in a new
+  `pipelines` block (unit counts, last completion). A pipeline with `failed` or
+  `quarantined` units raises `alert` and exits 1. Before, only streams, distributed runs,
+  datasets and the catalog were checked, so a failed collect still printed `alert: false`.
+  A pipeline that has never run reports `never-run` and gets no state file.
+- Two runs started at the same moment on a fresh project no longer crash with
+  `sqlite3.OperationalError: database is locked` (or `table ... already exists`) while
+  creating the state database. Switching the new file to WAL is retried, each migration
+  re-reads the schema version under its write lock, and a lock that never clears becomes
+  a one-line "state database ... is busy" error. The second run then gets the usual
+  "pipeline ... is busy" message or skips the units the first one finished.
+
 ## [0.6.11] - 2026-11-23
 
 DuckDB 2.0 compatibility: a fresh install resolves DuckDB 2.0, and 0.6.10 printed a

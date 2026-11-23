@@ -18,6 +18,8 @@ from typing import Any, cast
 from arsenal.project import DistributedRef, StreamRef
 from arsenal_core.errors import ArsenalError, FatalError
 from arsenal_core.execution import canonical_hash
+from arsenal_core.spec import load_pipeline
+from arsenal_core.state import StateStore
 
 _EXTRAS = {
     "hasta": ("streaming", "streams"),
@@ -143,6 +145,40 @@ def needs_attention(status: dict[str, Any]) -> bool:
     if not isinstance(block, dict):
         return False
     return bool(cast(dict[str, Any], block).get("alert"))
+
+
+# Unit states that mean a batch pipeline lost data until someone acts on it.
+_PIPELINE_ALERT_STATES = ("failed", "quarantined")
+
+
+def pipeline_status(path: Path) -> dict[str, Any]:
+    """Unit counts of one Pugio pipeline, like `pugio status` (a never-run one creates no state)."""
+
+    spec = load_pipeline(path)
+    db_path = Path(spec.state_dir) / f"{spec.name}.db"
+    base: dict[str, Any] = {"pipeline": spec.name, "spec": str(path)}
+    if not db_path.exists():
+        return {
+            **base,
+            "status": "never-run",
+            "units": {},
+            "last_completed_at": None,
+            "alert": False,
+        }
+    store = StateStore(db_path)
+    try:
+        units = store.counts(spec.name)
+        last_completed_at = store.pipeline_metrics(spec.name).last_completed_at
+    finally:
+        store.close()
+    alert = any(units.get(state, 0) for state in _PIPELINE_ALERT_STATES)
+    return {
+        **base,
+        "status": "needs-attention" if alert else ("ok" if units else "never-run"),
+        "units": units,
+        "last_completed_at": last_completed_at,
+        "alert": alert,
+    }
 
 
 def stream_status(ref: StreamRef) -> dict[str, Any]:

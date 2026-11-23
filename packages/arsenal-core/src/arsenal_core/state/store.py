@@ -7,12 +7,14 @@
 
 import json
 import sqlite3
+import time
 from collections.abc import Callable, Mapping
 from dataclasses import dataclass
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
 from typing import Any
 
+from arsenal_core.errors import FatalError
 from arsenal_core.execution import LeaseToken, OutputProof, canonical_json
 from arsenal_core.identity import unit_id as make_unit_id
 from arsenal_core.state.migrations import CURRENT_SCHEMA_VERSION, apply_migrations
@@ -23,6 +25,31 @@ SOURCE_EXHAUSTED = "\x00__ARSENAL_SOURCE_EXHAUSTED__"
 
 def _utcnow() -> datetime:
     return datetime.now(UTC)
+
+
+# The connection's busy timeout covers ordinary writes, but switching a new file
+# to WAL fails fast with "database is locked" while another process is doing the
+# same (two runs started together on a fresh project). Retry just that step.
+BUSY_TIMEOUT_SECONDS = 5.0  # sqlite3's own default, named so it can be tuned
+WAL_SWITCH_TIMEOUT_SECONDS = 10.0
+_WAL_SWITCH_RETRY_SECONDS = 0.02
+
+
+def _is_locked(exc: sqlite3.OperationalError) -> bool:
+    message = str(exc)
+    return "database is locked" in message or "database is busy" in message
+
+
+def _enable_wal(conn: sqlite3.Connection) -> None:
+    deadline = time.monotonic() + WAL_SWITCH_TIMEOUT_SECONDS
+    while True:
+        try:
+            conn.execute("PRAGMA journal_mode=WAL")
+            return
+        except sqlite3.OperationalError as exc:
+            if not _is_locked(exc) or time.monotonic() >= deadline:
+                raise
+            time.sleep(_WAL_SWITCH_RETRY_SECONDS)
 
 
 @dataclass(frozen=True)
@@ -175,9 +202,7 @@ class StateStore:
         self._backup_dir = backup_dir
         existed = self._db_path.exists() and self._db_path.stat().st_size > 0
         db_path.parent.mkdir(parents=True, exist_ok=True)
-        self._conn = sqlite3.connect(db_path)
-        self._conn.execute("PRAGMA journal_mode=WAL")
-        self._conn.execute("PRAGMA foreign_keys=ON")
+        self._conn = sqlite3.connect(db_path, timeout=BUSY_TIMEOUT_SECONDS)
         backed_up = False
 
         def backup(version: int) -> None:
@@ -186,7 +211,18 @@ class StateStore:
                 self._backup_database(version)
                 backed_up = True
 
-        apply_migrations(self._conn, before_migration=backup)
+        try:
+            _enable_wal(self._conn)
+            self._conn.execute("PRAGMA foreign_keys=ON")
+            apply_migrations(self._conn, before_migration=backup)
+        except sqlite3.OperationalError as exc:
+            self._conn.close()
+            if not _is_locked(exc):
+                raise
+            raise FatalError(
+                f"state database {self._db_path} is busy: another process is opening or "
+                "writing it. Wait for that run to finish, then retry"
+            ) from exc
 
     @classmethod
     def open(cls, db_path: Path, **kwargs: Any) -> "StateStore":

@@ -258,7 +258,7 @@ def check(project: Path = Path(".")) -> None:
 
 @app.command()
 def status(project: Path = Path(".")) -> None:
-    """Streams and distributed runs in arsenal.yaml: health, checkpoint, run state (JSON)."""
+    """Pipelines, streams and distributed runs in arsenal.yaml: units, health, run state (JSON)."""
     try:
         proj_dir = project if project.is_absolute() else project.absolute()
         dataset_path = proj_dir / dataset.STORE
@@ -272,6 +272,7 @@ def status(project: Path = Path(".")) -> None:
         proj = load_project(proj_dir / "arsenal.yaml")
         _check_optional_tools(proj)
         with _chdir(proj_dir):
+            pipelines = [stages.pipeline_status(path) for path in proj.pipelines]
             streams = [stages.stream_status(ref) for ref in proj.streams]
             distributed = [stages.distributed_status(proj.name, ref) for ref in proj.distributed]
         catalog = stages.catalog_status(proj_dir)
@@ -279,11 +280,14 @@ def status(project: Path = Path(".")) -> None:
         raise _fatal(FatalError(str(exc))) from exc
     except ArsenalError as e:
         raise _fatal(e) from e
-    alerts = [s for s in streams if stages.needs_attention(s)] + [
-        d for d in distributed if stages.needs_attention(d)
-    ]
+    alerts = (
+        [p for p in pipelines if p["alert"]]
+        + [s for s in streams if stages.needs_attention(s)]
+        + [d for d in distributed if stages.needs_attention(d)]
+    )
     payload: dict[str, Any] = {
         "project": proj.name,
+        "pipelines": pipelines,
         "streams": streams,
         "distributed": distributed,
         "alert": bool(alerts) or bool(catalog and catalog["alert"]),

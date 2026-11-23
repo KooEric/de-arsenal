@@ -284,6 +284,82 @@ def test_status_summarizes_recorded_ballista_runs(
     assert status["history"]["total"] == 1
 
 
+# --- batch pipelines (Pugio) ----------------------------------------------------------
+
+
+def pipeline_project(tmp_path: Path) -> Path:
+    write(
+        tmp_path / "collect.yaml",
+        yaml.safe_dump(
+            {
+                "name": "orders",
+                "source": {"type": "file", "path": "./raw/*.csv", "format": "csv"},
+                "sink": {"type": "parquet", "path": "./data/raw"},
+            }
+        ),
+    )
+    write(tmp_path / "arsenal.yaml", "name: lakehouse\npipelines: [collect.yaml]\n")
+    return tmp_path
+
+
+def record_units(tmp_path: Path, outcomes: list[str]) -> None:
+    from arsenal_core.state.store import UnitSpec
+
+    store = StateStore(tmp_path / ".arsenal" / "orders.db")
+    for index, outcome in enumerate(outcomes):
+        unit = UnitSpec.create(
+            pipeline="orders", source="file", unit_key=f"part{index}.csv", payload={}
+        )
+        store.register(unit)
+        store.mark_running(unit.unit_id)
+        if outcome == "done":
+            store.mark_done(unit.unit_id, row_count=1, byte_count=1, duration_ms=1)
+        elif outcome == "failed":
+            store.mark_failed(unit.unit_id, "boom")
+        else:
+            store.mark_quarantined(unit.unit_id, "bad row")
+    store.close()
+
+
+def test_status_reports_batch_pipeline_units(tmp_path: Path) -> None:
+    project = pipeline_project(tmp_path)
+    record_units(tmp_path, ["done", "done"])
+
+    result = runner.invoke(app, ["status", "--project", str(project)])
+
+    assert result.exit_code == 0, result.output
+    payload = json.loads(result.stdout)
+    [pipeline] = payload["pipelines"]
+    assert pipeline["pipeline"] == "orders"
+    assert pipeline["units"] == {"done": 2}
+    assert pipeline["last_completed_at"] is not None
+    assert pipeline["alert"] is False and payload["alert"] is False
+
+
+@pytest.mark.parametrize("outcome", ["failed", "quarantined"])
+def test_status_alerts_when_a_batch_pipeline_has_failed_units(tmp_path: Path, outcome: str) -> None:
+    project = pipeline_project(tmp_path)
+    record_units(tmp_path, ["done", outcome])
+
+    result = runner.invoke(app, ["status", "--project", str(project)])
+
+    assert result.exit_code == 1
+    payload = json.loads(result.stdout)
+    assert payload["pipelines"][0]["units"] == {"done": 1, outcome: 1}
+    assert payload["pipelines"][0]["alert"] is True and payload["alert"] is True
+
+
+def test_status_of_a_pipeline_that_never_ran_creates_no_state(tmp_path: Path) -> None:
+    project = pipeline_project(tmp_path)
+
+    result = runner.invoke(app, ["status", "--project", str(project)])
+
+    assert result.exit_code == 0, result.output
+    pipeline = json.loads(result.stdout)["pipelines"][0]
+    assert pipeline["units"] == {} and pipeline["status"] == "never-run"
+    assert not (tmp_path / ".arsenal" / "orders.db").exists()
+
+
 # --- catalog summary (Aquila) ---------------------------------------------------------
 
 
