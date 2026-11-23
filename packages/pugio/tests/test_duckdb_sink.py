@@ -30,7 +30,7 @@ def make_sink(
 def readback(db_path: Path, table: str = "t") -> list[dict[str, object]]:
     con = duckdb.connect(str(db_path))
     try:
-        arrow_table = con.execute(f'SELECT * FROM "{table}"').to_arrow_table()  # pyright: ignore[reportUnknownMemberType, reportUnknownVariableType]
+        arrow_table = con.sql(f'SELECT * FROM "{table}"').to_arrow_table()  # pyright: ignore[reportUnknownMemberType, reportUnknownVariableType]
         return arrow_table.to_pylist()  # pyright: ignore[reportUnknownMemberType, reportUnknownVariableType]
     finally:
         con.close()

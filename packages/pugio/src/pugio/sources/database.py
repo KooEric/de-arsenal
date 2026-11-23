@@ -228,10 +228,10 @@ class DatabaseSource:
         con = self._scanner_connect()
         table: pa.Table
         try:
-            result = con.execute(
+            result = con.sql(  # a relation: DB-API results copy the rows again for Arrow
                 f"SELECT * FROM src.{_qi(self._spec.table)} "
                 f"WHERE {_qi(key)} >= ? AND {_qi(key)} < ?",
-                [lo, hi],
+                params=[lo, hi],
             )
             table = result.to_arrow_table()  # pyright: ignore[reportUnknownMemberType, reportUnknownVariableType]
         except duckdb.Error as e:

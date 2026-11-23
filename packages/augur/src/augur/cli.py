@@ -127,10 +127,11 @@ def report(out: Annotated[Path, typer.Option("--out")] = DEFAULT_EVAL_OUT) -> No
     """모든 run의 실패 모드 추이 — 개선 전후 비교용."""
     pattern = str(out / "*.parquet")
     try:
-        duckdb.sql(  # pyright: ignore[reportUnknownMemberType]
-            f"SELECT run_id, provider, failure_mode, count(*) AS n FROM '{pattern}' "
-            "GROUP BY 1,2,3 ORDER BY 1,3"
-        ).show()
+        with duckdb.connect() as con:
+            con.sql(  # pyright: ignore[reportUnknownMemberType]
+                f"SELECT run_id, provider, failure_mode, count(*) AS n FROM '{pattern}' "
+                "GROUP BY 1,2,3 ORDER BY 1,3"
+            ).show()
     except duckdb.Error as e:
         _fail(e)
 

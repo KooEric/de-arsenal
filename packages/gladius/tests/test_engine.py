@@ -32,7 +32,7 @@ def test_transform_writes_parquet(tmp_path: Path) -> None:
         steps=[{"filter": "state = 'open'"}],
     )
     out = run_transform(spec)
-    row = duckdb.sql(f"SELECT count(*) FROM read_parquet('{out}/*.parquet')").fetchone()
+    row = duckdb.sql(f"SELECT count(*) FROM read_parquet('{out}/*.parquet')").fetchall()[0]
     assert row is not None
     assert row[0] == 2
 
@@ -76,7 +76,7 @@ def test_run_transform_output_path_with_single_quote(tmp_path: Path) -> None:
     out = run_transform(spec)
     assert out == out_dir
     # 파라미터 바인딩으로 조회 — 이 테스트 자체는 인젝션에 안전한 경로로 검증한다.
-    row = duckdb.execute("SELECT count(*) FROM read_parquet(?)", [f"{out}/*.parquet"]).fetchone()
+    row = duckdb.execute("SELECT count(*) FROM read_parquet(?)", [f"{out}/*.parquet"]).fetchall()[0]
     assert row is not None
     assert row[0] == 3
 
@@ -94,7 +94,7 @@ def test_run_transform_survives_cpu_count_returning_none(
     monkeypatch.setattr(os, "cpu_count", lambda: None)
     spec = make_spec(input=tmp_path / "in", output=tmp_path / "out", steps=[{"select": ["id"]}])
     out = run_transform(spec)
-    row = duckdb.sql(f"SELECT count(*) FROM read_parquet('{out}/*.parquet')").fetchone()
+    row = duckdb.sql(f"SELECT count(*) FROM read_parquet('{out}/*.parquet')").fetchall()[0]
     assert row is not None
     assert row[0] == 2
 

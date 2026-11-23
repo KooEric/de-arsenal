@@ -307,7 +307,7 @@ def query(sql: str, fmt: str = typer.Option("table", "--format")) -> None:
         raise _fatal(e) from e
 
     if fmt == "table":
-        duckdb.sql("SELECT * FROM result").show()  # pyright: ignore[reportUnknownMemberType]
+        gladius_engine.show(result)
     elif fmt == "csv":
         pa_csv.write_csv(  # pyright: ignore[reportPrivateImportUsage, reportUnknownMemberType]
             result, sys.stdout.buffer

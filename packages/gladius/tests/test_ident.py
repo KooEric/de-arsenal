@@ -12,7 +12,7 @@ def test_quote_roundtrips_in_duckdb(name: str) -> None:
     q = quote_ident(name)
     con = duckdb.connect()
     con.execute(f"CREATE TABLE t ({q} INTEGER)")
-    row = con.sql("SELECT column_name FROM duckdb_columns()").fetchone()
+    row = con.sql("SELECT column_name FROM duckdb_columns()").fetchall()[0]
     assert row is not None
     assert row[0] == name
 

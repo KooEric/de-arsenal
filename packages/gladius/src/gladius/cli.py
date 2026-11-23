@@ -9,7 +9,6 @@ import json
 import sys
 from pathlib import Path
 
-import duckdb
 import pyarrow.csv as pa_csv
 import typer
 
@@ -17,6 +16,7 @@ from arsenal_core.errors import ArsenalError
 from gladius.compile import compile_sql
 from gladius.engine import query as run_query
 from gladius.engine import run_transform
+from gladius.engine import show as show_table
 from gladius.loader import load_transform
 
 app = typer.Typer(help="Gladius — 변환·쿼리. 선언이 SQL로 컴파일된다.")
@@ -61,7 +61,7 @@ def query_cmd(
         raise typer.Exit(1) from e
 
     if fmt == "table":
-        duckdb.sql("SELECT * FROM result").show()  # pyright: ignore[reportUnknownMemberType]
+        show_table(result)
     elif fmt == "csv":
         pa_csv.write_csv(  # pyright: ignore[reportPrivateImportUsage, reportUnknownMemberType]
             result, sys.stdout.buffer
