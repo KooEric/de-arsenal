@@ -1,4 +1,5 @@
 import json
+import sys
 from pathlib import Path
 from typing import Any
 
@@ -191,3 +192,91 @@ def test_jsonl_files_of_one_snapshot_may_differ_in_an_empty_column(
     assert _published_types()["fee"] == "BIGINT"
     _jsonl(tmp_path / "part-3.jsonl", [{"id": "c", "fee": "free"}])
     assert runner.invoke(app, ["dataset", "apply"]).exit_code == 1
+
+
+def _workbook(path: Path, rows: list[list[Any]]) -> None:
+    openpyxl = pytest.importorskip("openpyxl")
+    book = openpyxl.Workbook()
+    sheet = book.active
+    for row in rows:
+        sheet.append(row)
+    book.save(path)
+
+
+def _dataset(*args: str, success: bool = True) -> dict[str, Any]:
+    result = CliRunner().invoke(app, ["dataset", *args])
+    assert result.exit_code == (0 if success else 1), (result.output, result.exception)
+    return json.loads(result.output) if success else {"output": result.output}
+
+
+def test_excel_ledger_is_read_as_text_and_diffed_by_key(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """A payroll ledger keeps leading zeros and whole numbers the way they look in Excel,
+    like a CSV read as text, so a monthly re-export only reports the rows that changed."""
+    pytest.importorskip("fastexcel")
+    monkeypatch.chdir(tmp_path)
+    _workbook(
+        tmp_path / "payroll.xlsx",
+        [["emp_id", "name", "amount"], ["00123", "Kim", 1234], ["00456", "Lee", 99.5]],
+    )
+    rules = ["--files", "*.xlsx", "--key", "emp_id", "--measure", "amount"]
+    first = _dataset("preview", *rules)
+    assert first["source"]["rows"] == 2
+    _dataset("apply", *rules, "--expect", first["version"])
+    with duckdb.connect(".arsenal/dataset.duckdb", read_only=True) as db:
+        assert db.execute("SELECT emp_id, amount FROM published ORDER BY emp_id").fetchall() == [
+            ("00123", "1234"),
+            ("00456", "99.5"),
+        ]
+
+    _workbook(
+        tmp_path / "payroll.xlsx",
+        [["emp_id", "name", "amount"], ["00123", "Kim", 1300], ["00456", "Lee", 99.5]],
+    )
+    update = _dataset("preview")
+    assert update["files"] == {"payroll.xlsx": "revised"}
+    assert update["changes"]["updated"]["count"] == 1
+    assert update["changes"]["updated"]["examples"][0]["before"]["amount"] == "1234"
+    assert update["changes"]["added"]["count"] == 0
+
+
+def test_excel_lock_file_of_an_open_workbook_is_ignored(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Excel leaves `~$name.xlsx` next to a workbook someone has open. It is not data."""
+    pytest.importorskip("fastexcel")
+    monkeypatch.chdir(tmp_path)
+    _workbook(tmp_path / "ledger.xlsx", [["id", "v"], ["1", "a"]])
+    (tmp_path / "~$ledger.xlsx").write_bytes(b"\x00owner")
+    report = _dataset("preview", "--files", "*.xlsx", "--key", "id")
+    assert report["files"] == {"ledger.xlsx": "new"}
+    assert report["source"]["rows"] == 1
+
+
+def test_unreadable_workbook_names_the_file(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    pytest.importorskip("fastexcel")
+    monkeypatch.chdir(tmp_path)
+    (tmp_path / "broken.xlsb").write_bytes(b"not a workbook")
+    result = _dataset("preview", "--files", "*.xlsb", success=False)
+    assert "broken.xlsb" in result["output"]
+
+
+def test_excel_and_csv_cannot_be_mixed(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.chdir(tmp_path)
+    (tmp_path / "a.csv").write_text("id\n1\n")
+    (tmp_path / "b.xlsx").write_bytes(b"x")
+    result = _dataset("preview", "--files", "*.*", success=False)
+    assert "Excel" in result["output"]
+
+
+def test_excel_without_extra_says_how_to_install(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.chdir(tmp_path)
+    monkeypatch.setitem(sys.modules, "fastexcel", None)
+    (tmp_path / "ledger.xlsx").write_bytes(b"x")
+    result = _dataset("preview", "--files", "*.xlsx", success=False)
+    assert "de-arsenal[excel]" in result["output"]

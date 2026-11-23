@@ -25,6 +25,7 @@ classifiers = [
 
 [project.optional-dependencies]
 postgres = ["pugio[postgres]"]
+excel = ["pugio[excel]"]
 redshift = ["pugio[redshift]"]
 iceberg = ["pugio[iceberg]"]
 dlt = ["pugio[dlt]"]

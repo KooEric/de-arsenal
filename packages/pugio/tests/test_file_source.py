@@ -211,3 +211,15 @@ def test_detect_changes_is_refused_with_a_parquet_sink(tmp_path: Path) -> None:
         "merge_key": ["id"],
     }
     assert PipelineSpec.model_validate(raw).source.type == "file"
+
+
+@pytest.mark.parametrize("name", ["a.xlsb", "a.XLSB", "a.xlsm"])
+def test_binary_and_macro_workbooks_auto_detect_as_excel(tmp_path: Path, name: str) -> None:
+    """Ledgers often come as .xlsb or .xlsm. fastexcel (calamine) reads both, so the
+    suffix must reach the excel reader instead of failing format detection."""
+    (tmp_path / name).write_bytes(b"not a real workbook")
+    spec = FileSourceSpec(type="file", path=str(tmp_path / name))
+    src = FileSource(spec, pipeline="p")
+    with pytest.raises(FatalError) as exc_info:
+        src.fetch(next(iter(src.units())))
+    assert "cannot auto-detect format" not in str(exc_info.value)

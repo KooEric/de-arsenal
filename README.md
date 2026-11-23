@@ -33,7 +33,7 @@ All three write ordinary files in the working directory: specs, output and bookk
 
 ## Review, then publish
 
-For a folder of CSV, JSONL or Parquet files that keeps changing, `arsenal dataset` shows
+For a folder of CSV, JSONL, Parquet or Excel files that keeps changing, `arsenal dataset` shows
 what the new files would change before anything is replaced. Use one working directory
 per dataset.
 
@@ -58,6 +58,8 @@ after the preview you looked at.
 | `--measure <column>` | Report the total of a numeric column and how it changed |
 | `--max-age-hours <n>` | `arsenal status` exits 1 when changed input has not been published for this long |
 
+- Excel workbooks (`.xlsx`, `.xlsm`, `.xlsb`, `.xls`) need `de-arsenal[excel]`. The first
+  sheet is read as text, like CSV, so leading zeros survive. `~$` lock files are skipped.
 - A file removed from the folder drops out of the next publication. A row deleted at the
   source is reported as `removed`.
 - A failed or refused apply keeps the last successful publication. `arsenal status`

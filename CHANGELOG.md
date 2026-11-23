@@ -12,12 +12,24 @@ minor.
 
 ## [Unreleased]
 
+### Added
+
+- `arsenal dataset` reads Excel workbooks (`.xlsx`, `.xlsm`, `.xlsb`, `.xls`). The first sheet
+  is read as text, like CSV, so leading zeros and whole numbers compare as they look in Excel.
+  `~$` lock files that Excel leaves beside an open workbook are skipped. Install the new
+  `excel` extra: `uv tool install "de-arsenal[excel]"`.
+- The file source auto-detects `.xlsb` and `.xlsm` workbooks as Excel. The `excel` extra
+  (fastexcel) already read them, but the suffix check refused them first.
+
 ### Fixed
 
 - `examples/real-world/d1-snapshot/d1_snapshot.py` read each page from the start of the table.
   Its paging predicate could not use the key index, so an export of n rows cost about
   n × pages / 2 row reads at D1 instead of n. It now seeks by key and prints the request and
   row-read counts D1 reports. Measured on a 105,484-row table: 106 requests, 105,484 rows read.
+- A postgres or mysql `DatabaseSource` with a wrong password, a rejected `pg_hba.conf` entry,
+  or a missing database or role now fails at once with a fatal error. DuckDB raises these as
+  IO errors, so they used to be retried until the backoff ran out.
 
 ## [0.6.8] - 2026-11-22
 

@@ -30,6 +30,8 @@ _SUFFIX_FORMATS = {
     ".ndjson": "jsonl",
     ".xlsx": "excel",
     ".xls": "excel",
+    ".xlsm": "excel",
+    ".xlsb": "excel",
 }
 
 

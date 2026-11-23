@@ -52,6 +52,8 @@ dev = [
     # pugio[iceberg] runtime plus a local SQLite catalog, so the Iceberg sink is tested
     # against real Iceberg tables on the local filesystem.
     "pyiceberg[sql-sqlite]>=0.9",
+    "fastexcel>=0.11",
+    "openpyxl>=3.1",
 ]
 
 [project.optional-dependencies]

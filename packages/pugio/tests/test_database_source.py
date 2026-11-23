@@ -7,13 +7,17 @@
 import sqlite3
 from pathlib import Path
 
+import duckdb
 import pytest
 from pydantic import ValidationError
 
 from arsenal_core.errors import FatalError, RetryableError
 from arsenal_core.spec.models import DatabaseSourceSpec, SplitSpec
 from arsenal_core.state import UnitSpec
-from pugio.sources.database import DatabaseSource
+from pugio.sources.database import (
+    DatabaseSource,
+    _raise_classified_duckdb,  # pyright: ignore[reportPrivateUsage]
+)
 
 
 def make_db(tmp_path: Path, n: int, *, name: str = "src.db") -> Path:
@@ -239,3 +243,34 @@ def test_locked_database_during_fetch_is_retryable(
     monkeypatch.setattr(src, "_connect", lambda: _LockedConnection())
     with pytest.raises(RetryableError, match="database is locked"):
         src.fetch(unit)
+
+
+# ---- scanner (postgres/mysql via duckdb ATTACH) error classification ----
+@pytest.mark.parametrize(
+    "message",
+    [
+        'IO Error: Unable to connect to Postgres at "<dsn>": connection to server at '
+        '"10.0.0.1", port 5432 failed: FATAL:  password authentication failed for user "etl"',
+        'IO Error: Unable to connect to Postgres at "<dsn>": FATAL:  no pg_hba.conf entry '
+        'for host "10.0.0.9", user "etl", database "erp"',
+        'IO Error: Unable to connect to Postgres at "<dsn>": FATAL:  database "erp" does not exist',
+        'IO Error: Unable to connect to Postgres at "<dsn>": FATAL:  role "etl" does not exist',
+        "IO Error: Failed to connect to MySQL database with parameters: "
+        "Access denied for user 'etl'@'10.0.0.9' (using password: YES)",
+        "IO Error: Failed to connect to MySQL database: Unknown database 'erp'",
+    ],
+)
+def test_scanner_credential_and_target_errors_are_fatal(message: str) -> None:
+    """A wrong password or a missing database never succeeds on retry, even though
+    duckdb raises it as IOException like a network failure."""
+    with pytest.raises(FatalError):
+        _raise_classified_duckdb(duckdb.IOException(message), context="attach failed")
+
+
+def test_scanner_connection_refused_stays_retryable() -> None:
+    message = (
+        'IO Error: Unable to connect to Postgres at "<dsn>": connection to server at '
+        '"127.0.0.1", port 5432 failed: Connection refused'
+    )
+    with pytest.raises(RetryableError):
+        _raise_classified_duckdb(duckdb.IOException(message), context="attach failed")

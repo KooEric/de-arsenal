@@ -33,7 +33,7 @@ arsenal query "SELECT * FROM './data/clean/*.parquet' LIMIT 10"
 
 ## 검토한 뒤 게시하기
 
-계속 바뀌는 CSV·JSONL·Parquet 폴더가 있을 때, `arsenal dataset`은 새 파일이 무엇을 바꾸는지
+계속 바뀌는 CSV·JSONL·Parquet·Excel 폴더가 있을 때, `arsenal dataset`은 새 파일이 무엇을 바꾸는지
 먼저 보여 주고 그다음에 교체한다. 데이터셋 하나에 작업 폴더 하나를 쓴다.
 
 ```bash
@@ -56,6 +56,8 @@ arsenal status                                             # 마지막 성공, �
 | `--measure <열>` | 숫자 열의 합계와 그 변화를 보고한다 |
 | `--max-age-hours <n>` | 바뀐 입력이 이 시간 넘게 게시되지 않으면 `arsenal status`가 exit 1을 낸다 |
 
+- Excel(`.xlsx`·`.xlsm`·`.xlsb`·`.xls`)은 `de-arsenal[excel]`이 필요하다. 첫 시트를 CSV처럼
+  문자열로 읽어 앞자리 0이 남는다. `~$` 잠금 파일은 건너뛴다.
 - 폴더에서 빠진 파일은 다음 게시에서 제외된다. 원본에서 지워진 행은 `removed`로 보고된다.
 - 실패하거나 거부된 게시는 마지막 성공 결과를 그대로 둔다. `arsenal status`는 다음 성공한
   게시 전까지 `failed`를 보고한다.
