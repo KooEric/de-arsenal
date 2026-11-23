@@ -12,6 +12,12 @@ minor.
 
 ## [Unreleased]
 
+## [0.6.11] - 2026-11-23
+
+DuckDB 2.0 compatibility: a fresh install resolves DuckDB 2.0, and 0.6.10 printed a
+`UserWarning` on every Postgres publish with it. All 13 packages move to `0.6.11`; internal
+pins stay `>=0.6,<0.7`. No state migrations.
+
 ### Fixed
 
 - A fresh install resolves DuckDB 2.0, which the lock file had not been testing. With it,
