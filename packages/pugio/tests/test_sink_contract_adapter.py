@@ -127,7 +127,7 @@ def sink_contract_case(
         def readback() -> Rows:
             con = duckdb.connect(str(db_path))
             try:
-                table = con.execute('SELECT * FROM "contract_rows"').to_arrow_table()  # pyright: ignore[reportUnknownMemberType, reportUnknownVariableType]
+                table = con.sql('SELECT * FROM "contract_rows"').to_arrow_table()  # pyright: ignore[reportUnknownMemberType, reportUnknownVariableType]
                 return table.to_pylist()  # pyright: ignore[reportUnknownMemberType, reportUnknownVariableType]
             finally:
                 con.close()

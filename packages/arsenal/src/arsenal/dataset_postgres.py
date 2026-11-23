@@ -106,7 +106,7 @@ def publish(db: duckdb.DuckDBPyConnection, table: str, target: PostgresTarget) -
             "Postgres로 게시하려면 postgres 추가 기능을 설치하세요: "
             'uv tool install "de-arsenal[postgres]"'
         ) from e
-    rows = cast(pa.Table, db.execute(f"FROM {table}").to_arrow_table())  # pyright: ignore[reportUnknownMemberType]
+    rows = cast(pa.Table, db.sql(f"FROM {table}").to_arrow_table())  # pyright: ignore[reportUnknownMemberType]
     try:
         with psycopg.connect(dsn) as con, con.transaction():
             _replace(con, target, rows)

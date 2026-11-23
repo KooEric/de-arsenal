@@ -171,6 +171,20 @@ def _merge_incremental_output(
     atomic_replace_directory(tmp_output, output)
 
 
+def show(table: pa.Table) -> None:
+    """Print ``table`` as a DuckDB box table, on a connection of its own.
+
+    Not ``duckdb.sql``: that uses the process-wide default connection, which DuckDB 2.0
+    refuses to reuse while an earlier result on it is unfinished.
+    """
+    con = duckdb.connect()
+    try:
+        con.register("result", table)
+        con.sql("SELECT * FROM result").show()  # pyright: ignore[reportUnknownMemberType]
+    finally:
+        con.close()
+
+
 def query(sql: str) -> pa.Table:
     """Parquet 레이크에 즉석 SQL — FROM './data/*.parquet' 경로 직접 참조.
 

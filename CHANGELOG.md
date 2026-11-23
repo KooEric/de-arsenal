@@ -12,6 +12,18 @@ minor.
 
 ## [Unreleased]
 
+### Fixed
+
+- A fresh install resolves DuckDB 2.0, which the lock file had not been testing. With it,
+  `arsenal dataset apply --postgres-table` and the postgres/mysql `DatabaseSource` printed
+  `UserWarning: Arrow output on a DB-API result makes an extra copy of the rows` on every run.
+  They now read through a relation, which also avoids that extra copy.
+- `gladius query`, `arsenal query` and `augur report` render their table on a connection of
+  their own instead of DuckDB's process-wide default one, which DuckDB 2.0 refuses to reuse
+  while an earlier result on it is unfinished.
+- CI runs the suite once more on the newest versions our dependency ranges allow
+  (`latest-deps`, on every PR and weekly), not only on the versions pinned in `uv.lock`.
+
 ## [0.6.10] - 2026-11-23
 
 `arsenal dataset` can publish a reviewed snapshot to a Postgres table as well as to
