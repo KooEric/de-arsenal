@@ -83,6 +83,13 @@ def apply_migrations(
             before_migration(version)
         conn.execute("BEGIN IMMEDIATE")
         try:
+            # Another process may have migrated between our read and the write
+            # lock (two runs opening a new state db together); re-read under it.
+            current = int(conn.execute("PRAGMA user_version").fetchone()[0])
+            if current >= target:
+                conn.commit()
+                version = current
+                continue
             for statement in MIGRATIONS[target]:
                 conn.execute(statement)
             conn.execute(f"PRAGMA user_version={target}")
