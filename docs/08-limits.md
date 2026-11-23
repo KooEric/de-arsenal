@@ -61,6 +61,7 @@ Arsenal(Pugio/Gladius)은 분산 엔진을 만들지 않는다([설계 원칙 1]
   (정수 컬럼만 한 번 더 읽어 확인하므로 그만큼 파싱 비용이 든다), 한 실행 안에서 파일끼리 타입이
   다르면 경고한다. 추론에 맡기지 않으려면 `source.column_types`로 고정한다. JSONL·Excel에는
   타입 고정이 없다.
+- **Excel은 `.xlsx`·`.xlsm`·`.xlsb`·`.xls`를 자동 판별한다.** 첫 시트만 읽는다.
 - **`offset`·`page` 모드의 기본 종료 조건은 "`size`보다 짧은 페이지"다.** 서버가 페이지 크기를
   `size`보다 작게 제한하면 첫 페이지에서 끝나고 성공으로 보고된다. Pugio는 서버의 상한을 알 수
   없으므로 이 경우를 감지하지 못한다. `pagination.stop_on: empty_page`가 상한과 무관한 방법이다.
@@ -74,6 +75,10 @@ Arsenal(Pugio/Gladius)은 분산 엔진을 만들지 않는다([설계 원칙 1]
 - **JSONL은 파일마다 타입을 추론한다.** 어떤 컬럼이 한 스냅샷에서 전부 NULL이면 0.6.8부터는
   게시된 타입을 그대로 쓰고 값 변경(`updated`)으로 보고한다. 0.6.7은 이 경우를 스키마 변경으로
   거부했다. 양쪽에 값이 있는데 타입이 다르면 지금도 거부한다.
+- **Excel은 첫 시트를 모든 열 문자열로 읽는다.** CSV와 같은 규칙이라 사번의 앞자리 0이 남고 정수는
+  `1234`처럼 보이는 그대로 비교된다. 날짜는 `2026-01-25 00:00:00` 형태의 문자열이 된다. 다른
+  시트는 읽지 않는다. Excel이 열린 통합 문서 옆에 만드는 `~$` 잠금 파일은 입력에서 뺀다.
+  `excel` 추가 기능(fastexcel)이 필요하다.
 - **거부되거나 실패한 `apply`는 `dataset status`를 `failed`로 남긴다.** 의도된 동작이다. 게시
   결과는 마지막 성공 상태 그대로지만 새 입력은 게시되지 않았으므로, 다음 성공한 `apply` 전까지
   상태 검사는 exit 1이다. `--expect` 토큰이 오래돼 거부된 경우도 같다. `preview`를 다시 보고
@@ -110,17 +115,13 @@ Scutum 설계 원칙("끝점 능력별 멱등 전략을 명시", [roadmap.md](ro
   이 조합을 명시적으로 거부하고 evidence(DLQ 파일)를 보존한다
   (`packages/pugio/src/pugio/cli.py`의 `dlq_retry`). `offset`/`page`/`file`/
   `database`/`python` 소스는 `unit_key`가 결정적으로 재생산되므로 정상 재시도된다.
-- **DuckDB scanner 경로(postgres/mysql `DatabaseSource`)의 인증 실패가 일시적
-  오류로 오분류될 수 있다.** `_raise_classified_duckdb`는 `duckdb.IOException` /
-  `ConnectionException` / `TransactionException`을 전부 `RetryableError`로
-  분류하는데, ATTACH 단계에서 잘못된 비밀번호로 인한 실패도 DuckDB가 이 예외
-  타입 중 하나로 표면화할 수 있다 — 이 경우 영구적인 자격증명 오류(재시도해도
-  절대 성공하지 않음)가 재시도 가능으로 잘못 분류된다. Postgres 직접 연결
-  sink(`sinks/postgres.py`)는 sqlstate `28xxx`(인증)를 별도로 `FatalError`로
-  가려내지만, scanner 경로는 이 세분화를 아직 갖고 있지 않다(테스트:
-  `packages/pugio/tests/test_database_source_scanner.py::test_scanner_error_redacts_dsn`은
-  DSN 마스킹만 검증하고 Fatal/Retryable 분류는 검증하지 않는다). 재시도
-  백오프가 소진될 때까지 불필요하게 재시도된다는 뜻이며, 결과가 틀리게
+- **DuckDB scanner 경로(postgres/mysql `DatabaseSource`)의 오류 분류는 서버 원문에
+  기댄다.** DuckDB는 ATTACH 단계의 인증 실패도 `IOException`으로 올리므로,
+  `_raise_classified_duckdb`가 메시지로 다시 가린다. 잘못된 비밀번호, `pg_hba.conf`
+  거부, 없는 database·role(postgres)과 `Access denied`, `Unknown database`(mysql)는
+  `FatalError`로 즉시 멈추고, 연결 거부·타임아웃 같은 나머지 IO 오류만 재시도한다.
+  서버 메시지가 다른 언어로 나오도록 설정된 경우(`lc_messages`)에는 인증 실패가 다시
+  재시도로 분류될 수 있다. 그때도 백오프가 소진될 때까지 재시도할 뿐 결과가 틀리게
   나오지는 않는다.
 
 ## Hasta 스트리밍의 보장과 한계 (0.4)

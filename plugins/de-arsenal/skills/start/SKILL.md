@@ -12,7 +12,7 @@ key is before getting a result, and nobody is locked out of the files either.
 
 ## Review and publish changing local data
 
-For a folder of CSV, JSONL or Parquet files, use `arsenal dataset --help` to
+For a folder of CSV, JSONL, Parquet or Excel files (Excel needs the `excel` extra), use `arsenal dataset --help` to
 check whether the installed CLI includes the dataset workflow. It is available
 from DE Arsenal 0.6.7. Use a separate working directory for each job.
 Existing API and database projects can review their collected Parquet files here.

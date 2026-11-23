@@ -16,6 +16,9 @@ from gladius.compile.ident import quote_ident
 
 app = typer.Typer(help="파일 데이터셋의 변경을 검토하고 게시합니다.")
 STORE = Path(".arsenal/dataset.duckdb")
+EXCEL_SUFFIXES = frozenset({".xlsx", ".xlsm", ".xlsb", ".xls"})
+# Excel keeps `~$name.xlsx` beside a workbook while someone has it open. It is not data.
+OFFICE_LOCK_PREFIX = "~$"
 
 
 @dataclass
@@ -32,6 +35,8 @@ def fingerprints(pattern: str) -> dict[str, str]:
     result: dict[str, str] = {}
     for name in sorted(glob.glob(pattern, recursive=True)):
         path = Path(name)
+        if path.name.startswith(OFFICE_LOCK_PREFIX) and path.suffix.lower() in EXCEL_SUFFIXES:
+            continue
         if path.is_file():
             with path.open("rb") as stream:
                 result[path.as_posix()] = hashlib.file_digest(stream, "sha256").hexdigest()
@@ -78,26 +83,56 @@ def align(db: duckdb.DuckDBPyConnection, left: str, right: str) -> bool:
     return True
 
 
-def read_inputs(db: duckdb.DuckDBPyConnection, paths: list[str]) -> None:
+def load_excel(db: duckdb.DuckDBPyConnection, path: str, table: str) -> None:
+    """Read a workbook's first sheet as text into ``table``, as CSV is read."""
+    try:
+        import fastexcel  # pyright: ignore[reportMissingImports]
+    except ImportError as e:
+        raise FatalError(
+            "Excel 파일을 읽으려면 excel 추가 기능을 설치하세요: "
+            'uv tool install "de-arsenal[excel]"'
+        ) from e
+    try:
+        sheet = fastexcel.read_excel(path).load_sheet(0, dtypes="string")  # pyright: ignore[reportUnknownMemberType, reportUnknownVariableType]
+        batch = sheet.to_arrow()  # pyright: ignore[reportUnknownMemberType, reportUnknownVariableType]
+    except Exception as e:  # fastexcel raises its own error types per failure
+        raise FatalError(f"Excel 파일을 읽을 수 없습니다. 파일을 확인하세요: {path} ({e})") from e
+    db.register("excel_sheet", batch)
+    try:
+        db.execute(f"CREATE TEMP TABLE {table} AS SELECT * FROM excel_sheet")
+    finally:
+        db.unregister("excel_sheet")
+
+
+def load_input(db: duckdb.DuckDBPyConnection, path: str, reader: str | None, table: str) -> None:
+    if reader is None:
+        load_excel(db, path, table)
+    else:
+        db.execute(f"CREATE TEMP TABLE {table} AS SELECT * FROM {reader}", [path])
+
+
+def input_reader(paths: list[str]) -> str | None:
+    """The DuckDB reader for one snapshot's files, or None for Excel workbooks."""
     suffixes = {Path(p).suffix.lower() for p in paths}
     if suffixes == {".csv"}:
-        reader = "read_csv(?, header=true, all_varchar=true)"
-    elif suffixes <= {".jsonl", ".ndjson"}:
-        reader = "read_json_auto(?, format='newline_delimited')"
-    elif suffixes == {".parquet"}:
-        reader = "read_parquet(?)"
-    else:
-        raise FatalError("한 작업에는 같은 형식의 CSV, JSONL 또는 Parquet 파일을 지정하세요.")
+        return "read_csv(?, header=true, all_varchar=true)"
+    if suffixes <= {".jsonl", ".ndjson"}:
+        return "read_json_auto(?, format='newline_delimited')"
+    if suffixes == {".parquet"}:
+        return "read_parquet(?)"
+    if suffixes <= EXCEL_SUFFIXES:
+        return None
+    raise FatalError("한 작업에는 같은 형식의 CSV, JSONL, Parquet 또는 Excel 파일을 지정하세요.")
+
+
+def read_inputs(db: duckdb.DuckDBPyConnection, paths: list[str]) -> None:
+    reader = input_reader(paths)
     # Read individually: a reordered header must never shift values into another column.
     for index, path in enumerate(paths):
         if index == 0:
-            db.execute(f"CREATE TEMP TABLE raw AS SELECT * FROM {reader}", [path])
+            load_input(db, path, reader, "raw")
             continue
-        fields = db.execute(f"DESCRIBE SELECT * FROM {reader}", [path]).fetchall()
-        if {r[:2] for r in fields} == {r[:2] for r in db.execute("DESCRIBE raw").fetchall()}:
-            db.execute(f"INSERT INTO raw BY NAME SELECT * FROM {reader}", [path])
-            continue
-        db.execute(f"CREATE TEMP TABLE part AS SELECT * FROM {reader}", [path])
+        load_input(db, path, reader, "part")
         if not align(db, "raw", "part"):
             raise FatalError(f"파일 간 열 또는 자료형이 다릅니다. 열 구성을 확인하세요: {path}")
         db.execute("INSERT INTO raw BY NAME SELECT * FROM part")

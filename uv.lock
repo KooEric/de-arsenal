@@ -747,6 +747,9 @@ distributed = [
 dlt = [
     { name = "pugio", extra = ["dlt"] },
 ]
+excel = [
+    { name = "pugio", extra = ["excel"] },
+]
 iceberg = [
     { name = "pugio", extra = ["iceberg"] },
 ]
@@ -772,12 +775,13 @@ requires-dist = [
     { name = "de-scorpio", editable = "packages/scorpio" },
     { name = "pugio", editable = "packages/pugio" },
     { name = "pugio", extras = ["dlt"], marker = "extra == 'dlt'", editable = "packages/pugio" },
+    { name = "pugio", extras = ["excel"], marker = "extra == 'excel'", editable = "packages/pugio" },
     { name = "pugio", extras = ["iceberg"], marker = "extra == 'iceberg'", editable = "packages/pugio" },
     { name = "pugio", extras = ["postgres"], marker = "extra == 'postgres'", editable = "packages/pugio" },
     { name = "pugio", extras = ["redshift"], marker = "extra == 'redshift'", editable = "packages/pugio" },
     { name = "typer", specifier = ">=0.12" },
 ]
-provides-extras = ["postgres", "redshift", "iceberg", "dlt", "dbt", "streaming", "distributed", "catalog", "dispatch"]
+provides-extras = ["postgres", "excel", "redshift", "iceberg", "dlt", "dbt", "streaming", "distributed", "catalog", "dispatch"]
 
 [[package]]
 name = "de-arsenal-workspace"
@@ -809,8 +813,10 @@ streaming = [
 
 [package.dev-dependencies]
 dev = [
+    { name = "fastexcel" },
     { name = "hypothesis" },
     { name = "obstore" },
+    { name = "openpyxl" },
     { name = "pyiceberg", extra = ["sql-sqlite"] },
     { name = "pyright" },
     { name = "pytest" },
@@ -842,8 +848,10 @@ provides-extras = ["streaming", "distributed"]
 
 [package.metadata.requires-dev]
 dev = [
+    { name = "fastexcel", specifier = ">=0.11" },
     { name = "hypothesis", specifier = ">=6" },
     { name = "obstore", specifier = ">=0.7" },
+    { name = "openpyxl", specifier = ">=3.1" },
     { name = "pyiceberg", extras = ["sql-sqlite"], specifier = ">=0.9" },
     { name = "pyright", specifier = ">=1.1" },
     { name = "pytest", specifier = ">=8" },
@@ -1149,6 +1157,15 @@ source = { registry = "https://pypi.org/simple" }
 sdist = { url = "https://files.pythonhosted.org/packages/b0/5d/5f8571bd5dedc80863191621ac4be001f3f3dd8315d2ec078705dab7dec1/durationpy-0.11.tar.gz", hash = "sha256:181898e1ae282e288f0a2291829656bf1b6b3aadf30a97993b85db4943642905", size = 3582, upload-time = "2026-08-26T13:56:00.991Z" }
 wheels = [
     { url = "https://files.pythonhosted.org/packages/e6/c4/ebdf7837bc4ef6fd98cfb013c28855bb358467bf86c1af011bbc21e21df0/durationpy-0.11-py3-none-any.whl", hash = "sha256:a739fe2b8972c250ff72f8e2c488d18cf25f7b852f49ee76048775d5171df30c", size = 4133, upload-time = "2026-08-26T13:55:59.456Z" },
+]
+
+[[package]]
+name = "et-xmlfile"
+version = "2.0.0"
+source = { registry = "https://pypi.org/simple" }
+sdist = { url = "https://files.pythonhosted.org/packages/d3/38/af70d7ab1ae9d4da450eeec1fa3918940a5fafb9055e934af8d6eb0c2313/et_xmlfile-2.0.0.tar.gz", hash = "sha256:dab3f4764309081ce75662649be815c4c9081e88f0837825f90fd28317d4da54", size = 17234, upload-time = "2024-10-25T17:25:40.039Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/c1/8b/5fe2cc11fee489817272089c4203e679c63b570a5aaeb18d852ae3cbba6a/et_xmlfile-2.0.0-py3-none-any.whl", hash = "sha256:7a91720bc756843502c3b7504c77b8fe44217c85c537d85037f0f536151b2caa", size = 18059, upload-time = "2024-10-25T17:25:39.051Z" },
 ]
 
 [[package]]
@@ -2441,6 +2458,18 @@ wheels = [
     { url = "https://files.pythonhosted.org/packages/b5/e0/6e38c19d1fd4dc40f087ad953c2c0dea1203994d359f253e1123ae175351/obstore-0.12.1-pp311-pypy311_pp73-musllinux_1_2_x86_64.whl", hash = "sha256:94fba14cd7d64f7a0b4da0224dcaec9c379ba7a1ddcad2c5e4c35a0b56977b61", size = 5815556, upload-time = "2026-10-27T22:50:57.387Z" },
     { url = "https://files.pythonhosted.org/packages/d8/c6/f0b45052e07d8eb2f5a6836b45babf18b06dae2019404f9af4662db6666c/obstore-0.12.1-pp311-pypy311_pp80-macosx_10_12_x86_64.whl", hash = "sha256:2edaecb8b06e6f1674f8e0375f0e25df00c4a2162c489769cd4ffc182e8069ba", size = 5424080, upload-time = "2026-10-27T22:50:58.899Z" },
     { url = "https://files.pythonhosted.org/packages/d3/b5/91046acc476a58c02731140d987cc3faed8a4dd073154b9c3eaf34965107/obstore-0.12.1-pp311-pypy311_pp80-macosx_11_0_arm64.whl", hash = "sha256:eb4fcec7658aa6929f77502edef424213db8dfe173276ae6bff67df8f95e5aff", size = 4591674, upload-time = "2026-10-27T22:51:00.972Z" },
+]
+
+[[package]]
+name = "openpyxl"
+version = "3.1.5"
+source = { registry = "https://pypi.org/simple" }
+dependencies = [
+    { name = "et-xmlfile" },
+]
+sdist = { url = "https://files.pythonhosted.org/packages/3d/f9/88d94a75de065ea32619465d2f77b29a0469500e99012523b91cc4141cd1/openpyxl-3.1.5.tar.gz", hash = "sha256:cf0e3cf56142039133628b5acffe8ef0c12bc902d2aadd3e0fe5878dc08d1050", size = 186464, upload-time = "2024-06-28T14:03:44.161Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/c0/da/977ded879c29cbd04de313843e76868e6e13408a94ed6b987245dc7c8506/openpyxl-3.1.5-py2.py3-none-any.whl", hash = "sha256:5282c12b107bffeef825f4617dc029afaf41d0ea60823bbb665ef3079dc79de2", size = 250910, upload-time = "2024-06-28T14:03:41.161Z" },
 ]
 
 [[package]]
