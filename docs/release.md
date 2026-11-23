@@ -1,3 +1,22 @@
+# v0.6.11 패치 릴리스 절차
+
+새로 설치하면 DuckDB 2.0이 잡히는데, 0.6.10은 lock의 1.5.4로만 테스트돼 Postgres 게시마다
+`UserWarning`을 냈다. 그 수정과, 허용 범위의 최신 의존성으로 테스트하는 CI(`latest-deps`)다.
+내역은 [CHANGELOG](../CHANGELOG.md).
+
+**patch인 이유**: 동작은 같고 경고와 불필요한 복사가 사라진다. 옵션, 저장 형식, 상태 파일이 바뀌지
+않는다. 교차 핀 `>=0.6,<0.7`을 유지하고, 상태 마이그레이션과 신규 PyPI 프로젝트가 없다.
+
+1. 이 PR CI green(`latest-deps` 포함) → `main` 머지
+2. `main`에서 검증: 아래 0.6.0 절차의 2번과 같다. 기대값은 "13 packages at v0.6.11", 산출물 26개.
+3. CHANGELOG `## [0.6.11]`의 날짜 (PR에서 2026-11-23으로 기입. 태그가 다른 날이면 고친다).
+4. `git tag v0.6.11 && git push origin v0.6.11` (계정 소유자). 신규 프로젝트가 없으므로 수동 최초 게시는 필요 없다.
+5. 게시 확인: 13개 패키지의 `https://pypi.org/pypi/<name>/0.6.11/json`이 모두 `200`. 깨끗한 환경에
+   `de-arsenal[postgres,excel]==0.6.11`을 설치해 DuckDB가 2.x로 잡힌 상태에서 Postgres 게시가 경고
+   없이 끝나는지 본다. 게시 직후 인덱스가 늦으면 `pugio`가 이전 버전으로 잡힐 수 있으니 버전을 함께 본다.
+
+---
+
 # v0.6.10 패치 릴리스 절차
 
 `arsenal dataset apply`가 검수한 스냅샷을 Postgres 테이블에도 게시하는 옵션
