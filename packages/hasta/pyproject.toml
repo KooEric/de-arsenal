@@ -1,6 +1,6 @@
 [project]
 name = "de-hasta"
-version = "0.6.8"
+version = "0.6.9"
 description = "Hasta — leased REST and Postgres outbox microbatch streaming"
 readme = "README.md"
 requires-python = ">=3.11"

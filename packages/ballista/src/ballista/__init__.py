@@ -11,7 +11,7 @@ from ballista.runner import BallistaRunner
 try:
     __version__ = version("de-ballista")
 except PackageNotFoundError:
-    __version__ = "0.6.8"
+    __version__ = "0.6.9"
 
 __all__ = [
     "ArtifactRepository",

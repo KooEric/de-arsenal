@@ -12,6 +12,13 @@ minor.
 
 ## [Unreleased]
 
+## [0.6.9] - 2026-11-23
+
+Fixes from running DE Arsenal against Excel ledgers at work: `arsenal dataset` reads Excel,
+the file source accepts `.xlsb`, and a wrong database password stops at once instead of
+retrying. All 13 packages move to `0.6.9`; internal pins stay `>=0.6,<0.7`. No state
+migrations.
+
 ### Added
 
 - `arsenal dataset` reads Excel workbooks (`.xlsx`, `.xlsm`, `.xlsb`, `.xls`). The first sheet

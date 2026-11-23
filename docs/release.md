@@ -1,3 +1,32 @@
+# v0.6.9 패치 릴리스 절차
+
+`arsenal dataset`의 Excel 입력(`.xlsx`·`.xlsm`·`.xlsb`·`.xls`), 파일 소스의 `.xlsb`·`.xlsm`
+자동 판별, postgres/mysql `DatabaseSource`의 인증 실패를 재시도하지 않고 바로 멈추게 한 수정이다.
+내역은 [CHANGELOG](../CHANGELOG.md).
+
+**patch인 이유**: 거부되던 입력 형식을 받아들이고, 재시도하던 영구 오류를 바로 실패시킨다.
+`de-arsenal`에 `excel` extra가 새로 생기지만 기존 설치와 명령, 옵션, 저장 형식
+(`.arsenal/dataset.duckdb`)은 바뀌지 않는다. 교차 핀 `>=0.6,<0.7`을 유지하고, 상태
+마이그레이션과 신규 PyPI 프로젝트가 없다.
+
+**동작 변화:** 잘못된 비밀번호·없는 DB로 실패하던 scanner 소스는 이제 재시도
+없이 바로 failed가 된다. 재시도 횟수에 기대던 모니터링이 있다면 더 빨리 실패를 보게 된다.
+
+1. 이 PR CI green → `main` 머지
+2. `main`에서 검증: 아래 0.6.0 절차의 2번과 같다. 기대값은 "13 packages at v0.6.9", 산출물 26개.
+3. 수동 점검
+   - [ ] `uv tool install "de-arsenal[excel]==0.6.9"` 뒤 실제 `.xlsb` 대장 폴더에서
+         `arsenal dataset preview --files '*.xlsb' --key <사번 열>`이 행 수와 앞자리 0을 그대로
+         보여 준다. 이 저장소에는 `.xlsb` 샘플이 없어 실제 파일로 읽어 본 적이 없다.
+   - [ ] 틀린 비밀번호로 postgres(또는 mysql) `DatabaseSource`를 한 번 실행해 재시도 없이 바로
+         failed가 되는지 본다. 메시지 문구로 판별하므로 서버 `lc_messages`가 영어가 아니면 다시
+         재시도로 분류될 수 있다.
+   - [ ] CHANGELOG `## [0.6.9]`의 날짜 (PR에서 2026-11-23으로 기입. 태그가 다른 날이면 고친다).
+4. `git tag v0.6.9 && git push origin v0.6.9` (계정 소유자). 신규 프로젝트가 없으므로 수동 최초 게시는 필요 없다.
+5. 게시 확인: 13개 패키지의 `https://pypi.org/pypi/<name>/0.6.9/json`이 모두 `200`.
+
+---
+
 # v0.6.8 패치 릴리스 절차
 
 `arsenal dataset`이 전부 NULL인 컬럼이 있는 JSONL 스냅샷을 스키마 변경으로 거부하던 문제의
