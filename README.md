@@ -65,6 +65,12 @@ after the preview you looked at.
   source is reported as `removed`.
 - A failed or refused apply keeps the last successful publication. `arsenal status`
   reports `failed` until the next successful apply.
+- With `--postgres-table`, the Postgres table is written first. If that fails, the apply
+  fails and both the Postgres table and the local publication keep the previous
+  snapshot; the error never shows the DSN. Views and grants on the table survive each
+  publication. An existing table must already have the snapshot's columns and types. The
+  one gap, a local commit failing right after Postgres committed, is in
+  [docs/08-limits.md](docs/08-limits.md).
 - Columns or types that differ from the published ones are refused. A column that is
   empty in every row of one snapshot is not a type change.
 - With `de-arsenal[catalog]`, `aquila scan` then
@@ -141,7 +147,8 @@ The project is pre-1.0 and has no long-term API commitment; see the
 | You want | Install |
 |---|---|
 | Ingest, transform, query, recipes | `uv tool install de-arsenal` |
-| …plus a Postgres sink | `uv tool install "de-arsenal[postgres]"` |
+| …plus Excel input (`.xlsx`, `.xlsm`, `.xlsb`, `.xls`) | `uv tool install "de-arsenal[excel]"` |
+| …plus a Postgres sink, or `arsenal dataset` publishing to Postgres | `uv tool install "de-arsenal[postgres]"` |
 | …plus a Redshift sink | `uv tool install "de-arsenal[redshift]"` |
 | …plus an Iceberg sink (readable from Trino) | `uv tool install "de-arsenal[iceberg]"` |
 | …plus streaming and CDC (Hasta) | `uv tool install "de-arsenal[streaming]"` |
@@ -227,7 +234,7 @@ what broke, and what is still unproven. Environment for the experiments: Linux, 
 | Silent data-loss bugs found by real data, all fixed | **5** (0.5.3: 2, 0.6.0: 3) |
 | Largest real load | 9.55M rows in 4.0 s; 19.7M rows transformed in 5.96 s |
 | A production database table through review and publish | 3,365 rows: 793 added, 2,559 updated and 0 removed between two real states |
-| Automated tests | 804, run in CI on Linux, macOS and Windows with Python 3.11 and 3.12 |
+| Automated tests | 869, run in CI on Linux, macOS and Windows with Python 3.11 and 3.12; also weekly and on every pull request against the newest dependency releases (DuckDB 2.x included) |
 
 ### Experiments
 
@@ -366,7 +373,7 @@ Two limits were confirmed and addressed in 0.6.0:
 |---|---|---|
 | Parquet (local) | Real files in every experiment above | |
 | DuckDB | Real DuckDB files in the test suite | |
-| Postgres | A real Postgres 16: idempotency, upsert, type round-trips | Managed services (RDS, Aurora) |
+| Postgres | A real Postgres 16: idempotency, upsert, type round-trips; `arsenal dataset` publication replacing rows with views and grants kept, and a failed publication leaving both copies unchanged | Managed services (RDS, Aurora) |
 | Redshift (experimental) | `insert` path executed on Postgres, which accepts the same SQL; `copy` path through the statements it issues | **Any real Redshift cluster** |
 | Iceberg (experimental) | Real Iceberg tables with a SQLite catalog and a local warehouse | REST and Glue catalogs, S3, **reading back from Trino** |
 | `pugio ddl` for Trino | The printed statement only | **Running it in Trino** |

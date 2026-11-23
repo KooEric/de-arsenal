@@ -62,6 +62,11 @@ arsenal status                                             # 마지막 성공, �
 - 폴더에서 빠진 파일은 다음 게시에서 제외된다. 원본에서 지워진 행은 `removed`로 보고된다.
 - 실패하거나 거부된 게시는 마지막 성공 결과를 그대로 둔다. `arsenal status`는 다음 성공한
   게시 전까지 `failed`를 보고한다.
+- `--postgres-table`을 쓰면 Postgres 테이블을 먼저 쓴다. 여기서 실패하면 게시가 실패하고
+  Postgres 테이블과 로컬 게시 결과 모두 이전 스냅샷으로 남는다. 오류 메시지에 DSN은 나오지
+  않는다. 테이블에 걸린 뷰와 권한은 게시해도 유지된다. 이미 있는 테이블은 스냅샷과 열·타입이
+  같아야 한다. Postgres 커밋 직후 로컬 커밋이 실패하는 경우 하나만 예외이며
+  [docs/08-limits.md](docs/08-limits.md)에 적었다.
 - 게시된 것과 열이나 타입이 다르면 거부한다. 한 스냅샷에서 모든 행이 비어 있는 열은 타입
   변경으로 보지 않는다.
 - `de-arsenal[catalog]`이 있으면 `aquila scan` 뒤에
@@ -135,7 +140,8 @@ sink별·도구별로 무엇을 보장하고 무엇을 보장하지 않는지는
 | 하고 싶은 것 | 설치 |
 |---|---|
 | 수집·변환·쿼리·레시피 | `uv tool install de-arsenal` |
-| …+ Postgres sink | `uv tool install "de-arsenal[postgres]"` |
+| …+ Excel 입력 (`.xlsx`·`.xlsm`·`.xlsb`·`.xls`) | `uv tool install "de-arsenal[excel]"` |
+| …+ Postgres sink, 또는 `arsenal dataset`의 Postgres 게시 | `uv tool install "de-arsenal[postgres]"` |
 | …+ Redshift sink | `uv tool install "de-arsenal[redshift]"` |
 | …+ Iceberg sink (Trino에서 조회) | `uv tool install "de-arsenal[iceberg]"` |
 | …+ 스트리밍·CDC (Hasta) | `uv tool install "de-arsenal[streaming]"` |
@@ -219,7 +225,7 @@ Ballista는 Kubernetes 클러스터, 객체 스토리지, Iceberg 카탈로그�
 | 실데이터로 찾은 조용한 데이터 손실 버그 (모두 수정) | **5건** (0.5.3에서 2건, 0.6.0에서 3건) |
 | 가장 큰 실제 적재 | 955만 행 4.0초, 1,970만 행 변환 5.96초 |
 | 운영 DB 테이블을 검토·게시 경로로 | 3,365행. 실제 두 상태 사이에 추가 793, 수정 2,559, 삭제 0 |
-| 자동 테스트 | 804개. CI가 Linux·macOS·Windows, Python 3.11·3.12에서 실행 |
+| 자동 테스트 | 869개. CI가 Linux·macOS·Windows, Python 3.11·3.12에서 실행. 매주와 PR마다 최신 의존성 릴리스(DuckDB 2.x 포함)로도 실행 |
 
 ### 실험
 
@@ -354,7 +360,7 @@ rows=24000 distinct=24000 min=1 max=24000 gaps=0 dups=0
 |---|---|---|
 | Parquet (로컬) | 위 모든 실험의 실제 파일 | |
 | DuckDB | 테스트의 실제 DuckDB 파일 | |
-| Postgres | 실제 Postgres 16: 멱등, upsert, 타입 왕복 | 관리형 서비스 (RDS, Aurora) |
+| Postgres | 실제 Postgres 16: 멱등, upsert, 타입 왕복. `arsenal dataset` 게시: 행 교체 시 뷰·권한 유지, 게시 실패 시 양쪽 모두 그대로 | 관리형 서비스 (RDS, Aurora) |
 | Redshift (experimental) | `insert` 경로는 같은 SQL을 받는 Postgres에서 실행, `copy` 경로는 발행하는 SQL문 | **실제 Redshift 클러스터** |
 | Iceberg (experimental) | SQLite 카탈로그와 로컬 저장소의 실제 Iceberg 테이블 | REST·Glue 카탈로그, S3, **Trino에서의 조회** |
 | Trino용 `pugio ddl` | 출력되는 문장 | **Trino에서의 실행** |
