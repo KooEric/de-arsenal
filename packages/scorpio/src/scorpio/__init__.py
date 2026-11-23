@@ -5,7 +5,7 @@ from importlib.metadata import PackageNotFoundError, version
 try:
     __version__ = version("de-scorpio")
 except PackageNotFoundError:
-    __version__ = "0.6.9"
+    __version__ = "0.6.10"
 
 from scorpio.freshness import Freshness, assess_freshness
 from scorpio.streams import (
