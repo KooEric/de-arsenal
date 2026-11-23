@@ -1,3 +1,28 @@
+# v0.6.10 패치 릴리스 절차
+
+`arsenal dataset apply`가 검수한 스냅샷을 Postgres 테이블에도 게시하는 옵션
+(`--postgres-table schema.table`, `--postgres-dsn-env`)이다. 내역은 [CHANGELOG](../CHANGELOG.md).
+
+**patch인 이유**: 옵션 두 개를 더할 뿐이고, 지정하지 않으면 동작이 0.6.9와 같다. 저장 형식
+(`.arsenal/dataset.duckdb`)과 상태 파일은 바뀌지 않는다. 의존성은 이미 있는 `postgres` extra를
+쓴다. 교차 핀 `>=0.6,<0.7`을 유지하고, 상태 마이그레이션과 신규 PyPI 프로젝트가 없다.
+`pugio.sinks.postgres._pg_type`이 공개 이름 `pg_column_type`이 됐다. 밑줄로 시작하는 내부
+이름이라 호환 약속 대상이 아니다.
+
+1. 이 PR CI green → `main` 머지
+2. `main`에서 검증: 아래 0.6.0 절차의 2번과 같다. 기대값은 "13 packages at v0.6.10", 산출물 26개.
+   Docker가 켜진 머신에서 돌려 Postgres 테스트가 skip되지 않게 한다(`10 skipped` 안팎).
+3. 수동 점검
+   - [ ] 회사 Postgres의 테스트 스키마에 `arsenal dataset apply --postgres-table <schema>.<table>
+         --postgres-dsn-env <VAR>`로 실제 대장을 한 번 게시하고, 다른 계정에서 조회되는지 본다.
+         같은 테이블에 뷰를 하나 만든 뒤 다시 `apply`해서 뷰가 남는지 본다.
+   - [ ] CHANGELOG `## [0.6.10]`의 날짜 (PR에서 2026-11-23으로 기입. 태그가 다른 날이면 고친다).
+4. `git tag v0.6.10 && git push origin v0.6.10` (계정 소유자). 신규 프로젝트가 없으므로 수동 최초 게시는 필요 없다.
+5. 게시 확인: 13개 패키지의 `https://pypi.org/pypi/<name>/0.6.10/json`이 모두 `200`. 게시 직후에는
+   인덱스가 늦게 갱신돼 `pugio`가 이전 버전으로 설치될 수 있으니 버전을 함께 확인한다.
+
+---
+
 # v0.6.9 패치 릴리스 절차
 
 `arsenal dataset`의 Excel 입력(`.xlsx`·`.xlsm`·`.xlsb`·`.xls`), 파일 소스의 `.xlsb`·`.xlsm`
