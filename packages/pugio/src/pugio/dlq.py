@@ -12,6 +12,7 @@ from pathlib import Path
 import pyarrow as pa
 import pyarrow.parquet as pq
 
+from arsenal_core.errors import FatalError
 from arsenal_core.state import UnitSpec
 from pugio.validate.gate import Violation
 
@@ -48,6 +49,23 @@ def write_dlq(
         json.dumps(reason, ensure_ascii=False, indent=2), encoding="utf-8"
     )
     return parquet_path
+
+
+def split_rejected_rows(state_dir: str | Path, pipeline: str) -> int:
+    """`on_violation: split`이 DLQ에 남긴 행 수의 합. unit은 done이라 상태 개수에는 안 보인다.
+
+    `dlq retry --unit`(원본을 고친 뒤 재수집)이나 검토 후 DLQ 파일 삭제로 0이 된다.
+    """
+    total = 0
+    for path in sorted(dlq_dir(state_dir, pipeline).glob("*.json")):
+        try:
+            reason = read_reason(path)
+        except (OSError, ValueError) as exc:
+            raise FatalError(f"unreadable DLQ record {path}: {exc}") from exc
+        if reason.get("mode") == "split":
+            rows = reason.get("rejected_rows")
+            total += rows if isinstance(rows, int) else 0
+    return total
 
 
 def read_reason(json_path: Path) -> dict[str, object]:

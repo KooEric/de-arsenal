@@ -865,3 +865,40 @@ def test_a_failed_file_that_is_still_there_keeps_failing(tmp_path: Path) -> None
     store = StateStore(tmp_path / ".arsenal" / "ledger.db")
     assert store.counts("ledger") == {"failed": 1}
     store.close()
+
+
+def test_block_catches_a_renamed_column_in_a_later_file_of_the_run(tmp_path: Path) -> None:
+    (tmp_path / "in").mkdir()
+    spec = _csv_spec(tmp_path)
+    spec = spec.model_copy(update={"schema_drift": "block"})
+    (tmp_path / "in" / "a.csv").write_text("id,customer\n1,x\n")
+    run_pipeline(spec)
+    (tmp_path / "in" / "m.csv").write_text("id,customer\n2,y\n")  # same columns, read first
+    (tmp_path / "in" / "z.csv").write_text("id,client\n3,z\n")  # renamed column
+    with pytest.raises(FatalError, match=r"added=client; removed=customer in z.csv"):
+        run_pipeline(spec)
+    store = StateStore(tmp_path / ".arsenal" / "ledger.db")
+    assert store.counts("ledger") == {"done": 2, "failed": 1}
+    store.close()
+
+
+def test_columns_differing_between_files_are_allowed_by_default(tmp_path: Path) -> None:
+    (tmp_path / "in").mkdir()
+    (tmp_path / "in" / "a.csv").write_text("id,customer\n1,x\n")
+    (tmp_path / "in" / "b.csv").write_text("id,client\n2,y\n")
+    assert run_pipeline(_csv_spec(tmp_path)).written == 2
+
+
+def test_drift_on_a_freshly_pinned_column_says_how_to_reload(tmp_path: Path) -> None:
+    (tmp_path / "in").mkdir()
+    (tmp_path / "in" / "a.csv").write_text("id,code\n1,100\n")
+    (tmp_path / "in" / "b.csv").write_text("id,code\n2,A1\n")
+    spec = _csv_spec(tmp_path).model_copy(update={"schema_drift": "block"})
+    with pytest.raises(FatalError, match="column types differ"):
+        run_pipeline(spec)
+    pinned = _csv_spec(tmp_path, column_types={"code": "string"}).model_copy(
+        update={"schema_drift": "block"}
+    )
+    with pytest.raises(FatalError, match="code is pinned in source.column_types") as caught:
+        run_pipeline(pinned)
+    assert "ledger.db" in str(caught.value)

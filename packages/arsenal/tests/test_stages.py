@@ -360,6 +360,27 @@ def test_status_of_a_pipeline_that_never_ran_creates_no_state(tmp_path: Path) ->
     assert not (tmp_path / ".arsenal" / "orders.db").exists()
 
 
+def test_status_alerts_on_rows_that_split_held_back(tmp_path: Path) -> None:
+    project = pipeline_project(tmp_path)
+    record_units(tmp_path, ["done"])  # split leaves the unit done
+    dlq = tmp_path / ".arsenal" / "dlq" / "orders"
+    dlq.mkdir(parents=True)
+    write(dlq / "u1.json", json.dumps({"unit_id": "u1", "mode": "split", "rejected_rows": 3}))
+    write(dlq / "u2.json", json.dumps({"unit_id": "u2", "violations": []}))  # whole-unit record
+
+    result = runner.invoke(app, ["status", "--project", str(project)])
+
+    assert result.exit_code == 1
+    pipeline = json.loads(result.stdout)["pipelines"][0]
+    assert pipeline["units"] == {"done": 1} and pipeline["rejected_rows"] == 3
+    assert pipeline["alert"] is True and pipeline["status"] == "needs-attention"
+
+    (dlq / "u1.json").unlink()  # reviewed and cleared
+    result = runner.invoke(app, ["status", "--project", str(project)])
+    assert result.exit_code == 0, result.output
+    assert json.loads(result.stdout)["pipelines"][0]["rejected_rows"] == 0
+
+
 # --- catalog summary (Aquila) ---------------------------------------------------------
 
 

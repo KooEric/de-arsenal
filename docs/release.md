@@ -1,3 +1,37 @@
+# v0.6.14 패치 릴리스 절차
+
+0.6.13 사내 저장소 점검에서 나온 문제의 수정이다. 내역은 [CHANGELOG](../CHANGELOG.md).
+
+- 같은 순간 시작한 두 실행이 수집 단계 `register_stream_writer`의 공유 임시 파일 때문에
+  `FileNotFoundError`로 죽던 문제. 프로세스마다 임시 파일을 따로 쓴다.
+- `schema_drift: block`이 실행의 첫 파일만 비교해, 뒤쪽 파일의 컬럼 이름 변경이 그대로 적재되던 문제.
+  파일 소스는 실행 안의 모든 파일을 첫 파일과 비교한다.
+- `on_violation: split`으로 DLQ에 행이 남아도 `arsenal status`가 `alert: false`이던 문제.
+  `rejected_rows`를 보고하고 0보다 크면 alert.
+- `column_types`를 첫 적재 뒤에 고정했을 때의 drift 오류에 다시 적재하는 방법을 안내한다.
+
+**patch인 이유**: 명령, 옵션, 저장 형식, 상태 파일이 바뀌지 않는다. `arsenal status` 출력에 필드 하나
+(`rejected_rows`)가 더해진다. 교차 핀 `>=0.6,<0.7`을 유지하고, 상태 마이그레이션과 신규 PyPI 프로젝트가 없다.
+
+**사용자 고지 (CHANGELOG Upgrade notes와 같음):** `split` 사용 시 DLQ에 행이 있으면 `arsenal status`
+exit 1. `schema_drift: block`/`warn`에서 한 실행의 파일끼리 컬럼이 다르면 실패/경고.
+
+1. 이 PR CI green → `main` 머지
+2. `main`에서 검증: 아래 0.6.0 절차의 2번과 같다. 기대값은 "13 packages at v0.6.14", 산출물 26개.
+3. 수동 점검 (PyPI에서 설치한 0.6.14로)
+   - [ ] `arsenal init csv-cleanup`, `schema_drift: block` 추가, `arsenal run` 뒤 `input/`에 같은 컬럼의
+         `m.csv`와 `customer`를 `client`로 바꾼 `z.csv`를 넣고 `arsenal run` → `added=client; removed=customer
+         in z.csv` 오류, `arsenal status` exit 1.
+   - [ ] `validate: {rules: [{field: amount, min: 0}], on_violation: split}`과 음수 금액 행 하나 →
+         `pugio status`에 `rejected_rows: 1`, `arsenal status` exit 1. 원본을 고치고 `pugio dlq retry` →
+         `arsenal run` → exit 0.
+   - [ ] 새 프로젝트에서 `arsenal run` 두 개를 같은 순간에 여러 번 띄워 traceback이 없는지 본다.
+   - [ ] CHANGELOG `## [0.6.14]`의 날짜 (PR에서 2026-11-24로 기입. 태그가 다른 날이면 고친다).
+4. 태그 `v0.6.14` 게시 (계정 소유자): 웹의 Releases → Draft a new release → `v0.6.14` 새 태그, target `main`.
+5. 게시 확인: 13개 패키지의 `https://pypi.org/pypi/<name>/0.6.14/json`이 모두 `200`.
+
+---
+
 # v0.6.13 패치 릴리스 절차
 
 0.6.12 점검에서 나온 두 문제의 수정이다. 내역은 [CHANGELOG](../CHANGELOG.md).
