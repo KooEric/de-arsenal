@@ -384,6 +384,7 @@ Two limits were confirmed and addressed in 0.6.0:
 
 | | |
 |---|---|
+| [docs/quickstart.md](docs/quickstart.md) | (Korean) The four-command walkthrough, the commands of each CLI, an operations checklist |
 | [docs/tools.md](docs/tools.md) | When to use each tool, with a short start for each |
 | [plugins/de-arsenal/README.md](plugins/de-arsenal/README.md) | Agent skills: install, what each skill does, what was run |
 | [docs/reference/](docs/reference/) | Every YAML field, generated from the code |

@@ -371,6 +371,7 @@ rows=24000 distinct=24000 min=1 max=24000 gaps=0 dups=0
 
 | | |
 |---|---|
+| [docs/quickstart.md](docs/quickstart.md) | 명령 4개로 한 바퀴, 세 CLI의 명령, 운영 체크리스트 |
 | [docs/tools.md](docs/tools.md) | 도구별 사용 시점과 짧은 시작 방법 |
 | [plugins/de-arsenal/README.md](plugins/de-arsenal/README.md) | 에이전트 스킬: 설치, 스킬별 역할, 실행해 본 범위 |
 | [docs/reference/](docs/reference/) | 코드에서 생성한 YAML 필드 전체 |
