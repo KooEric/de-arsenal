@@ -43,12 +43,13 @@ all specs valid
 
 테스트하면서 실제로 부딪힌 문제들이다.
 
-- [ ] **실패 감시는 `pugio status <spec>`으로 한다.** 0.6.11까지 `arsenal status`는 `pipelines:`의
-      수집 파이프라인을 보지 않아서, 수집이 실패해도 `alert: false`에 exit 0을 낸다. `pugio status <spec>`은
-      unit 상태별 개수(`done: 12`, `failed: 1` …)를 출력한다. exit 1은 `--max-age-seconds <n>`의 freshness
-      초과 때만 나므로, 감시 스크립트는 출력의 `failed:`·`quarantined:` 줄도 함께 확인한다.
-      (다음 릴리스부터는 `arsenal status`에도 `pipelines` 블록이 들어가고 실패 시 exit 1이 난다.
-      [CHANGELOG](../CHANGELOG.md) Unreleased 참고.)
+- [ ] **실패는 `arsenal status`로, 오래된 데이터는 `pugio status --max-age-seconds`로 감시한다.**
+      0.6.12부터 `arsenal status`는 `pipelines:`의 수집 파이프라인마다 unit 상태를 보여 주고, `failed`나
+      `quarantined` unit이 있으면 `alert: true`에 exit 1을 낸다. 다만 마지막 성공이 얼마나 오래됐는지는 보지
+      않으므로, 수집 스펙마다 `pugio status <spec> --max-age-seconds <n>`도 함께 건다(기준을 넘으면 exit 1).
+      **0.6.11 이하**에서는 `arsenal status`가 수집 파이프라인을 보지 않아 수집이 실패해도 exit 0을 낸다.
+      그 버전에서는 `pugio status <spec>` 출력의 `failed:`·`quarantined:` 줄을 직접 확인한다.
+      `pugio status`는 freshness 초과 때만 exit 1을 내기 때문이다.
 - [ ] **`schema_drift: block`을 쓰면 `source.column_types`를 고정한다.** 타입은 파일마다 추론하므로
       빈 값이나 숫자로만 된 문자열 하나로 타입이 바뀌고, `block`이면 그 실행이 실패한다. 우편번호·코드처럼
       문자열이어야 하는 컬럼은 특히 고정한다.

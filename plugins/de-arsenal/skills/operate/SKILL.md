@@ -81,7 +81,7 @@ check a little after the run:
 
 ```bash
 pugio status collect.yaml --max-age-seconds 90000    # exits 1 when stale (0.6.6+)
-arsenal status                                       # streams and distributed runs, JSON
+arsenal status                                       # pipelines (0.6.12+), streams, distributed runs; JSON, exits 1 on failed units
 ```
 
 90000 seconds is 25 hours: a daily job with an hour of slack. Wire the

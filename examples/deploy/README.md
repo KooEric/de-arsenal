@@ -33,8 +33,10 @@ PG_DSN`, `Authorization: "Bearer ${API_TOKEN}"`). Do not write them into the YAM
 
 All three examples post to a Slack incoming webhook when `arsenal run` exits non-zero.
 For a check that also catches "it ran, but the data is stale", schedule
-`arsenal status` or `pugio status <spec> --max-age-seconds 90000` the same way; both
-exit 1 on an alert.
+`pugio status <spec> --max-age-seconds 90000` the same way; it exits 1 when the last
+success is older than that. `arsenal status` exits 1 when a pipeline has failed or
+quarantined units (0.6.12+) or a stream or distributed run needs attention, but does not
+check the age of batch pipelines.
 
 ## Not verified
 
