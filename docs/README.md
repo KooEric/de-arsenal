@@ -6,10 +6,11 @@
 
 | 문서 | 내용 |
 |---|---|
+| [quickstart.md](quickstart.md) | 샘플 CSV로 한 바퀴, 세 CLI의 명령, 운영 체크리스트 |
 | [tools.md](tools.md) | 도구별 사용 시점과 빠른 시작 |
 | [reference/](reference/) | YAML 필드 레퍼런스 (코드에서 생성, 수정 금지) |
 | [08-limits.md](08-limits.md) | 보장하는 것과 보장하지 않는 것 |
-| [../CHANGELOG.md](../CHANGELOG.md) | 버전별 변경 내역 (0.6.6 `arsenal check`, 0.6.7 `arsenal dataset`, 0.6.8 JSONL NULL 컬럼 수정, 0.6.9 Excel 대장과 DB 인증 오류, 0.6.10 dataset의 Postgres 게시, 0.6.11 DuckDB 2.0 호환) |
+| [../CHANGELOG.md](../CHANGELOG.md) | 버전별 변경 내역 (0.6.6 `arsenal check`, 0.6.7 `arsenal dataset`, 0.6.8 JSONL NULL 컬럼 수정, 0.6.9 Excel 대장과 DB 인증 오류, 0.6.10 dataset의 Postgres 게시, 0.6.11 DuckDB 2.0 호환, 0.6.12 `arsenal status`의 수집 파이프라인 감시, 0.6.13 변환 동시 실행 락과 지운 실패 파일의 알림 해제, 0.6.14 동시 첫 실행 수정·파일별 컬럼 drift·split 행 알림, 0.6.15 de-arsenal 설치 시 pugio·gladius 명령) |
 | [upgrade-0.6.md](upgrade-0.6.md) · [upgrade-0.5.md](upgrade-0.5.md) · [upgrade-0.4.md](upgrade-0.4.md) | 버전별 업그레이드 절차 |
 | [../plugins/de-arsenal/README.md](../plugins/de-arsenal/README.md) | 에이전트 스킬: Claude Code 플러그인 설치, 휴대용 스킬 ZIP |
 | [../examples/deploy/](../examples/deploy/README.md) | cron, GitHub Actions, 컨테이너로 주기 실행 |

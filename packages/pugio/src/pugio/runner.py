@@ -25,8 +25,8 @@ from scutum import ContractColumn, DataContract
 
 from arsenal_core.errors import AuthExpiredError, FatalError
 from arsenal_core.retry import DEFAULT_MAX_ATTEMPTS, with_retry
-from arsenal_core.schema import compare_schema_snapshots
-from arsenal_core.spec.models import ContractSpec, PipelineSpec
+from arsenal_core.schema import SchemaDiff, compare_schema_snapshots
+from arsenal_core.spec.models import ContractSpec, FileSourceSpec, PipelineSpec
 from arsenal_core.state import SOURCE_EXHAUSTED, StateStore, UnitSpec
 from pugio.auth import AuthProvider, build_auth
 from pugio.dlq import write_dlq
@@ -60,6 +60,44 @@ def _schema_json(batch: pa.RecordBatch) -> str:
     return json.dumps(
         [{"name": f.name, "type": str(f.type), "nullable": f.nullable} for f in batch.schema]
     )
+
+
+def _pinned_after_load_hint(spec: PipelineSpec, store: StateStore, drift: SchemaDiff) -> str:
+    """Say what to do when the drift is a type the user has just pinned.
+
+    The snapshot came from files loaded before the pin, and those files keep the old
+    type in the output, so accepting the new schema would mix two types in one column.
+    """
+    pinned: set[str] = (
+        set(spec.source.column_types) if isinstance(spec.source, FileSourceSpec) else set()
+    )
+    columns = sorted({change.field for change in drift.changed} & pinned)
+    if not columns or not store.counts(spec.name).get("done"):
+        return ""
+    return (
+        f". {', '.join(columns)} {'is' if len(columns) == 1 else 'are'} pinned in "
+        "source.column_types, but files loaded before the pin still have the old type in "
+        f"the output. To reload everything with the pinned types, delete the state file "
+        f"{Path(spec.state_dir) / (spec.name + '.db')} and the pipeline's output, then run again"
+    )
+
+
+def _column_drift(
+    first: tuple[frozenset[str], str] | None, batch: pa.RecordBatch, unit_key: str
+) -> str:
+    """Columns added or missing in this file compared with the first file of the same run.
+
+    The snapshot comparison sees only a run's first file, so a renamed column in any later
+    file used to load silently even under ``schema_drift: block``.
+    """
+    if first is None:
+        return ""
+    names = frozenset(batch.schema.names)
+    added, removed = sorted(names - first[0]), sorted(first[0] - names)
+    parts = ([f"added={','.join(added)}"] if added else []) + (
+        [f"removed={','.join(removed)}"] if removed else []
+    )
+    return f"{'; '.join(parts)} in {unit_key} compared with {first[1]}" if parts else ""
 
 
 def _type_conflicts(seen: dict[str, tuple[str, str]], batch: pa.RecordBatch, unit_key: str) -> str:
@@ -233,7 +271,10 @@ def _run_units(
     fetched = written = skipped = done_count = quarantined = rejected_rows = 0
     schema_recorded = False  # 이번 run에서 스냅샷 기록 여부 (첫 non-empty batch에서 한 번만)
     file_types: dict[str, tuple[str, str]] = {}  # 컬럼 → (타입, 처음 본 파일)
+    first_columns: tuple[frozenset[str], str] | None = None  # 이번 run 첫 파일의 컬럼 집합
+    seen: set[str] = set()
     for unit in source.units():
+        seen.add(unit.unit_id)
         store.register(unit)
         if store.is_done(unit.unit_id):
             skipped += 1
@@ -259,6 +300,15 @@ def _run_units(
                     store.mark_failed(unit.unit_id, message)
                     raise FatalError(message)
                 logger.warning(message)
+            drift_in_run = _column_drift(first_columns, result.batch, unit.unit_key)
+            if first_columns is None:
+                first_columns = (frozenset(result.batch.schema.names), unit.unit_key)
+            if drift_in_run and spec.schema_drift != "allow":
+                message = f"schema drift for pipeline {spec.name!r}: {drift_in_run}"
+                if spec.schema_drift == "block":
+                    store.mark_failed(unit.unit_id, message)
+                    raise FatalError(message)
+                logger.warning(message)
         if not schema_recorded and result.batch is not None:
             schema_json = _schema_json(result.batch)
             previous_schema = store.last_schema(spec.name)
@@ -266,6 +316,7 @@ def _run_units(
                 drift = compare_schema_snapshots(previous_schema, schema_json)
                 if drift.has_changes:
                     message = f"schema drift for pipeline {spec.name!r}: {drift.summary()}"
+                    message += _pinned_after_load_hint(spec, store, drift)
                     if spec.schema_drift == "block":
                         store.mark_failed(unit.unit_id, message)
                         raise FatalError(message)
@@ -400,6 +451,18 @@ def _run_units(
             on_unit_complete(done_count)
         if result.exhausted:
             break
+    else:
+        if spec.source.type == "file":
+            # 폴더 전체를 끝까지 돌았을 때만: 지워진(또는 내용이 바뀐) 파일의 실패는 다시
+            # 시도할 수 없으니 alert에서 뺀다. 남은 실패 파일은 위에서 이미 raise했다.
+            withdrawn = store.withdraw_absent(spec.name, seen)
+            if withdrawn:
+                logger.warning(
+                    "pipeline %r: %d failed or quarantined unit(s) no longer match a file "
+                    "and were withdrawn",
+                    spec.name,
+                    withdrawn,
+                )
     return RunReport(
         fetched=fetched,
         written=written,

@@ -20,6 +20,7 @@ from arsenal_core.errors import ArsenalError, FatalError
 from arsenal_core.execution import canonical_hash
 from arsenal_core.spec import load_pipeline
 from arsenal_core.state import StateStore
+from pugio.dlq import split_rejected_rows
 
 _EXTRAS = {
     "hasta": ("streaming", "streams"),
@@ -171,11 +172,13 @@ def pipeline_status(path: Path) -> dict[str, Any]:
         last_completed_at = store.pipeline_metrics(spec.name).last_completed_at
     finally:
         store.close()
-    alert = any(units.get(state, 0) for state in _PIPELINE_ALERT_STATES)
+    rejected_rows = split_rejected_rows(spec.state_dir, spec.name)
+    alert = rejected_rows > 0 or any(units.get(state, 0) for state in _PIPELINE_ALERT_STATES)
     return {
         **base,
         "status": "needs-attention" if alert else ("ok" if units else "never-run"),
         "units": units,
+        "rejected_rows": rejected_rows,
         "last_completed_at": last_completed_at,
         "alert": alert,
     }

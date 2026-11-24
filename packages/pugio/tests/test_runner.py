@@ -1,7 +1,7 @@
 import sqlite3
 import textwrap
 from pathlib import Path
-from typing import Literal
+from typing import Any, Literal
 
 import httpx
 import pyarrow.parquet as pq
@@ -817,3 +817,88 @@ def test_split_with_every_row_bad_writes_no_file(tmp_path: Path) -> None:
 
     assert (report.written, report.rejected_rows) == (0, 1)
     assert _loaded_ids(tmp_path) == []
+
+
+def _csv_spec(tmp_path: Path, **extra: Any) -> PipelineSpec:
+    return PipelineSpec.model_validate(
+        {
+            "name": "ledger",
+            "state_dir": str(tmp_path / ".arsenal"),
+            "source": {"type": "file", "path": str(tmp_path / "in" / "*.csv"), **extra},
+            "sink": {"type": "parquet", "path": str(tmp_path / "out")},
+        }
+    )
+
+
+def test_deleting_a_failed_file_withdraws_its_unit(tmp_path: Path) -> None:
+    (tmp_path / "in").mkdir()
+    (tmp_path / "in" / "a.csv").write_text("id,v\n1,x\n")
+    (tmp_path / "in" / "b.csv").write_text("id,v,w\n1\n")  # 3 columns, 1 field
+    spec = _csv_spec(tmp_path)
+    with pytest.raises(FatalError):
+        run_pipeline(spec)
+    store = StateStore(tmp_path / ".arsenal" / "ledger.db")
+    assert store.counts("ledger") == {"done": 1, "failed": 1}
+    store.close()
+
+    (tmp_path / "in" / "b.csv").unlink()
+    run_pipeline(spec)
+    store = StateStore(tmp_path / ".arsenal" / "ledger.db")
+    assert store.counts("ledger") == {"done": 1, "withdrawn": 1}
+    store.close()
+
+    (tmp_path / "in" / "b.csv").write_text("id,v\n2,y\n")  # same name, now valid
+    report = run_pipeline(spec)
+    assert report.written == 1
+    store = StateStore(tmp_path / ".arsenal" / "ledger.db")
+    assert store.counts("ledger") == {"done": 2}
+    store.close()
+
+
+def test_a_failed_file_that_is_still_there_keeps_failing(tmp_path: Path) -> None:
+    (tmp_path / "in").mkdir()
+    (tmp_path / "in" / "b.csv").write_text("id,v,w\n1\n")
+    spec = _csv_spec(tmp_path)
+    for _ in range(2):
+        with pytest.raises(FatalError):
+            run_pipeline(spec)
+    store = StateStore(tmp_path / ".arsenal" / "ledger.db")
+    assert store.counts("ledger") == {"failed": 1}
+    store.close()
+
+
+def test_block_catches_a_renamed_column_in_a_later_file_of_the_run(tmp_path: Path) -> None:
+    (tmp_path / "in").mkdir()
+    spec = _csv_spec(tmp_path)
+    spec = spec.model_copy(update={"schema_drift": "block"})
+    (tmp_path / "in" / "a.csv").write_text("id,customer\n1,x\n")
+    run_pipeline(spec)
+    (tmp_path / "in" / "m.csv").write_text("id,customer\n2,y\n")  # same columns, read first
+    (tmp_path / "in" / "z.csv").write_text("id,client\n3,z\n")  # renamed column
+    with pytest.raises(FatalError, match=r"added=client; removed=customer in z.csv"):
+        run_pipeline(spec)
+    store = StateStore(tmp_path / ".arsenal" / "ledger.db")
+    assert store.counts("ledger") == {"done": 2, "failed": 1}
+    store.close()
+
+
+def test_columns_differing_between_files_are_allowed_by_default(tmp_path: Path) -> None:
+    (tmp_path / "in").mkdir()
+    (tmp_path / "in" / "a.csv").write_text("id,customer\n1,x\n")
+    (tmp_path / "in" / "b.csv").write_text("id,client\n2,y\n")
+    assert run_pipeline(_csv_spec(tmp_path)).written == 2
+
+
+def test_drift_on_a_freshly_pinned_column_says_how_to_reload(tmp_path: Path) -> None:
+    (tmp_path / "in").mkdir()
+    (tmp_path / "in" / "a.csv").write_text("id,code\n1,100\n")
+    (tmp_path / "in" / "b.csv").write_text("id,code\n2,A1\n")
+    spec = _csv_spec(tmp_path).model_copy(update={"schema_drift": "block"})
+    with pytest.raises(FatalError, match="column types differ"):
+        run_pipeline(spec)
+    pinned = _csv_spec(tmp_path, column_types={"code": "string"}).model_copy(
+        update={"schema_drift": "block"}
+    )
+    with pytest.raises(FatalError, match="code is pinned in source.column_types") as caught:
+        run_pipeline(pinned)
+    assert "ledger.db" in str(caught.value)

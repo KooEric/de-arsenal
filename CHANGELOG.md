@@ -22,6 +22,103 @@ minor.
 - Augur no longer sends `temperature` to the Anthropic API. Claude 5.x models reject the
   parameter with a 400, so every `augur ask` and `augur eval` call against them failed on
   the first request.
+
+## [0.6.15] - 2026-11-24
+
+Installing `de-arsenal` now also puts `pugio` and `gladius` on PATH. All 13 packages move
+to `0.6.15`; internal pins stay `>=0.6,<0.7`. No state migrations.
+
+### Fixed
+
+- `uv tool install de-arsenal` (and pipx) put only `arsenal` on PATH, so `pugio status` and
+  `gladius compile`, which the docs use, were "command not found". `de-arsenal` now declares
+  the `pugio` and `gladius` commands too. They run the same CLIs as before and stay
+  available as `arsenal collect …` and `arsenal transform …`. With pip, uninstalling
+  `de-arsenal` alone also removes those two command files; reinstall `pugio` or
+  `de-gladius` if you keep using them without it.
+
+## [0.6.14] - 2026-11-24
+
+Fixes from testing 0.6.13 against an internal repository: simultaneous first runs, a
+renamed column slipping past `schema_drift: block`, and `split` rows not raising the
+alert. All 13 packages move to `0.6.14`; internal pins stay `>=0.6,<0.7`. No state
+migrations.
+
+### ⚠️ Upgrade notes
+
+- With `on_violation: split`, `arsenal status` now exits 1 while rows sit in the DLQ
+  (`rejected_rows` > 0). Retry or delete the reviewed DLQ files to clear it.
+- With `schema_drift: block` (or `warn`) on a file source, a run now fails (or warns)
+  when its files do not all have the same columns. Before, only the first file of a run
+  was compared. Folders that mix layouts on purpose need `allow`, or one pipeline per
+  layout.
+
+### Fixed
+
+- Two runs started at the same instant on a fresh project no longer crash in the collect
+  step with `FileNotFoundError` from `register_stream_writer`. Both wrote the same
+  temporary file, so the second rename found nothing. Each process now uses its own
+  temporary file, and a registration another process finished first is accepted.
+- `schema_drift: block` now catches a column added, removed or renamed in any file of a
+  run, not only the first one. Before, a renamed column in a file read after another new
+  file loaded silently and `arsenal status` exited 0. File sources only; within a run each
+  file is compared with the first, and `warn` logs the difference.
+- Rows that `on_violation: split` set aside now raise the alert. The unit is `done`, so
+  `arsenal status` reported `alert: false` while rows sat in the DLQ. Its `pipelines`
+  block has a new `rejected_rows` count and alerts while it is above 0; `pugio status`
+  prints `rejected_rows: N`. `pugio dlq retry` after fixing the source, or deleting the
+  reviewed DLQ files, clears it.
+- A drift error on a column that was just pinned in `source.column_types` now says what
+  to do: files loaded before the pin keep the old type in the output, so the state file
+  and the output must be deleted and everything reloaded. The error itself is unchanged:
+  accepting the new type would mix two types in one column.
+
+## [0.6.13] - 2026-11-24
+
+Two fixes from testing 0.6.12: overlapping runs no longer crash in the transform step,
+and deleting a file that failed to load clears the alert. All 13 packages move to
+`0.6.13`; internal pins stay `>=0.6,<0.7`. No state migrations.
+
+### ⚠️ Upgrade notes
+
+- A unit can now be in the new state `withdrawn`. `pugio status` prints it as
+  `withdrawn: N` and `arsenal status` counts it under `units` without raising an alert.
+  A script that expects only `done`, `failed`, `quarantined`, `pending` and `running`
+  should accept it.
+- A transform leaves a `<output>.lock` file next to its output directory (for example
+  `data/clean.lock`). It is empty and safe to ignore; do not delete it while a run is
+  going.
+
+### Fixed
+
+- Two `arsenal run` (or `gladius run`) processes that reach the same transform together
+  no longer crash with `FileNotFoundError: 'data/clean.tmp'`. The collect step already
+  let only one run through, but once it was done both went on to the transform and shared
+  its temporary directory. A transform now holds an OS lock on `<output>.lock` for the
+  whole run; the second one stops with "transform ... is busy". The lock is released
+  when its process exits, `kill -9` included, so a crash never leaves it behind.
+- Deleting a file that failed to load now clears the alert. The failed (or quarantined)
+  unit stayed `failed` until a file with the same name loaded, so `arsenal status` kept
+  exiting 1. After a run that reads the whole folder without a failure, such units become
+  `withdrawn`, keeping their last error; a file that comes back under that name is loaded
+  again. With `detect_changes`, the same applies to the old content of a file that was
+  replaced.
+
+## [0.6.12] - 2026-11-24
+
+`arsenal status` now watches the batch pipelines under `pipelines:`, and two runs started
+together on a fresh project no longer crash while creating the state database. All 13
+packages move to `0.6.12`; internal pins stay `>=0.6,<0.7`. No state migrations.
+
+### ⚠️ Upgrade notes
+
+- `arsenal status` now exits 1 when a pipeline under `pipelines:` has `failed` or
+  `quarantined` units. A script that ran it only for its output and stops on a non-zero exit
+  (`set -e`, a CI step) will now stop there. It does not check how old a pipeline's last
+  success is; keep `pugio status <spec> --max-age-seconds <n>` for that.
+
+### Fixed
+
 - `arsenal status` now reports the batch pipelines listed under `pipelines:` in a new
   `pipelines` block (unit counts, last completion). A pipeline with `failed` or
   `quarantined` units raises `alert` and exits 1. Before, only streams, distributed runs,

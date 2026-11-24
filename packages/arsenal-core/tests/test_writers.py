@@ -24,6 +24,32 @@ def setup(tmp_path: Path) -> tuple[Path, StateStore, StreamWriter]:
     return dataset, store, writer
 
 
+def test_concurrent_registrations_of_one_writer_do_not_collide(tmp_path: Path) -> None:
+    import threading
+
+    writer = StreamWriter(str(tmp_path / "s.db"), RESOURCE, "orders", "orders")
+    errors: list[BaseException] = []
+    for attempt in range(30):
+        dataset = tmp_path / f"d{attempt}"
+        barrier = threading.Barrier(8)
+
+        def register(target: Path = dataset, gate: threading.Barrier = barrier) -> None:
+            gate.wait()
+            try:
+                register_stream_writer(target, writer)
+            except BaseException as exc:  # noqa: BLE001 - collected for the assert below
+                errors.append(exc)
+
+        threads = [threading.Thread(target=register) for _ in range(8)]
+        for thread in threads:
+            thread.start()
+        for thread in threads:
+            thread.join()
+        assert stream_writers(dataset) == [writer]
+        assert not list(dataset.parent.glob("**/*.tmp"))
+    assert errors == []
+
+
 def test_registration_is_idempotent_and_discoverable(tmp_path: Path) -> None:
     dataset, _, writer = setup(tmp_path)
 

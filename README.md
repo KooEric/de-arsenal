@@ -160,6 +160,9 @@ The project is pre-1.0 and has no long-term API commitment; see the
 
 The base install does not pull in Spark, Kubernetes, Iceberg or Postgres drivers
 (`packages/arsenal/tests/test_base_install.py` checks this).
+Installing `de-arsenal` also puts `pugio` and `gladius` on PATH (0.6.15+), so `pugio status` and
+`arsenal collect status` both work. On 0.6.14 and earlier, `uv tool install de-arsenal` exposed only
+`arsenal`; use `arsenal collect …` and `arsenal transform …` there.
 From source: clone, `uv sync`, and prefix commands with `uv run`.
 
 ## Examples
@@ -395,6 +398,7 @@ Two limits were confirmed and addressed in 0.6.0:
 
 | | |
 |---|---|
+| [docs/quickstart.md](docs/quickstart.md) | (Korean) The four-command walkthrough, the commands of each CLI, an operations checklist |
 | [docs/tools.md](docs/tools.md) | When to use each tool, with a short start for each |
 | [plugins/de-arsenal/README.md](plugins/de-arsenal/README.md) | Agent skills: install, what each skill does, what was run |
 | [docs/reference/](docs/reference/) | Every YAML field, generated from the code |

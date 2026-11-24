@@ -13,7 +13,7 @@ from arsenal_core.errors import ArsenalError, FatalError
 from arsenal_core.spec import load_pipeline
 from arsenal_core.state import StateStore
 from pugio.ddl import trino_hive_external_table
-from pugio.dlq import dlq_dir, read_reason, remove_dlq
+from pugio.dlq import dlq_dir, read_reason, remove_dlq, split_rejected_rows
 from pugio.runner import run_pipeline
 
 app = typer.Typer(help="Pugio — 수집·전송. 재실행은 곧 재개다.")
@@ -73,6 +73,9 @@ def status(
         return
     for state, n in sorted(counts.items()):
         typer.echo(f"{state}: {n}")
+    rejected = split_rejected_rows(spec.state_dir, spec.name)
+    if rejected:
+        typer.echo(f"rejected_rows: {rejected} (on_violation: split; see `pugio dlq list`)")
     if metrics is not None:
         typer.echo(
             f"cost: units={metrics.completed_units} rows={metrics.row_count} "

@@ -1,3 +1,115 @@
+# v0.6.15 패치 릴리스 절차
+
+`uv tool install de-arsenal`(과 pipx)이 `arsenal`만 PATH에 올려, 문서의 `pugio status`·`gladius compile`이
+command not found가 되던 문제의 수정이다. `de-arsenal`이 `pugio`·`gladius` 명령도 선언한다. 내역은
+[CHANGELOG](../CHANGELOG.md).
+
+**patch인 이유**: 명령 두 개가 PATH에 더 올라올 뿐, 명령·옵션·저장 형식·상태 파일이 바뀌지 않는다. 교차 핀
+`>=0.6,<0.7`을 유지하고, 상태 마이그레이션과 신규 PyPI 프로젝트가 없다.
+
+1. 이 PR CI green → `main` 머지
+2. `main`에서 검증: 아래 0.6.0 절차의 2번과 같다. 기대값은 "13 packages at v0.6.15", 산출물 26개.
+3. 수동 점검 (PyPI에서 설치한 0.6.15로)
+   - [ ] 깨끗한 환경에서 `uv tool install de-arsenal==0.6.15` 뒤 `arsenal`·`pugio`·`gladius`가 모두 PATH에 있다.
+         `arsenal init csv-cleanup` → `arsenal run` → `pugio status collect.yaml`과 `arsenal collect status collect.yaml`이
+         같은 결과, `gladius compile transform.yaml`이 SQL을 출력한다.
+   - [ ] CHANGELOG `## [0.6.15]`의 날짜 (PR에서 2026-11-24로 기입. 태그가 다른 날이면 고친다).
+4. 태그 `v0.6.15` 게시 (계정 소유자): 웹의 Releases → Draft a new release → `v0.6.15` 새 태그, target `main`.
+5. 게시 확인: 13개 패키지의 `https://pypi.org/pypi/<name>/0.6.15/json`이 모두 `200`.
+
+---
+
+# v0.6.14 패치 릴리스 절차
+
+0.6.13 사내 저장소 점검에서 나온 문제의 수정이다. 내역은 [CHANGELOG](../CHANGELOG.md).
+
+- 같은 순간 시작한 두 실행이 수집 단계 `register_stream_writer`의 공유 임시 파일 때문에
+  `FileNotFoundError`로 죽던 문제. 프로세스마다 임시 파일을 따로 쓴다.
+- `schema_drift: block`이 실행의 첫 파일만 비교해, 뒤쪽 파일의 컬럼 이름 변경이 그대로 적재되던 문제.
+  파일 소스는 실행 안의 모든 파일을 첫 파일과 비교한다.
+- `on_violation: split`으로 DLQ에 행이 남아도 `arsenal status`가 `alert: false`이던 문제.
+  `rejected_rows`를 보고하고 0보다 크면 alert.
+- `column_types`를 첫 적재 뒤에 고정했을 때의 drift 오류에 다시 적재하는 방법을 안내한다.
+
+**patch인 이유**: 명령, 옵션, 저장 형식, 상태 파일이 바뀌지 않는다. `arsenal status` 출력에 필드 하나
+(`rejected_rows`)가 더해진다. 교차 핀 `>=0.6,<0.7`을 유지하고, 상태 마이그레이션과 신규 PyPI 프로젝트가 없다.
+
+**사용자 고지 (CHANGELOG Upgrade notes와 같음):** `split` 사용 시 DLQ에 행이 있으면 `arsenal status`
+exit 1. `schema_drift: block`/`warn`에서 한 실행의 파일끼리 컬럼이 다르면 실패/경고.
+
+1. 이 PR CI green → `main` 머지
+2. `main`에서 검증: 아래 0.6.0 절차의 2번과 같다. 기대값은 "13 packages at v0.6.14", 산출물 26개.
+3. 수동 점검 (PyPI에서 설치한 0.6.14로)
+   - [ ] `arsenal init csv-cleanup`, `schema_drift: block` 추가, `arsenal run` 뒤 `input/`에 같은 컬럼의
+         `m.csv`와 `customer`를 `client`로 바꾼 `z.csv`를 넣고 `arsenal run` → `added=client; removed=customer
+         in z.csv` 오류, `arsenal status` exit 1.
+   - [ ] `validate: {rules: [{field: amount, min: 0}], on_violation: split}`과 음수 금액 행 하나 →
+         `pugio status`에 `rejected_rows: 1`, `arsenal status` exit 1. 원본을 고치고 `pugio dlq retry` →
+         `arsenal run` → exit 0.
+   - [ ] 새 프로젝트에서 `arsenal run` 두 개를 같은 순간에 여러 번 띄워 traceback이 없는지 본다.
+   - [ ] CHANGELOG `## [0.6.14]`의 날짜 (PR에서 2026-11-24로 기입. 태그가 다른 날이면 고친다).
+4. 태그 `v0.6.14` 게시 (계정 소유자): 웹의 Releases → Draft a new release → `v0.6.14` 새 태그, target `main`.
+5. 게시 확인: 13개 패키지의 `https://pypi.org/pypi/<name>/0.6.14/json`이 모두 `200`.
+
+---
+
+# v0.6.13 패치 릴리스 절차
+
+0.6.12 점검에서 나온 두 문제의 수정이다. 내역은 [CHANGELOG](../CHANGELOG.md).
+
+- 두 실행이 수집을 지나 변환에서 겹치면 같은 `<output>.tmp`를 써서 한쪽이 `FileNotFoundError`
+  traceback으로 죽었다. 변환이 `<output>.lock`에 OS 락(`flock` / `msvcrt.locking`)을 잡고, 겹친 쪽은
+  `transform ... is busy`로 멈춘다. 락은 프로세스가 죽으면 OS가 푼다.
+- 적재에 실패한 파일을 지워도 unit이 `failed`로 남아 `arsenal status`가 계속 exit 1을 냈다. 폴더를 끝까지
+  읽은 실행 뒤 파일이 없는 failed/quarantined unit은 `withdrawn`이 된다.
+
+**patch인 이유**: 명령, 옵션, 저장 형식이 바뀌지 않는다. `units.status`는 자유 텍스트 컬럼이라 새 값
+`withdrawn`에 마이그레이션이 필요 없다. 교차 핀 `>=0.6,<0.7`을 유지하고, 신규 PyPI 프로젝트가 없다.
+
+**사용자 고지 (CHANGELOG Upgrade notes와 같음):** 새 unit 상태 `withdrawn`, 출력 옆의 빈 `<output>.lock` 파일.
+
+1. 이 PR CI green(Windows 포함: `msvcrt.locking` 경로는 Windows CI에서만 실행된다) → `main` 머지
+2. `main`에서 검증: 아래 0.6.0 절차의 2번과 같다. 기대값은 "13 packages at v0.6.13", 산출물 26개.
+3. 수동 점검 (PyPI에서 설치한 0.6.13으로)
+   - [ ] 행이 많은 CSV 몇 개로 `arsenal init csv-cleanup` 프로젝트를 만들고 `arsenal run`을 둘 동시에 3번
+         띄운다. traceback 없이 한쪽이 `is busy`로 멈추고, `data/clean`의 행 수와 고유 id 수가 같다.
+   - [ ] `printf 'id,customer,zip,amount\n1,"Alice\n' > input/bad.csv` → `arsenal run`(실패) →
+         `rm input/bad.csv` → `arsenal run` → `pugio status collect.yaml`에 `withdrawn: 1`,
+         `arsenal status` exit 0.
+   - [ ] CHANGELOG `## [0.6.13]`의 날짜 (PR에서 2026-11-24로 기입. 태그가 다른 날이면 고친다).
+4. 태그 `v0.6.13` 게시 (계정 소유자): 웹의 Releases → Draft a new release → `v0.6.13` 새 태그, target `main`.
+5. 게시 확인: 13개 패키지의 `https://pypi.org/pypi/<name>/0.6.13/json`이 모두 `200`.
+
+---
+
+# v0.6.12 패치 릴리스 절차
+
+`arsenal status`가 `pipelines:`의 수집 파이프라인을 보고하지 않아 수집이 실패해도 `alert: false`에
+exit 0을 내던 문제와, 새 프로젝트에서 두 실행이 동시에 시작하면 상태 DB를 만들다 `database is locked`로
+죽던 문제의 수정이다(#43). 내역은 [CHANGELOG](../CHANGELOG.md).
+
+**patch인 이유**: 명령, 옵션, 저장 형식, 상태 파일이 바뀌지 않는다. 마이그레이션은 기존 것을 쓰기 락
+안에서 스키마 버전을 다시 읽도록 고쳤을 뿐 새로 추가하지 않았다. 교차 핀 `>=0.6,<0.7`을 유지하고, 신규
+PyPI 프로젝트가 없다.
+
+**사용자 고지 (CHANGELOG Upgrade notes와 같음):** 수집 파이프라인에 `failed`·`quarantined` unit이 있으면
+`arsenal status`가 exit 1을 낸다. 출력만 보려고 `set -e`나 CI 단계 안에서 돌리던 스크립트는 거기서 멈춘다.
+
+1. 이 PR CI green → `main` 머지
+2. `main`에서 검증: 아래 0.6.0 절차의 2번과 같다. 기대값은 "13 packages at v0.6.12", 산출물 26개.
+3. 수동 점검
+   - [ ] PyPI에서 설치한 0.6.12로, 새 디렉터리에서 `arsenal init csv-cleanup` 뒤 `arsenal status`가
+         `pipelines`에 `never-run`을 보고하고 exit 0이다. 이어서
+         `printf 'id,customer,zip,amount\n1,"Alice\n' > input/bad.csv` → `arsenal run`(CSV 파싱 오류)
+         → `arsenal status`가 `alert: true`, `units: {"failed": 1}`, exit 1이다. (PR에서 소스 체크아웃으로
+         같은 순서를 돌려 이 결과를 확인했다.)
+   - [ ] CHANGELOG `## [0.6.12]`의 날짜 (PR에서 2026-11-24로 기입. 태그가 다른 날이면 고친다).
+4. `git tag v0.6.12 && git push origin v0.6.12` (계정 소유자). 신규 프로젝트가 없으므로 수동 최초 게시는 필요 없다.
+5. 게시 확인: 13개 패키지의 `https://pypi.org/pypi/<name>/0.6.12/json`이 모두 `200`. 게시 직후 인덱스가
+   늦으면 `pugio`가 이전 버전으로 잡힐 수 있으니 버전을 함께 본다.
+
+---
+
 # v0.6.11 패치 릴리스 절차
 
 새로 설치하면 DuckDB 2.0이 잡히는데, 0.6.10은 lock의 1.5.4로만 테스트돼 Postgres 게시마다

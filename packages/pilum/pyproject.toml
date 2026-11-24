@@ -1,6 +1,6 @@
 [project]
 name = "de-pilum"
-version = "0.6.11"
+version = "0.6.15"
 description = "Pilum — reverse ETL: dispatch changed records from Parquet to HTTP endpoints and Slack, once per change"
 readme = "README.md"
 requires-python = ">=3.11"

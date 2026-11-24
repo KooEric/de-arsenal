@@ -224,3 +224,19 @@ validate:
     d = tmp_path / ".arsenal" / "dlq" / spec.name
     assert (d / f"{unit_id}.parquet").exists()  # evidence 그대로
     assert (d / f"{unit_id}.json").exists()
+
+
+def test_status_shows_rows_split_held_back_until_retried(tmp_path: Path) -> None:
+    spec = write_validate_spec(tmp_path)
+    spec.write_text(spec.read_text().replace("on_violation: quarantine", "on_violation: split"))
+    assert runner.invoke(app, ["run", str(spec)]).exit_code == 0
+
+    result = runner.invoke(app, ["status", str(spec)])
+    assert result.exit_code == 0
+    assert "done: 2" in result.output and "rejected_rows: 1" in result.output
+
+    unit_id = runner.invoke(app, ["dlq", "list", str(spec)]).output.split()[0]
+    (tmp_path / "b.csv").write_text("id,v\n2,y\n", encoding="utf-8")  # fixed at the source
+    assert runner.invoke(app, ["dlq", "retry", str(spec), "--unit", unit_id]).exit_code == 0
+    assert runner.invoke(app, ["run", str(spec)]).exit_code == 0
+    assert "rejected_rows" not in runner.invoke(app, ["status", str(spec)]).output
