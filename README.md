@@ -312,9 +312,20 @@ bound for the engine, not an expected production rate).
 | Stream 1M events | 2.99 s | 3.26 s |
 | Re-run a finished stream | 0.9 ms | 0.8 ms |
 
-**7. Natural language to SQL (Augur).** 34 of 34 evaluation cases correct with
-`gemini-3.1-flash-lite`. Read as "the evaluation set is too easy" (3 small tables), not
-as "the model is perfect".
+**7. Natural language to SQL (Augur).** The same 34 evaluation cases on two models.
+Read a high score as "the evaluation set is too easy" (3 small tables), not as "the
+model is perfect".
+
+| Model | Correct | Failures |
+|---|---:|---|
+| `gemini-3.1-flash-lite` | 34 / 34 | none |
+| `claude-sonnet-5-5` | 30 / 34 | WRONG_SHAPE 2, WRONG_RESULT 1, UNANSWERABLE 1 |
+
+Sonnet's four misses are disagreements with the golden SQL more than wrong SQL: it
+returned extra columns twice, added a `status = 'paid'` filter to "revenue by category",
+and declared "orders that are COMPLETED" unanswerable instead of mapping it to `paid`
+(the trap that case is built to catch). 14,655 input and 2,545 output tokens for the run,
+no repairs.
 
 **8. A production Cloudflare D1 table through `arsenal dataset`** (0.6.7 from PyPI). A
 catalog table of 3,365 rows and 20 columns, exported as a snapshot by key. Two real

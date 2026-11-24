@@ -12,8 +12,16 @@ minor.
 
 ## [Unreleased]
 
+### Changed
+
+- Augur's default Anthropic model is now `claude-sonnet-5-5` (was `claude-sonnet-4-6`).
+  `--model` still overrides it.
+
 ### Fixed
 
+- Augur no longer sends `temperature` to the Anthropic API. Claude 5.x models reject the
+  parameter with a 400, so every `augur ask` and `augur eval` call against them failed on
+  the first request.
 - `arsenal status` now reports the batch pipelines listed under `pipelines:` in a new
   `pipelines` block (unit counts, last completion). A pipeline with `failed` or
   `quarantined` units raises `alert` and exits 1. Before, only streams, distributed runs,

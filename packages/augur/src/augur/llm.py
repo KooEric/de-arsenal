@@ -62,7 +62,7 @@ def _env(key: str) -> str:
 
 @dataclass(frozen=True)
 class AnthropicProvider:
-    model: str = "claude-sonnet-4-6"
+    model: str = "claude-sonnet-5-5"
     api_key: str = field(default="", repr=False)  # 비어 있으면 환경변수에서 읽는다
     name: str = "anthropic"
 
@@ -81,7 +81,7 @@ class AnthropicProvider:
                     json={
                         "model": self.model,
                         "max_tokens": DEFAULT_MAX_TOKENS,
-                        "temperature": 0,
+                        # temperature 없음: Claude 5.x 모델은 이 파라미터를 400으로 거부한다.
                         "system": system,
                         "messages": [{"role": "user", "content": user}],
                     },
