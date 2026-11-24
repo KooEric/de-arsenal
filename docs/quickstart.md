@@ -35,6 +35,10 @@ all specs valid
 | `pugio` | 수집. 스펙 파일 하나 단위 | `run <spec>`, `status <spec>`, `dlq list <spec>`, `dlq retry <spec> --unit <id>`, `ddl <spec>` |
 | `gladius` | 변환. 스펙 파일 하나 단위 | `compile <spec>`, `run <spec>`, `query <sql>` |
 
+`de-arsenal`을 설치하면 세 명령이 모두 PATH에 올라온다(0.6.15+). `pugio`와 `gladius`는 `arsenal collect`,
+`arsenal transform`으로도 같은 명령을 쓸 수 있다(예: `pugio status x.yaml` = `arsenal collect status x.yaml`).
+0.6.14 이하에서 `uv tool install de-arsenal`로 설치했다면 `pugio`가 없으니 `arsenal collect …`를 쓴다.
+
 `arsenal run`은 `arsenal.yaml`의 `pipelines:`를 `pugio run`으로, `transforms:`를 `gladius run`으로
 차례로 실행한다. 한 단계만 다시 돌리거나 상태를 자세히 볼 때 `pugio`·`gladius`를 직접 쓴다.
 `gladius compile`은 변환이 실행할 DuckDB SQL을 출력한다.

@@ -160,6 +160,9 @@ The project is pre-1.0 and has no long-term API commitment; see the
 
 The base install does not pull in Spark, Kubernetes, Iceberg or Postgres drivers
 (`packages/arsenal/tests/test_base_install.py` checks this).
+Installing `de-arsenal` also puts `pugio` and `gladius` on PATH (0.6.15+), so `pugio status` and
+`arsenal collect status` both work. On 0.6.14 and earlier, `uv tool install de-arsenal` exposed only
+`arsenal`; use `arsenal collect …` and `arsenal transform …` there.
 From source: clone, `uv sync`, and prefix commands with `uv run`.
 
 ## Examples

@@ -12,6 +12,20 @@ minor.
 
 ## [Unreleased]
 
+## [0.6.15] - 2026-11-24
+
+Installing `de-arsenal` now also puts `pugio` and `gladius` on PATH. All 13 packages move
+to `0.6.15`; internal pins stay `>=0.6,<0.7`. No state migrations.
+
+### Fixed
+
+- `uv tool install de-arsenal` (and pipx) put only `arsenal` on PATH, so `pugio status` and
+  `gladius compile`, which the docs use, were "command not found". `de-arsenal` now declares
+  the `pugio` and `gladius` commands too. They run the same CLIs as before and stay
+  available as `arsenal collect …` and `arsenal transform …`. With pip, uninstalling
+  `de-arsenal` alone also removes those two command files; reinstall `pugio` or
+  `de-gladius` if you keep using them without it.
+
 ## [0.6.14] - 2026-11-24
 
 Fixes from testing 0.6.13 against an internal repository: simultaneous first runs, a
