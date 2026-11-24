@@ -12,6 +12,26 @@ minor.
 
 ## [Unreleased]
 
+### Fixed
+
+- Two runs started at the same instant on a fresh project no longer crash in the collect
+  step with `FileNotFoundError` from `register_stream_writer`. Both wrote the same
+  temporary file, so the second rename found nothing. Each process now uses its own
+  temporary file, and a registration another process finished first is accepted.
+- `schema_drift: block` now catches a column added, removed or renamed in any file of a
+  run, not only the first one. Before, a renamed column in a file read after another new
+  file loaded silently and `arsenal status` exited 0. File sources only; within a run each
+  file is compared with the first, and `warn` logs the difference.
+- Rows that `on_violation: split` set aside now raise the alert. The unit is `done`, so
+  `arsenal status` reported `alert: false` while rows sat in the DLQ. Its `pipelines`
+  block has a new `rejected_rows` count and alerts while it is above 0; `pugio status`
+  prints `rejected_rows: N`. `pugio dlq retry` after fixing the source, or deleting the
+  reviewed DLQ files, clears it.
+- A drift error on a column that was just pinned in `source.column_types` now says what
+  to do: files loaded before the pin keep the old type in the output, so the state file
+  and the output must be deleted and everything reloaded. The error itself is unchanged:
+  accepting the new type would mix two types in one column.
+
 ## [0.6.13] - 2026-11-24
 
 Two fixes from testing 0.6.12: overlapping runs no longer crash in the transform step,

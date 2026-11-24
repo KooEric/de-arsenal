@@ -52,11 +52,15 @@ all specs valid
       `pugio status`는 freshness 초과 때만 exit 1을 내기 때문이다.
 - [ ] **`schema_drift: block`을 쓰면 `source.column_types`를 고정한다.** 타입은 파일마다 추론하므로
       빈 값이나 숫자로만 된 문자열 하나로 타입이 바뀌고, `block`이면 그 실행이 실패한다. 우편번호·코드처럼
-      문자열이어야 하는 컬럼은 특히 고정한다.
+      문자열이어야 하는 컬럼은 특히 고정한다. 첫 적재 **뒤에** 고정했다면 이미 적재된 파일은 옛 타입으로 남아
+      있어 drift로 막힌다. 이때는 `.arsenal/<파이프라인>.db`와 출력 폴더를 지우고 처음부터 다시 적재한다.
+- [ ] **`on_violation: split`으로 걸러진 행도 알림 대상이다(0.6.14+).** `pugio status`의 `rejected_rows`,
+      `arsenal status`의 alert로 나온다. 원본을 고친 뒤 `pugio dlq retry`로 다시 적재하거나, 검토한 DLQ
+      파일(`.arsenal/dlq/<파이프라인>/`)을 지우면 풀린다. 0.6.13까지는 `alert: false`였다.
 - [ ] **같은 프로젝트를 동시에 실행하지 않는다.** cron 간격이 실행 시간보다 짧으면 겹친다. 겹친 쪽은
       `pipeline ... is busy`(수집) 또는 `transform ... is busy`(변환) 오류로 멈추고, 데이터는 깨지지
-      않지만 그 회차는 건너뛴다. 0.6.12까지는 변환 단계에서 겹치면 한쪽이 `FileNotFoundError`
-      traceback으로 죽었다(데이터는 정상).
+      않지만 그 회차는 건너뛴다. 0.6.12까지는 변환 단계에서, 0.6.13까지는 같은 순간 시작 시 수집 단계에서
+      한쪽이 `FileNotFoundError` traceback으로 죽었다(데이터는 정상).
 - [ ] **실패한 파일을 지우면 다음 실행 뒤 알림이 풀린다(0.6.13+).** 폴더를 끝까지 읽은 실행이 끝나면 없어진
       파일의 실패 기록은 `withdrawn`이 된다. 0.6.12까지는 같은 이름의 파일이 다시 적재돼야 풀렸다.
 - [ ] **비정상 종료 뒤에는 약 1분 기다린다.** `kill -9`, OOM, 전원 차단 뒤에는 실행 락(lease, TTL 60초)이

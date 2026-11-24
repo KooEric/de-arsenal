@@ -17,6 +17,8 @@ dataset, so this works without any shared service.
 from __future__ import annotations
 
 import json
+import os
+import uuid
 from collections.abc import Generator
 from contextlib import ExitStack, contextmanager
 from dataclasses import asdict, dataclass
@@ -51,9 +53,19 @@ def register_stream_writer(dataset: Path, writer: StreamWriter) -> Path:
     registry.mkdir(parents=True, exist_ok=True)
     path = registry / f"{canonical_hash(asdict(writer))[:16]}.json"
     if not path.exists():
-        temp = path.with_suffix(".tmp")
-        temp.write_text(json.dumps(asdict(writer), sort_keys=True), encoding="utf-8")
-        temp.replace(path)
+        # The name is a hash of the content, so concurrent registrations of the same
+        # writer write identical bytes. Each process needs its own temp file though:
+        # with a shared one, the first rename left the second with nothing to rename
+        # (FileNotFoundError when two runs started at the same instant).
+        temp = path.with_name(f"{path.stem}.{os.getpid()}.{uuid.uuid4().hex[:8]}.tmp")
+        try:
+            temp.write_text(json.dumps(asdict(writer), sort_keys=True), encoding="utf-8")
+            temp.replace(path)
+        except OSError:
+            if not path.exists():  # a concurrent rename winning is fine; anything else is not
+                raise
+        finally:
+            temp.unlink(missing_ok=True)
     return path
 
 

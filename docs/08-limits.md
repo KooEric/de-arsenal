@@ -44,7 +44,7 @@ Arsenal(Pugio/Gladius)은 분산 엔진을 만들지 않는다([설계 원칙 1]
 |---|---|---|
 | 밀리초급 실시간 스트리밍 | 범위 밖 | Hasta(0.4)는 폴링 마이크로배치(초~분)다. Kafka·binlog/WAL 등 log 기반 CDC, Flink식 상태 연산·윈도 조인, exactly-once 외부 전송은 하지 않는다 — 아래 [Hasta 절](#hasta-스트리밍의-보장과-한계-04) 참고. 밀리초급은 전용 인프라 없이는 불가하다([07-cost-efficiency.md](07-cost-efficiency.md) "줄여주지 못하는 비용"). |
 | 범용 분산 실행 | 범위 밖 | Ballista(0.4)는 portable Gladius 플랜 하나를 Spark on Kubernetes에서 실행하고 Iceberg로만 커밋한다. raw Parquet 원격 출력의 원자성, 임의 Spark 코드·raw SQL·Python UDF의 분산 실행, 클러스터 프로비저닝은 하지 않으며 그 인프라 비용은 사용자가 진다 — 아래 [Ballista 절](#ballista-분산-실행의-보장과-한계-04) 참고. |
-| 스키마 드리프트 감지+정책 | P1 | `schema_drift`로 `allow`/`warn`/`block`을 선택한다. `warn`은 경고 후 최신 스냅샷을 기록하고, `block`은 해당 unit을 failed 처리해 적재를 막는다. 현재는 첫 non-empty batch의 필드명·타입·nullable 비교만 지원한다. |
+| 스키마 드리프트 감지+정책 | P1 | `schema_drift`로 `allow`/`warn`/`block`을 선택한다. `warn`은 경고 후 최신 스냅샷을 기록하고, `block`은 해당 unit을 failed 처리해 적재를 막는다. 이전 실행과의 비교는 그 실행의 첫 non-empty batch로 한다(필드명·타입·nullable). 파일 소스는 0.6.14부터 같은 실행 안의 모든 파일을 첫 파일과 비교해, 뒤쪽 파일의 컬럼 추가·삭제(이름 변경 포함)도 정책대로 처리한다. 타입 차이는 파일 간 타입 검사가 따로 맡는다. |
 | 증분 변환 (`incremental: by_unit/by_key`) | P1 | 입력 파일 시그니처와 변환 스펙 해시를 SQLite에 기록한다. 신규 파일은 `by_unit`에서 append하고 `by_key`에서는 신규 결과가 기존 키를 덮어쓴다. 기존 파일 변경·삭제 또는 스펙 변경은 안전성을 위해 전체 재계산한다. `by_key`는 소스에서 삭제된 행을 추론하지 않는다. |
 | Python UDF step | P1 | `steps`의 `python`, `args`, `output`으로 `module:function`을 등록하고 SQL 호출로 컴파일한다. 실행 환경에는 `de-gladius[python]`(numpy)가 필요하며, 함수의 부작용·분산 실행·벡터화는 보장하지 않는다. |
 | `pugio status --cost` | P1 | 완료된 unit의 누적 행 수·바이트·처리 시간과 마지막 완료 시각을 보여준다. `--max-age-seconds`를 함께 주면 freshness 상태와 stale alert를 출력한다. 단가 환산·외부 알림 전송·분산 집계는 P2 범위다. |
@@ -213,7 +213,7 @@ preflight에서 거부된다.
 
 `validate.on_violation`의 `quarantine`은 unit(페이지·파일) 전체를 격리한다. 실데이터는 거의 모든
 unit에 나쁜 행이 몇 개씩 있어서 이 정책으로는 적재가 0건이 될 수 있다
-([실험](11-real-data-experiments.md)). `split`은 위반 행만 DLQ Parquet에 남기고 나머지를 적재한다.
+([실험](11-real-data-experiments.md)). `split`은 위반 행만 DLQ Parquet에 남기고 나머지를 적재한다. unit은 `done`이 되지만, DLQ에 행이 남아 있는 동안 `pugio status`는 `rejected_rows`를 출력하고 `arsenal status`는 alert를 낸다(0.6.14+). 원본을 고친 뒤 `pugio dlq retry`로 다시 적재하거나, 검토한 DLQ 파일을 지우면 풀린다.
 
 - unit은 `done`이 된다. `pugio status --cost`의 행 수는 적재된 행만 센다.
 - `unique` 규칙은 중복된 값의 모든 행을 걸러 낸다. 어느 쪽이 맞는지 알 수 없기 때문이다.
