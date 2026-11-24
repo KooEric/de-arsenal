@@ -153,6 +153,9 @@ sink별·도구별로 무엇을 보장하고 무엇을 보장하지 않는지는
 
 기본 설치는 Spark·Kubernetes·Iceberg·Postgres 드라이버를 끌어오지 않는다
 (`packages/arsenal/tests/test_base_install.py`가 확인한다).
+`de-arsenal`을 설치하면 `pugio`와 `gladius`도 PATH에 올라온다(0.6.15+). `pugio status`와
+`arsenal collect status`가 둘 다 된다. 0.6.14 이하의 `uv tool install de-arsenal`은 `arsenal`만 올렸으니
+그 버전에서는 `arsenal collect …`, `arsenal transform …`을 쓴다.
 소스에서 쓰려면 clone 후 `uv sync`, 명령 앞에 `uv run`을 붙인다.
 
 ## 예제

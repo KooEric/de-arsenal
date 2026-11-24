@@ -74,3 +74,27 @@ def test_base_install_pulls_no_heavy_or_p2_runtime() -> None:
 def test_p2_tools_keep_their_cluster_runtimes_optional() -> None:
     assert base_closure("de-ballista") & {"pyspark", "kubernetes", "pyiceberg", "obstore"} == set()
     assert base_closure("de-hasta") & {"psycopg", "psycopg-binary", "kafka-python"} == set()
+
+
+def test_de_arsenal_puts_every_tool_cli_on_path() -> None:
+    """`uv tool install de-arsenal` exposes only de-arsenal's own commands, so it must
+    declare pugio and gladius as well for the docs' `pugio status` to work."""
+    scripts = {
+        ep.name: ep.value
+        for ep in metadata.distribution("de-arsenal").entry_points
+        if ep.group == "console_scripts"
+    }
+    assert scripts == {
+        "arsenal": "arsenal.cli:app",
+        "pugio": "pugio.cli:app",
+        "gladius": "gladius.cli:app",
+    }
+    for name in ("pugio", "gladius"):  # the same CLI its own package ships
+        [own] = [
+            ep
+            for ep in metadata.distribution(
+                "de-gladius" if name == "gladius" else name
+            ).entry_points
+            if ep.group == "console_scripts" and ep.name == name
+        ]
+        assert own.value == scripts[name]

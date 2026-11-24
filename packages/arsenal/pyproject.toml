@@ -41,6 +41,11 @@ Repository = "https://github.com/KooEric/de-arsenal"
 
 [project.scripts]
 arsenal = "arsenal.cli:app"
+# `uv tool install de-arsenal` (and pipx) put only this package's own commands on PATH.
+# Declaring the two tool CLIs here too makes `pugio` and `gladius` usable after that
+# install; the pugio and de-gladius packages still ship the same commands on their own.
+pugio = "pugio.cli:app"
+gladius = "gladius.cli:app"
 
 [build-system]
 requires = ["hatchling"]

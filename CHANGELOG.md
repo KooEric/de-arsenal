@@ -12,6 +12,15 @@ minor.
 
 ## [Unreleased]
 
+### Fixed
+
+- `uv tool install de-arsenal` (and pipx) put only `arsenal` on PATH, so `pugio status` and
+  `gladius compile`, which the docs use, were "command not found". `de-arsenal` now declares
+  the `pugio` and `gladius` commands too. They run the same CLIs as before and stay
+  available as `arsenal collect …` and `arsenal transform …`. With pip, uninstalling
+  `de-arsenal` alone also removes those two command files; reinstall `pugio` or
+  `de-gladius` if you keep using them without it.
+
 ## [0.6.14] - 2026-11-24
 
 Fixes from testing 0.6.13 against an internal repository: simultaneous first runs, a
