@@ -22,7 +22,7 @@ ANTHROPIC_OK = {
     "id": "msg_1",
     "type": "message",
     "role": "assistant",
-    "model": "claude-sonnet-4-6",
+    "model": "claude-sonnet-5-5",
     "content": [{"type": "text", "text": "SELECT 1"}],
     "stop_reason": "end_turn",
     "usage": {"input_tokens": 12, "output_tokens": 3},
@@ -45,13 +45,15 @@ def keys(monkeypatch: pytest.MonkeyPatch) -> None:
 def test_anthropic_parses_messages_response(keys: None) -> None:
     route = respx.post(ANTHROPIC_URL).mock(return_value=Response(200, json=ANTHROPIC_OK))
     c = AnthropicProvider().complete("sys", "user")
-    assert (c.text, c.model) == ("SELECT 1", "claude-sonnet-4-6")
+    assert (c.text, c.model) == ("SELECT 1", "claude-sonnet-5-5")
     assert (c.input_tokens, c.output_tokens) == (12, 3)
     req = t.cast(httpx.Request, route.calls[0].request)  # pyright: ignore[reportUnknownMemberType]
     body = json.loads(req.content)
     assert req.headers["x-api-key"] == "test-anthropic-key"
     assert req.headers["anthropic-version"] == "2023-06-01"
     assert body["system"] == "sys" and body["messages"] == [{"role": "user", "content": "user"}]
+    assert body["model"] == "claude-sonnet-5-5"
+    assert "temperature" not in body  # Claude 5.x는 temperature를 400으로 거부한다
 
 
 @respx.mock

@@ -12,6 +12,17 @@ minor.
 
 ## [Unreleased]
 
+### Changed
+
+- Augur's default Anthropic model is now `claude-sonnet-5-5` (was `claude-sonnet-4-6`).
+  `--model` still overrides it.
+
+### Fixed
+
+- Augur no longer sends `temperature` to the Anthropic API. Claude 5.x models reject the
+  parameter with a 400, so every `augur ask` and `augur eval` call against them failed on
+  the first request.
+
 ## [0.6.15] - 2026-11-24
 
 Installing `de-arsenal` now also puts `pugio` and `gladius` on PATH. All 13 packages move
