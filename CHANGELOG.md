@@ -12,6 +12,37 @@ minor.
 
 ## [Unreleased]
 
+## [0.6.13] - 2026-11-24
+
+Two fixes from testing 0.6.12: overlapping runs no longer crash in the transform step,
+and deleting a file that failed to load clears the alert. All 13 packages move to
+`0.6.13`; internal pins stay `>=0.6,<0.7`. No state migrations.
+
+### ⚠️ Upgrade notes
+
+- A unit can now be in the new state `withdrawn`. `pugio status` prints it as
+  `withdrawn: N` and `arsenal status` counts it under `units` without raising an alert.
+  A script that expects only `done`, `failed`, `quarantined`, `pending` and `running`
+  should accept it.
+- A transform leaves a `<output>.lock` file next to its output directory (for example
+  `data/clean.lock`). It is empty and safe to ignore; do not delete it while a run is
+  going.
+
+### Fixed
+
+- Two `arsenal run` (or `gladius run`) processes that reach the same transform together
+  no longer crash with `FileNotFoundError: 'data/clean.tmp'`. The collect step already
+  let only one run through, but once it was done both went on to the transform and shared
+  its temporary directory. A transform now holds an OS lock on `<output>.lock` for the
+  whole run; the second one stops with "transform ... is busy". The lock is released
+  when its process exits, `kill -9` included, so a crash never leaves it behind.
+- Deleting a file that failed to load now clears the alert. The failed (or quarantined)
+  unit stayed `failed` until a file with the same name loaded, so `arsenal status` kept
+  exiting 1. After a run that reads the whole folder without a failure, such units become
+  `withdrawn`, keeping their last error; a file that comes back under that name is loaded
+  again. With `detect_changes`, the same applies to the old content of a file that was
+  replaced.
+
 ## [0.6.12] - 2026-11-24
 
 `arsenal status` now watches the batch pipelines under `pipelines:`, and two runs started

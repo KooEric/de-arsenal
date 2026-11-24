@@ -233,7 +233,9 @@ def _run_units(
     fetched = written = skipped = done_count = quarantined = rejected_rows = 0
     schema_recorded = False  # 이번 run에서 스냅샷 기록 여부 (첫 non-empty batch에서 한 번만)
     file_types: dict[str, tuple[str, str]] = {}  # 컬럼 → (타입, 처음 본 파일)
+    seen: set[str] = set()
     for unit in source.units():
+        seen.add(unit.unit_id)
         store.register(unit)
         if store.is_done(unit.unit_id):
             skipped += 1
@@ -400,6 +402,18 @@ def _run_units(
             on_unit_complete(done_count)
         if result.exhausted:
             break
+    else:
+        if spec.source.type == "file":
+            # 폴더 전체를 끝까지 돌았을 때만: 지워진(또는 내용이 바뀐) 파일의 실패는 다시
+            # 시도할 수 없으니 alert에서 뺀다. 남은 실패 파일은 위에서 이미 raise했다.
+            withdrawn = store.withdraw_absent(spec.name, seen)
+            if withdrawn:
+                logger.warning(
+                    "pipeline %r: %d failed or quarantined unit(s) no longer match a file "
+                    "and were withdrawn",
+                    spec.name,
+                    withdrawn,
+                )
     return RunReport(
         fetched=fetched,
         written=written,

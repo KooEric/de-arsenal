@@ -369,6 +369,28 @@ class StateStore:
         ).fetchall()
         return [UnitRecord(*r) for r in rows]
 
+    def withdraw_absent(self, pipeline: str, present: set[str]) -> int:
+        """Failed/quarantined units whose input is gone become ``withdrawn``.
+
+        A file source calls this after a full pass over its folder: a file that
+        failed and was then deleted (or, with ``detect_changes``, replaced by new
+        content) can never be retried, so it must stop raising the alert.
+        ``last_error`` is kept. A unit that comes back is re-run, since only
+        ``done`` is skipped.
+        """
+        rows = self._conn.execute(
+            "SELECT unit_id FROM units WHERE pipeline=? AND status IN ('failed', 'quarantined')",
+            (pipeline,),
+        ).fetchall()
+        gone = [uid for (uid,) in rows if uid not in present]
+        now = self._now()
+        self._conn.executemany(
+            "UPDATE units SET status='withdrawn', updated_at=? WHERE unit_id=?",
+            [(now, uid) for uid in gone],
+        )
+        self._conn.commit()
+        return len(gone)
+
     def requeue(self, uid: str) -> int:
         """`pugio dlq retry` — 격리를 풀고 pending으로 되돌려 다음 run이 재수집하게 한다.
 

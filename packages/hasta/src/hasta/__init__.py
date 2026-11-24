@@ -19,7 +19,7 @@ from hasta.spec import DatabaseOutboxSourceSpec, StreamSpec, TableCursorSourceSp
 try:
     __version__ = version("de-hasta")
 except PackageNotFoundError:
-    __version__ = "0.6.12"
+    __version__ = "0.6.13"
 
 __all__ = [
     "BatchLimits",
