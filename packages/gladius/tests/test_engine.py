@@ -110,3 +110,48 @@ def test_missing_input_says_what_to_do_and_leaves_no_tmp_dir(tmp_path: Path) -> 
     message = str(caught.value)
     assert "no Parquet files under input" in message and "compiled SQL" not in message
     assert not (tmp_path / "clean.tmp").exists()
+
+
+def test_a_second_run_on_the_same_output_is_busy_not_a_crash(tmp_path: Path) -> None:
+    from gladius.lock import output_lock
+
+    (tmp_path / "in").mkdir()
+    pq.write_table(  # pyright: ignore[reportUnknownMemberType]
+        pa.table({"id": [1, 2]}), tmp_path / "in" / "a.parquet"
+    )
+    spec = make_spec(input=tmp_path / "in", output=tmp_path / "out", steps=[{"filter": "id > 0"}])
+    with output_lock(tmp_path / "out", "other"):
+        with pytest.raises(FatalError, match="is busy"):
+            run_transform(spec)
+        assert not (tmp_path / "out.tmp").exists()
+    out = run_transform(spec)  # the lock is gone once its holder lets go
+    assert duckdb.sql(f"SELECT count(*) FROM read_parquet('{out}/*.parquet')").fetchall() == [(2,)]
+
+
+def test_the_lock_dies_with_its_process(tmp_path: Path) -> None:
+    import subprocess
+    import sys
+    import textwrap
+
+    from gladius.lock import output_lock
+
+    holder = textwrap.dedent(
+        f"""
+        import sys, time
+        from pathlib import Path
+        from gladius.lock import output_lock
+        with output_lock(Path({str(tmp_path / "out")!r}), "holder"):
+            print("held", flush=True)
+            time.sleep(60)
+        """
+    )
+    proc = subprocess.Popen([sys.executable, "-c", holder], stdout=subprocess.PIPE, text=True)
+    try:
+        assert proc.stdout is not None and proc.stdout.readline().strip() == "held"
+        with pytest.raises(FatalError, match="is busy"), output_lock(tmp_path / "out", "t"):
+            pass
+    finally:
+        proc.kill()  # SIGKILL on POSIX, TerminateProcess on Windows: no cleanup runs
+        proc.wait()
+    with output_lock(tmp_path / "out", "t"):
+        pass

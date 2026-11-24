@@ -25,6 +25,7 @@ from gladius.incremental import (
     state_path,
     transform_hash,
 )
+from gladius.lock import output_lock
 from gladius.spec import TransformSpec
 from gladius.udf import register_python_udfs
 
@@ -34,9 +35,15 @@ def run_transform(spec: TransformSpec) -> Path:
 
     전체 재계산 의미론(P0): 매 실행은 output을 통째로 다시 쓴다. 임시 디렉터리에
     쓰고 os.replace로 원자 교체 — 실패한 실행이 이전 성공 출력을 훼손하지 않는다.
+    한 output에는 한 번에 한 실행만 쓴다(`output_lock`). 겹친 실행은 바로 busy로 멈춘다.
     """
-    if spec.incremental is not None:
-        return _run_incremental(spec)
+    with output_lock(Path(spec.output), spec.name):
+        if spec.incremental is not None:
+            return _run_incremental(spec)
+        return _run_full(spec)
+
+
+def _run_full(spec: TransformSpec) -> Path:
     sql = compile_sql(spec)
     con = duckdb.connect()  # in-memory, 상태 없음
     register_python_udfs(con, spec)

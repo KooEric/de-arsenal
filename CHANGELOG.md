@@ -12,6 +12,21 @@ minor.
 
 ## [Unreleased]
 
+### Fixed
+
+- Two `arsenal run` (or `gladius run`) processes that reach the same transform together
+  no longer crash with `FileNotFoundError: 'data/clean.tmp'`. The collect step already
+  let only one run through, but once it was done both went on to the transform and shared
+  its temporary directory. A transform now holds an OS lock on `<output>.lock` for the
+  whole run; the second one stops with "transform ... is busy". The lock is released
+  when its process exits, `kill -9` included, so a crash never leaves it behind.
+- Deleting a file that failed to load now clears the alert. The failed (or quarantined)
+  unit stayed `failed` until a file with the same name loaded, so `arsenal status` kept
+  exiting 1. After a run that reads the whole folder without a failure, such units become
+  `withdrawn`, keeping their last error; a file that comes back under that name is loaded
+  again. With `detect_changes`, the same applies to the old content of a file that was
+  replaced.
+
 ## [0.6.12] - 2026-11-24
 
 `arsenal status` now watches the batch pipelines under `pipelines:`, and two runs started
