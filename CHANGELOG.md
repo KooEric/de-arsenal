@@ -12,6 +12,11 @@ minor.
 
 ## [Unreleased]
 
+## [0.6.15] - 2026-11-24
+
+Installing `de-arsenal` now also puts `pugio` and `gladius` on PATH. All 13 packages move
+to `0.6.15`; internal pins stay `>=0.6,<0.7`. No state migrations.
+
 ### Fixed
 
 - `uv tool install de-arsenal` (and pipx) put only `arsenal` on PATH, so `pugio status` and

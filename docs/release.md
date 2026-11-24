@@ -1,3 +1,24 @@
+# v0.6.15 패치 릴리스 절차
+
+`uv tool install de-arsenal`(과 pipx)이 `arsenal`만 PATH에 올려, 문서의 `pugio status`·`gladius compile`이
+command not found가 되던 문제의 수정이다. `de-arsenal`이 `pugio`·`gladius` 명령도 선언한다. 내역은
+[CHANGELOG](../CHANGELOG.md).
+
+**patch인 이유**: 명령 두 개가 PATH에 더 올라올 뿐, 명령·옵션·저장 형식·상태 파일이 바뀌지 않는다. 교차 핀
+`>=0.6,<0.7`을 유지하고, 상태 마이그레이션과 신규 PyPI 프로젝트가 없다.
+
+1. 이 PR CI green → `main` 머지
+2. `main`에서 검증: 아래 0.6.0 절차의 2번과 같다. 기대값은 "13 packages at v0.6.15", 산출물 26개.
+3. 수동 점검 (PyPI에서 설치한 0.6.15로)
+   - [ ] 깨끗한 환경에서 `uv tool install de-arsenal==0.6.15` 뒤 `arsenal`·`pugio`·`gladius`가 모두 PATH에 있다.
+         `arsenal init csv-cleanup` → `arsenal run` → `pugio status collect.yaml`과 `arsenal collect status collect.yaml`이
+         같은 결과, `gladius compile transform.yaml`이 SQL을 출력한다.
+   - [ ] CHANGELOG `## [0.6.15]`의 날짜 (PR에서 2026-11-24로 기입. 태그가 다른 날이면 고친다).
+4. 태그 `v0.6.15` 게시 (계정 소유자): 웹의 Releases → Draft a new release → `v0.6.15` 새 태그, target `main`.
+5. 게시 확인: 13개 패키지의 `https://pypi.org/pypi/<name>/0.6.15/json`이 모두 `200`.
+
+---
+
 # v0.6.14 패치 릴리스 절차
 
 0.6.13 사내 저장소 점검에서 나온 문제의 수정이다. 내역은 [CHANGELOG](../CHANGELOG.md).
