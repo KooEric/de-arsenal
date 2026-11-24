@@ -12,6 +12,22 @@ minor.
 
 ## [Unreleased]
 
+## [0.6.14] - 2026-11-24
+
+Fixes from testing 0.6.13 against an internal repository: simultaneous first runs, a
+renamed column slipping past `schema_drift: block`, and `split` rows not raising the
+alert. All 13 packages move to `0.6.14`; internal pins stay `>=0.6,<0.7`. No state
+migrations.
+
+### ⚠️ Upgrade notes
+
+- With `on_violation: split`, `arsenal status` now exits 1 while rows sit in the DLQ
+  (`rejected_rows` > 0). Retry or delete the reviewed DLQ files to clear it.
+- With `schema_drift: block` (or `warn`) on a file source, a run now fails (or warns)
+  when its files do not all have the same columns. Before, only the first file of a run
+  was compared. Folders that mix layouts on purpose need `allow`, or one pipeline per
+  layout.
+
 ### Fixed
 
 - Two runs started at the same instant on a fresh project no longer crash in the collect
