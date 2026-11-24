@@ -12,6 +12,6 @@ from importlib.metadata import PackageNotFoundError, version
 try:
     __version__ = version("de-pilum")
 except PackageNotFoundError:
-    __version__ = "0.6.12"
+    __version__ = "0.6.13"
 
 __all__ = ["__version__"]

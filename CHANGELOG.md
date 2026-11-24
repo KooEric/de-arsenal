@@ -12,6 +12,22 @@ minor.
 
 ## [Unreleased]
 
+## [0.6.13] - 2026-11-24
+
+Two fixes from testing 0.6.12: overlapping runs no longer crash in the transform step,
+and deleting a file that failed to load clears the alert. All 13 packages move to
+`0.6.13`; internal pins stay `>=0.6,<0.7`. No state migrations.
+
+### ⚠️ Upgrade notes
+
+- A unit can now be in the new state `withdrawn`. `pugio status` prints it as
+  `withdrawn: N` and `arsenal status` counts it under `units` without raising an alert.
+  A script that expects only `done`, `failed`, `quarantined`, `pending` and `running`
+  should accept it.
+- A transform leaves a `<output>.lock` file next to its output directory (for example
+  `data/clean.lock`). It is empty and safe to ignore; do not delete it while a run is
+  going.
+
 ### Fixed
 
 - Two `arsenal run` (or `gladius run`) processes that reach the same transform together
