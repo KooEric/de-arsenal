@@ -1,3 +1,31 @@
+# v0.6.12 패치 릴리스 절차
+
+`arsenal status`가 `pipelines:`의 수집 파이프라인을 보고하지 않아 수집이 실패해도 `alert: false`에
+exit 0을 내던 문제와, 새 프로젝트에서 두 실행이 동시에 시작하면 상태 DB를 만들다 `database is locked`로
+죽던 문제의 수정이다(#43). 내역은 [CHANGELOG](../CHANGELOG.md).
+
+**patch인 이유**: 명령, 옵션, 저장 형식, 상태 파일이 바뀌지 않는다. 마이그레이션은 기존 것을 쓰기 락
+안에서 스키마 버전을 다시 읽도록 고쳤을 뿐 새로 추가하지 않았다. 교차 핀 `>=0.6,<0.7`을 유지하고, 신규
+PyPI 프로젝트가 없다.
+
+**사용자 고지 (CHANGELOG Upgrade notes와 같음):** 수집 파이프라인에 `failed`·`quarantined` unit이 있으면
+`arsenal status`가 exit 1을 낸다. 출력만 보려고 `set -e`나 CI 단계 안에서 돌리던 스크립트는 거기서 멈춘다.
+
+1. 이 PR CI green → `main` 머지
+2. `main`에서 검증: 아래 0.6.0 절차의 2번과 같다. 기대값은 "13 packages at v0.6.12", 산출물 26개.
+3. 수동 점검
+   - [ ] PyPI에서 설치한 0.6.12로, 새 디렉터리에서 `arsenal init csv-cleanup` 뒤 `arsenal status`가
+         `pipelines`에 `never-run`을 보고하고 exit 0이다. 이어서
+         `printf 'id,customer,zip,amount\n1,"Alice\n' > input/bad.csv` → `arsenal run`(CSV 파싱 오류)
+         → `arsenal status`가 `alert: true`, `units: {"failed": 1}`, exit 1이다. (PR에서 소스 체크아웃으로
+         같은 순서를 돌려 이 결과를 확인했다.)
+   - [ ] CHANGELOG `## [0.6.12]`의 날짜 (PR에서 2026-11-24로 기입. 태그가 다른 날이면 고친다).
+4. `git tag v0.6.12 && git push origin v0.6.12` (계정 소유자). 신규 프로젝트가 없으므로 수동 최초 게시는 필요 없다.
+5. 게시 확인: 13개 패키지의 `https://pypi.org/pypi/<name>/0.6.12/json`이 모두 `200`. 게시 직후 인덱스가
+   늦으면 `pugio`가 이전 버전으로 잡힐 수 있으니 버전을 함께 본다.
+
+---
+
 # v0.6.11 패치 릴리스 절차
 
 새로 설치하면 DuckDB 2.0이 잡히는데, 0.6.10은 lock의 1.5.4로만 테스트돼 Postgres 게시마다

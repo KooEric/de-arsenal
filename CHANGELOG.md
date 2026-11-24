@@ -12,6 +12,19 @@ minor.
 
 ## [Unreleased]
 
+## [0.6.12] - 2026-11-24
+
+`arsenal status` now watches the batch pipelines under `pipelines:`, and two runs started
+together on a fresh project no longer crash while creating the state database. All 13
+packages move to `0.6.12`; internal pins stay `>=0.6,<0.7`. No state migrations.
+
+### ⚠️ Upgrade notes
+
+- `arsenal status` now exits 1 when a pipeline under `pipelines:` has `failed` or
+  `quarantined` units. A script that ran it only for its output and stops on a non-zero exit
+  (`set -e`, a CI step) will now stop there. It does not check how old a pipeline's last
+  success is; keep `pugio status <spec> --max-age-seconds <n>` for that.
+
 ### Fixed
 
 - `arsenal status` now reports the batch pipelines listed under `pipelines:` in a new
