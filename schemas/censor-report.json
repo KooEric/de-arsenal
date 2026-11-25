@@ -1,0 +1,209 @@
+{
+  "$defs": {
+    "CheckResult": {
+      "additionalProperties": false,
+      "properties": {
+        "id": {
+          "description": "Stable check id, e.g. `guards.validate:collect.yaml`",
+          "title": "Id",
+          "type": "string"
+        },
+        "dimension": {
+          "$ref": "#/$defs/Dimension"
+        },
+        "weight": {
+          "minimum": 1,
+          "title": "Weight",
+          "type": "integer"
+        },
+        "status": {
+          "$ref": "#/$defs/Status"
+        },
+        "blocker": {
+          "default": false,
+          "description": "A failed blocker caps the grade at C",
+          "title": "Blocker",
+          "type": "boolean"
+        },
+        "subject": {
+          "description": "File, table or directory the check looked at",
+          "title": "Subject",
+          "type": "string"
+        },
+        "evidence": {
+          "description": "What was found; never contains a secret value",
+          "title": "Evidence",
+          "type": "string"
+        },
+        "fix": {
+          "default": "",
+          "description": "One line on how to fix it",
+          "title": "Fix",
+          "type": "string"
+        }
+      },
+      "required": [
+        "id",
+        "dimension",
+        "weight",
+        "status",
+        "subject",
+        "evidence"
+      ],
+      "title": "CheckResult",
+      "type": "object"
+    },
+    "Dimension": {
+      "enum": [
+        "correctness",
+        "guards",
+        "security",
+        "operability",
+        "agent_readiness",
+        "reliability",
+        "freshness",
+        "data_health"
+      ],
+      "title": "Dimension",
+      "type": "string"
+    },
+    "DimensionScore": {
+      "additionalProperties": false,
+      "properties": {
+        "dimension": {
+          "$ref": "#/$defs/Dimension"
+        },
+        "weight": {
+          "title": "Weight",
+          "type": "integer"
+        },
+        "score": {
+          "anyOf": [
+            {
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "0-10, or null when no check applied",
+          "title": "Score"
+        }
+      },
+      "required": [
+        "dimension",
+        "weight",
+        "score"
+      ],
+      "title": "DimensionScore",
+      "type": "object"
+    },
+    "Status": {
+      "enum": [
+        "pass",
+        "warn",
+        "fail",
+        "na",
+        "error"
+      ],
+      "title": "Status",
+      "type": "string"
+    }
+  },
+  "additionalProperties": false,
+  "properties": {
+    "schema_version": {
+      "const": 1,
+      "default": 1,
+      "title": "Schema Version",
+      "type": "integer"
+    },
+    "run_id": {
+      "title": "Run Id",
+      "type": "string"
+    },
+    "tier": {
+      "description": "quick reads files only; standard (Plan 2) also inspects state and data",
+      "enum": [
+        "quick",
+        "standard"
+      ],
+      "title": "Tier",
+      "type": "string"
+    },
+    "target": {
+      "title": "Target",
+      "type": "string"
+    },
+    "target_kind": {
+      "description": "What `target` names; Plan 1 audits a DE Arsenal `project` only",
+      "enum": [
+        "project",
+        "files",
+        "duckdb",
+        "postgres"
+      ],
+      "title": "Target Kind",
+      "type": "string"
+    },
+    "censor_version": {
+      "title": "Censor Version",
+      "type": "string"
+    },
+    "score": {
+      "anyOf": [
+        {
+          "type": "number"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "description": "0-100, or null when nothing applied",
+      "title": "Score"
+    },
+    "grade": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "title": "Grade"
+    },
+    "capped_by_blocker": {
+      "title": "Capped By Blocker",
+      "type": "boolean"
+    },
+    "dimensions": {
+      "items": {
+        "$ref": "#/$defs/DimensionScore"
+      },
+      "title": "Dimensions",
+      "type": "array"
+    },
+    "checks": {
+      "items": {
+        "$ref": "#/$defs/CheckResult"
+      },
+      "title": "Checks",
+      "type": "array"
+    }
+  },
+  "required": [
+    "run_id",
+    "tier",
+    "target",
+    "target_kind",
+    "censor_version",
+    "score",
+    "grade",
+    "capped_by_blocker",
+    "dimensions",
+    "checks"
+  ],
+  "title": "AuditReport",
+  "type": "object"
+}

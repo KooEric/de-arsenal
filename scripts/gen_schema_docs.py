@@ -32,6 +32,7 @@ _BALLISTA_JSON: Final = Path("schemas/ballista-profile.json")
 _BALLISTA_MD: Final = Path("docs/reference/ballista-profile-schema.md")
 _DISPATCH_JSON: Final = Path("schemas/dispatch.json")
 _DISPATCH_MD: Final = Path("docs/reference/dispatch-schema.md")
+_CENSOR_REPORT_JSON: Final = Path("schemas/censor-report.json")
 
 
 def _import_pipeline_spec() -> type[Any]:
@@ -62,6 +63,12 @@ def _import_dispatch_spec() -> type[Any]:
     from pilum.spec import DispatchSpec
 
     return DispatchSpec
+
+
+def _import_censor_report() -> type[Any]:
+    from censor.model import AuditReport
+
+    return AuditReport
 
 
 def _ref_name(ref: str) -> str:
@@ -186,13 +193,14 @@ def _render_json_schema(model: type[Any]) -> str:
 
 
 def generate_artifacts() -> dict[Path, str]:
-    """Build the full content of all 10 generated artifacts, keyed by the
+    """Build the full content of all 11 generated artifacts, keyed by the
     (CWD-relative) path they should be written to."""
     pipeline_spec = _import_pipeline_spec()
     transform_spec = _import_transform_spec()
     stream_spec = _import_stream_spec()
     ballista_profile = _import_ballista_profile()
     dispatch_spec = _import_dispatch_spec()
+    censor_report = _import_censor_report()
 
     pipeline_schema = pipeline_spec.model_json_schema()
     transform_schema = transform_spec.model_json_schema()
@@ -274,6 +282,7 @@ def generate_artifacts() -> dict[Path, str]:
         _BALLISTA_MD: ballista_md,
         _DISPATCH_JSON: _render_json_schema(dispatch_spec),
         _DISPATCH_MD: dispatch_md,
+        _CENSOR_REPORT_JSON: _render_json_schema(censor_report),
     }
 
 

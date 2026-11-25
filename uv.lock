@@ -20,6 +20,7 @@ members = [
     "de-arsenal-workspace",
     "de-augur",
     "de-ballista",
+    "de-censor",
     "de-gladius",
     "de-hasta",
     "de-onager",
@@ -923,6 +924,7 @@ dependencies = [
     { name = "de-arsenal" },
     { name = "de-augur" },
     { name = "de-ballista" },
+    { name = "de-censor" },
     { name = "de-gladius" },
     { name = "de-hasta" },
     { name = "de-onager" },
@@ -964,6 +966,7 @@ requires-dist = [
     { name = "de-augur", editable = "packages/augur" },
     { name = "de-ballista", editable = "packages/ballista" },
     { name = "de-ballista", marker = "extra == 'distributed'", editable = "packages/ballista" },
+    { name = "de-censor", editable = "packages/censor" },
     { name = "de-gladius", editable = "packages/gladius" },
     { name = "de-hasta", editable = "packages/hasta" },
     { name = "de-hasta", marker = "extra == 'streaming'", editable = "packages/hasta" },
@@ -1051,6 +1054,31 @@ requires-dist = [
     { name = "typer", specifier = ">=0.12" },
 ]
 provides-extras = ["spark-kubernetes", "iceberg", "object-store"]
+
+[[package]]
+name = "de-censor"
+version = "0.6.17"
+source = { editable = "packages/censor" }
+dependencies = [
+    { name = "arsenal-core" },
+    { name = "de-arsenal" },
+    { name = "de-gladius" },
+    { name = "pyarrow" },
+    { name = "pydantic" },
+    { name = "pyyaml" },
+    { name = "typer" },
+]
+
+[package.metadata]
+requires-dist = [
+    { name = "arsenal-core", editable = "packages/arsenal-core" },
+    { name = "de-arsenal", editable = "packages/arsenal" },
+    { name = "de-gladius", editable = "packages/gladius" },
+    { name = "pyarrow", specifier = ">=17" },
+    { name = "pydantic", specifier = ">=2" },
+    { name = "pyyaml", specifier = ">=6" },
+    { name = "typer", specifier = ">=0.12" },
+]
 
 [[package]]
 name = "de-gladius"
