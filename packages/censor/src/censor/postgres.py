@@ -10,7 +10,7 @@ from urllib.parse import quote, urlsplit
 import duckdb
 
 from arsenal_core.errors import FatalError
-from censor.data import SAMPLE_SEED, TargetUnreadable, narrow, run_query
+from censor.data import SAMPLE_SEED, QueryTimeout, TargetUnreadable, narrow, run_query
 from censor.limits import Scale
 from censor.target import PostgresTarget, ScanOptions
 from gladius.compile.ident import quote_ident
@@ -59,6 +59,18 @@ def redact(text: str, target: PostgresTarget) -> str:
     return re.sub(r"options=\S*statement_timeout\S*", "", text)
 
 
+def _connect_failure(message: str) -> str:
+    """A fixed phrase for a connection error; the driver's text is not passed on."""
+    lowered = message.lower()
+    if "password authentication failed" in lowered or "pg_hba.conf" in lowered:
+        return "authentication failed"
+    if "does not exist" in lowered:
+        return "the database or role does not exist"
+    if "permission denied" in lowered:
+        return "permission denied"
+    return "could not connect to the server"
+
+
 def split_table(table: str) -> tuple[str, str]:
     schema, _, name = table.rpartition(".")
     schema = schema or DEFAULT_SCHEMA
@@ -88,8 +100,12 @@ def postgres_relation(
         )
         rows = run_query(con, f"SELECT * FROM {size}", scan.timeout_seconds)
     except duckdb.Error as e:
-        reason = redact(str(e), target).strip().splitlines()[0]
-        raise TargetUnreadable(f"could not read {target.label}: {reason}") from e
+        if "statement timeout" in str(e):
+            raise QueryTimeout(scan.timeout_seconds) from e
+        reason = _connect_failure(str(e))
+        raise TargetUnreadable(
+            f"could not read {target.label}: {reason} (DSN from ${target.dsn_env})"
+        ) from None  # the driver's own text names the host, port and user: never chain it
     if not rows:
         raise TargetUnreadable(f"no table {target.table} (DSN from ${target.dsn_env})")
     estimated, total_bytes = rows[0]
