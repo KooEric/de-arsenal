@@ -12,6 +12,12 @@ minor.
 
 ## [Unreleased]
 
+## [0.6.17] - 2026-11-25
+
+Augur's read-only guard is enforced by the DuckDB parser and a sandboxed connection
+instead of a first-word regex. All 13 packages move to `0.6.17`; internal pins stay
+`>=0.6,<0.7`. No state migrations.
+
 ### Security
 
 - Augur: the read-only guard no longer trusts the first word of the generated SQL.

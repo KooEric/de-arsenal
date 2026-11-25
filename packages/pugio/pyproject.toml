@@ -1,6 +1,6 @@
 [project]
 name = "pugio"
-version = "0.6.16"
+version = "0.6.17"
 description = "Pugio — 수집·전송. 재개·멱등·인증 갱신이 기본값인 ETL 엔진"
 readme = "README.md"
 requires-python = ">=3.11"

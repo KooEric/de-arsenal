@@ -263,7 +263,7 @@ wheels = [
 
 [[package]]
 name = "arsenal-core"
-version = "0.6.16"
+version = "0.6.17"
 source = { editable = "packages/arsenal-core" }
 dependencies = [
     { name = "pydantic" },
@@ -819,7 +819,7 @@ wheels = [
 
 [[package]]
 name = "de-aquila"
-version = "0.6.16"
+version = "0.6.17"
 source = { editable = "packages/aquila" }
 dependencies = [
     { name = "arsenal-core" },
@@ -847,7 +847,7 @@ provides-extras = ["iceberg"]
 
 [[package]]
 name = "de-arsenal"
-version = "0.6.16"
+version = "0.6.17"
 source = { editable = "packages/arsenal" }
 dependencies = [
     { name = "arsenal-core" },
@@ -993,7 +993,7 @@ dev = [
 
 [[package]]
 name = "de-augur"
-version = "0.6.16"
+version = "0.6.17"
 source = { editable = "packages/augur" }
 dependencies = [
     { name = "arsenal-core" },
@@ -1018,7 +1018,7 @@ requires-dist = [
 
 [[package]]
 name = "de-ballista"
-version = "0.6.16"
+version = "0.6.17"
 source = { editable = "packages/ballista" }
 dependencies = [
     { name = "arsenal-core" },
@@ -1054,7 +1054,7 @@ provides-extras = ["spark-kubernetes", "iceberg", "object-store"]
 
 [[package]]
 name = "de-gladius"
-version = "0.6.16"
+version = "0.6.17"
 source = { editable = "packages/gladius" }
 dependencies = [
     { name = "arsenal-core" },
@@ -1081,7 +1081,7 @@ provides-extras = ["python"]
 
 [[package]]
 name = "de-hasta"
-version = "0.6.16"
+version = "0.6.17"
 source = { editable = "packages/hasta" }
 dependencies = [
     { name = "arsenal-core" },
@@ -1117,7 +1117,7 @@ provides-extras = ["postgres"]
 
 [[package]]
 name = "de-onager"
-version = "0.6.16"
+version = "0.6.17"
 source = { editable = "packages/onager" }
 dependencies = [
     { name = "arsenal-core" },
@@ -1136,7 +1136,7 @@ requires-dist = [
 
 [[package]]
 name = "de-pilum"
-version = "0.6.16"
+version = "0.6.17"
 source = { editable = "packages/pilum" }
 dependencies = [
     { name = "arsenal-core" },
@@ -1161,12 +1161,12 @@ requires-dist = [
 
 [[package]]
 name = "de-scorpio"
-version = "0.6.16"
+version = "0.6.17"
 source = { editable = "packages/scorpio" }
 
 [[package]]
 name = "de-scutum"
-version = "0.6.16"
+version = "0.6.17"
 source = { editable = "packages/scutum" }
 dependencies = [
     { name = "arsenal-core" },
@@ -3013,7 +3013,7 @@ wheels = [
 
 [[package]]
 name = "pugio"
-version = "0.6.16"
+version = "0.6.17"
 source = { editable = "packages/pugio" }
 dependencies = [
     { name = "arsenal-core" },
@@ -4096,7 +4096,7 @@ wheels = [
 
 [[package]]
 name = "spatha"
-version = "0.6.16"
+version = "0.6.17"
 source = { editable = "packages/spatha" }
 dependencies = [
     { name = "de-scutum" },
