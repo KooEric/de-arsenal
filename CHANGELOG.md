@@ -12,6 +12,12 @@ minor.
 
 ## [Unreleased]
 
+## [0.6.16] - 2026-11-25
+
+Augur works with Claude 5.x models (0.6.15 sent `temperature`, which they reject
+with a 400), and `pugio transfer` arrives as an experimental command. All 13 packages move
+to `0.6.16`; internal pins stay `>=0.6,<0.7`. No state migrations.
+
 ### Added
 
 - `pugio transfer run|status` (experimental): a Hive or Redshift query is exported by the

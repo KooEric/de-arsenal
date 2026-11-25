@@ -1,3 +1,26 @@
+# v0.6.16 패치 릴리스 절차
+
+PyPI의 0.6.15 Augur가 Anthropic API에 `temperature`를 보내, Claude 5.x 모델이 첫 요청부터 400으로
+거부하던 문제의 수정이 핵심이다. 함께 나가는 것: Augur 기본 Anthropic 모델 `claude-sonnet-5-5`,
+experimental `pugio transfer run|status`와 새 extra `hive`(`impyla`). 내역은 [CHANGELOG](../CHANGELOG.md).
+
+**patch인 이유**: 기존 명령·옵션·저장 형식·상태 파일이 바뀌지 않는다. `pugio transfer`는 새 하위 명령이고
+상태를 별도 파일(`<state_dir>/<name>.transfer.db`)에 둔다. Augur 기본 모델은 바뀌지만 `--model`로 고를 수
+있다. 교차 핀 `>=0.6,<0.7`을 유지하고, 상태 마이그레이션과 신규 PyPI 프로젝트가 없다.
+
+1. 이 PR CI green → `main` 머지
+2. `main`에서 검증: 아래 0.6.0 절차의 2번과 같다. 기대값은 "13 packages at v0.6.16", 산출물 26개.
+3. 수동 점검 (PyPI에서 설치한 0.6.16으로)
+   - [ ] 깨끗한 환경에서 `uv tool install de-augur==0.6.16` 뒤 `ANTHROPIC_API_KEY`로 `augur ask`가
+         400 없이 답한다(기본 모델 `claude-sonnet-5-5`).
+   - [ ] `uv tool install "de-arsenal[redshift,hive]==0.6.16"` 뒤 `pugio transfer --help`와
+         `pugio transfer status examples/transfer/hive-to-redshift.yaml`(`no runs yet`)이 동작한다.
+   - [ ] CHANGELOG `## [0.6.16]`의 날짜 (PR에서 2026-11-25로 기입. 태그가 다른 날이면 고친다).
+4. 태그 `v0.6.16` 게시 (계정 소유자): 웹의 Releases → Draft a new release → `v0.6.16` 새 태그, target `main`.
+5. 게시 확인: 13개 패키지의 `https://pypi.org/pypi/<name>/0.6.16/json`이 모두 `200`.
+
+---
+
 # v0.6.15 패치 릴리스 절차
 
 `uv tool install de-arsenal`(과 pipx)이 `arsenal`만 PATH에 올려, 문서의 `pugio status`·`gladius compile`이
