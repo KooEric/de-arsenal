@@ -129,7 +129,7 @@ sink별·도구별로 무엇을 보장하고 무엇을 보장하지 않는지는
 | **Aquila** | SQLite 파일 하나로 된 카탈로그: 데이터셋, 스키마 이력, lineage(`arsenal dataset` 게시 포함), 계약, 태그 | `de-aquila` | preview |
 | **Augur** | 자연어 질문을 SQL로. eval 하네스 포함 | `de-augur` | experimental |
 | **Pilum** | Reverse ETL: 바뀐 레코드를 HTTP 끝점과 Slack으로, 변경당 한 번 보낸다 | `de-pilum` | experimental |
-| **Censor** | 감사: 프로젝트를 파일만 읽고 채점한다(스펙, 검증 규칙, 평문 비밀값, 스케줄, 에이전트 설정). 고칠 곳을 근거와 함께 알려 준다. `arsenal eval`로도 실행 | `de-censor` | experimental |
+| **Censor** | 감사: 프로젝트를 파일만 읽고 채점한다(스펙, 검증 규칙, 평문 비밀값, 스케줄, 에이전트 설정). `--tier standard`는 실행 상태와 데이터도 읽는다(실패 unit, 신선도, 중복 키, NULL). 파일·DuckDB·Postgres 데이터셋만 따로 평가할 수도 있다. 읽기만 하고, 고칠 곳을 근거와 함께 알려 준다. `arsenal eval`로도 실행 | `de-censor` | experimental |
 
 **stable**: 같은 minor 안에서는 YAML 필드가 추가만 되고, 상태 파일은 앞으로 마이그레이션된다.
 **beta**: 동작하고 테스트되지만 이 저장소 밖 사용 사례가 적다.

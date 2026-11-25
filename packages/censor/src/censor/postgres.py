@@ -29,6 +29,11 @@ def _dsn(target: PostgresTarget) -> str:
     return dsn
 
 
+def precheck_postgres(target: PostgresTarget) -> None:
+    split_table(target.table)
+    _dsn(target)
+
+
 def with_statement_timeout(dsn: str, seconds: float) -> str:
     """Add `statement_timeout` to a DSN (URL or keyword form); a DSN with its own options wins.
 

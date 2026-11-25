@@ -9,7 +9,7 @@ from censor.data import QueryTimeout, TargetUnreadable, open_source, profile
 from censor.derive import derive_targets
 from censor.history import scratch_dir
 from censor.limits import Scale, describe, exceeds, guidance, list_files, measure_files
-from censor.postgres import redact
+from censor.postgres import precheck_postgres, redact
 from censor.reading import DataReading
 from censor.target import AuditContext, DataTarget, FilesTarget, PostgresTarget
 
@@ -32,6 +32,17 @@ def _skipped_for_scale(
     return DataReading(label, skipped=reason, notice=notice)
 
 
+def precheck(target: DataTarget) -> None:
+    """Refuse a target that is not there before anything is written or connected."""
+    if isinstance(target, FilesTarget):
+        if not list_files(target.pattern):
+            raise FatalError(f"no file matches {target.pattern}")
+    elif isinstance(target, PostgresTarget):
+        precheck_postgres(target)
+    elif not target.path.is_file():
+        raise FatalError(f"no DuckDB file at {target.path}")
+
+
 def read_target(
     ctx: AuditContext,
     target: DataTarget,
@@ -48,6 +59,7 @@ def read_target(
         return redact(text, target) if isinstance(target, PostgresTarget) else text
 
     try:
+        precheck(target)
         if isinstance(target, FilesTarget):  # sized from `stat` before any file is opened
             scale = measure_files(list_files(target.pattern))
             if exceeds(scale) and not ctx.scan.narrowed:

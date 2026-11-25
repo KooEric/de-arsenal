@@ -176,14 +176,16 @@ pilum status dispatch.yaml           # 원장 크기, 마지막 실행, DLQ
 원장이 유일한 기억이므로 끝점을 밖에서 고치면 Pilum은 모른다. 실행 가능한 예제는
 [examples/pilum](../examples/pilum), 상세는 [packages/pilum/README.md](../packages/pilum/README.md).
 
-## 10. Censor (`de-censor`) — 프로젝트 감사 (experimental)
+## 10. Censor (`de-censor`) — 프로젝트·데이터셋 감사 (experimental)
 
-파이프라인을 실행하지 않고 프로젝트 파일만 읽어서 등급(A+~F)을 매긴다. 실패한 항목마다 근거(파일과 줄)와
+파이프라인을 실행하지 않고 프로젝트 파일을 읽어서(Standard 단계는 실행 상태와 데이터도 읽어서) 등급(A+~F)을 매긴다. 실패한 항목마다 근거(파일과 줄)와
 고칠 방법을 한 줄로 낸다. 비밀값은 종류와 줄 번호만 보여 주고 값은 출력하지 않는다.
 
 ```bash
 pip install de-censor                # de-arsenal도 함께 설치된다
 censor audit .                       # stdout: JSON 리포트, stderr: 등급 한 줄
+censor audit . --tier standard       # 실행 상태와 데이터까지 읽는다
+censor audit --files 'data/*.parquet' --key id   # 프로젝트 없이 데이터셋만
 arsenal eval .                       # 같은 명령
 censor report                        # 저장된 실행의 등급 추이
 censor compare <run_a> <run_b>       # 상태가 바뀐 체크만
@@ -196,13 +198,19 @@ censor compare <run_a> <run_b>       # 상태가 바뀐 체크만
 | 보안 | 스펙 파일의 평문 비밀값 (토큰, URL의 비밀번호, 헤더, PEM 키) |
 | 운영성 | README, 스케줄, lineage |
 | 에이전트 준비도 | CLAUDE.md, de-arsenal 플러그인, `.arsenal/` 삭제 차단, 비밀값 검사 훅 |
+| 신뢰성 (Standard) | 실패·격리된 unit, 검증이 걸러 낸 행의 비율, 실패 후에도 출력이 남아 있는가 |
+| 신선도 (Standard) | 마지막 성공 시각, `arsenal dataset` 게시 상태, 허용 나이(`--max-age-hours`) 설정 여부 |
+| 데이터 상태 (Standard) | 행 수, 키 유일성과 NULL, 컬럼별 NULL 비율, 시간 컬럼의 기간 |
 
 평문 비밀값이 있거나 스펙이 로드되지 않으면 다른 점수와 상관없이 등급이 C를 넘지 못한다. 종료 코드는
 0(실패한 체크 없음), 1(하나 이상 실패), 2(Censor가 실행되지 못함)라서 CI 게이트로 쓸 수 있다. 실행 결과는
 `.arsenal/censor/`에 JSON, Parquet, Markdown으로 남는다.
 
-지금은 파일만 읽는 Quick 단계만 있다. 실행 상태와 데이터를 읽는 Standard 단계는 아직 없다
-(`--tier standard`는 종료 코드 2). 리포트 형식은 0.x에서 바뀔 수 있다.
+Standard 단계는 읽기만 한다. 실행 상태는 `.arsenal/censor/tmp/`에 복사해서 읽고, DuckDB 파일과 Postgres는
+읽기 전용으로 붙인다. 파이프라인을 다시 실행하지 않는다. 데이터셋만 줄 때는 `--files`, `--duckdb`와
+`--table`, 또는 `--table`과 `--postgres-dsn-env`(DSN은 환경변수 이름으로만 받는다)를 쓴다. 파일 2,000개,
+5 GB, 추정 5천만 행을 넘는 데이터는 건너뛰고 `--sample 1%`, `--since <날짜>`, `--full` 중 고르라고 안내한다.
+리포트 형식은 0.x에서 필드가 추가될 수 있다.
 상세는 [packages/censor/README.md](../packages/censor/README.md).
 
 ## 11. arsenal-core — 확장 도구를 위한 신뢰성 기반

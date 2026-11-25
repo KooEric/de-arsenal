@@ -150,13 +150,11 @@ def test_tier_quick_is_the_default_and_accepted(tmp_path: Path) -> None:
     assert json.loads(result.stdout)["tier"] == "quick"
 
 
-def test_tier_standard_is_not_available_yet(tmp_path: Path) -> None:
+def test_tier_standard_runs_and_is_recorded(tmp_path: Path) -> None:
     root = production_project(tmp_path)
     result = runner.invoke(app, ["audit", str(root), "--tier", "standard"])
-    assert result.exit_code == 2
-    assert "tier standard is not available in this version" in result.stderr
-    assert result.stdout == ""
-    assert not (root / ".arsenal").exists()
+    assert result.exit_code == 0, result.output
+    assert json.loads(result.stdout)["tier"] == "standard"
 
 
 def test_unknown_tier_is_a_usage_error(tmp_path: Path) -> None:

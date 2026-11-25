@@ -135,7 +135,7 @@ and they exchange data only as Parquet files.
 | **Aquila** | Catalog in one SQLite file: datasets, schema history, lineage (including `arsenal dataset` publications), contracts, tags | `de-aquila` | preview |
 | **Augur** | Natural-language questions to SQL, with an eval harness | `de-augur` | experimental |
 | **Pilum** | Reverse ETL: send changed records to HTTP endpoints and Slack, once per change | `de-pilum` | experimental |
-| **Censor** | Audit: grades a project from its files (specs, validation rules, literal secrets, schedule, agent setup) and names what to fix. Also runs as `arsenal eval` | `de-censor` | experimental |
+| **Censor** | Audit: grades a project from its files (specs, validation rules, literal secrets, schedule, agent setup) and, with `--tier standard`, from its run state and data (failed units, freshness, duplicate keys, NULLs). Audits a bare file, DuckDB or Postgres dataset too. Read-only; names what to fix. Also runs as `arsenal eval` | `de-censor` | experimental |
 
 **stable**: YAML fields are only added within a minor series, and state files migrate
 forward. **beta**: works and is tested, but has little use outside this repo.

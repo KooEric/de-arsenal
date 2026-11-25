@@ -12,6 +12,39 @@ minor.
 
 ## [Unreleased]
 
+### Added
+
+- Censor Standard tier: `censor audit [DIR] --tier standard` also reads run state and data,
+  and scores three more dimensions. Reliability: failed or quarantined units, the share of
+  rows set aside by validation, whether output remains after a failure. Freshness: the last
+  completed unit, the `arsenal dataset` publication state, and whether a limit is set
+  (`--max-age-hours`). Data health: row count, key uniqueness and NULLs, NULL ratio per
+  column, and the period a time column covers. A pipeline that never ran is not scored.
+- Censor audits a dataset without a project: `--files GLOB`, `--duckdb FILE --table T`, or
+  `--table T --postgres-dsn-env VAR`, with `--key` and `--time-column`. The DSN is read from
+  the named variable and never printed.
+- Scale guard: data over 2,000 files, 5 GB or 50 million estimated rows is not profiled; the
+  report and stderr say how to narrow it with `--sample`, `--since` or `--full`.
+  `--memory-limit` (default 4GB) and `--timeout` (default 120 seconds per query) bound a read.
+- The report gains `sample`, `since` and `notices` (`schema_version` stays 1), and the
+  Markdown report a "Scale and sample" section.
+- `arsenal_core.errors.MissingEnvError` (a `FatalError`) for a spec that names an unset
+  environment variable.
+
+### Changed
+
+- Censor reads only: run state is read from a copy under `.arsenal/censor/tmp/`, DuckDB files
+  and Postgres are attached read-only. Nothing is written outside `.arsenal/censor/`.
+- `censor audit` exits 2 when `arsenal.yaml` cannot be read (it was a failed check, exit 1),
+  and `censor report` exits 2 for a directory that does not exist (it printed nothing, exit 0).
+- `arsenal eval --help` shows the options it forwards to `censor audit`.
+
+### Fixed
+
+- Censor: a save that fails part-way no longer leaves a `runs/<id>.parquet` without its JSON;
+  two audits of one project at the same time no longer share a temp file; a commented-out
+  `schedule` in a DAG file no longer counts as a schedule.
+
 ## [0.7.0] - 2026-11-25
 
 A 14th package, Censor (`de-censor`, experimental), audits a project from its files and
