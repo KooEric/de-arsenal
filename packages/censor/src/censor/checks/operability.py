@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-import importlib.util
+import re
 from pathlib import Path
 from typing import Final
 
@@ -24,8 +24,28 @@ _DAG_TRIGGER: Final = "schedule"  # `schedule=` and `schedule_interval=`
 _NO_SCHEDULE: Final = "no schedule found in dags/, airflow/dags/, .github/workflows/ or crontab"
 
 
-def module_available(name: str) -> bool:
-    return importlib.util.find_spec(name) is not None
+# Aquila's default catalog file (aquila.service.DEFAULT_DB), relative to the project root.
+AQUILA_CATALOG: Final = Path(".arsenal") / "aquila.db"
+_DEPENDENCY_FILES: Final = ("pyproject.toml", "requirements*.txt")
+_AQUILA_DEPENDENCY: Final = re.compile(
+    r"\bde-aquila\b|\bde-arsenal\[[^\]]*\bcatalog\b", re.IGNORECASE
+)
+
+
+def _lineage_evidence(root: Path) -> str | None:
+    """The project's own sign of a catalog: never the auditor's installed packages."""
+    if (root / AQUILA_CATALOG).is_file():
+        return f"aquila catalog at {AQUILA_CATALOG.as_posix()}"
+    for pattern in _DEPENDENCY_FILES:
+        for path in sorted(root.glob(pattern)):
+            try:
+                text = path.read_text(encoding="utf-8")
+            except (OSError, UnicodeDecodeError):
+                continue
+            lines = (ln for ln in text.splitlines() if not ln.lstrip().startswith("#"))
+            if any(_AQUILA_DEPENDENCY.search(ln) for ln in lines):
+                return f"{path.name} depends on aquila"
+    return None
 
 
 def _r(
@@ -67,7 +87,7 @@ def _schedule_file(root: Path) -> Path | None:
 def check_operability(ctx: ProjectContext) -> list[CheckResult]:
     has_readme = (ctx.root / "README.md").is_file()
     schedule = _schedule_file(ctx.root)
-    has_lineage = module_available("aquila")
+    lineage = _lineage_evidence(ctx.root)
     return [
         _r(
             "operability.readme",
@@ -88,9 +108,9 @@ def check_operability(ctx: ProjectContext) -> list[CheckResult]:
         _r(
             "operability.lineage",
             1,
-            Status.PASS if has_lineage else Status.WARN,
+            Status.PASS if lineage else Status.WARN,
             "aquila",
-            "aquila is installed" if has_lineage else "aquila is not installed: no lineage",
+            lineage or "no aquila catalog or dependency in the project: no lineage",
             "pip install 'de-arsenal[catalog]', then `aquila scan`",
         ),
     ]

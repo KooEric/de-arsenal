@@ -75,6 +75,7 @@ SETTINGS = _json.dumps(
     }
 )
 SECRET_HOOK = "# scan *.yaml and *.yml for secrets\n"
+PYPROJECT = '[project]\nname = "demo"\ndependencies = ["de-arsenal[catalog]>=0.6,<0.7"]\n'
 
 
 def minimal_project(root: Path) -> Path:
@@ -96,5 +97,10 @@ def robust_project(root: Path) -> Path:
 def production_project(root: Path) -> Path:
     robust_project(root)
     return write_project(
-        root, {".claude/settings.json": SETTINGS, ".claude/hooks/secret-scan.sh": SECRET_HOOK}
+        root,
+        {
+            ".claude/settings.json": SETTINGS,
+            ".claude/hooks/secret-scan.sh": SECRET_HOOK,
+            "pyproject.toml": PYPROJECT,
+        },
     )

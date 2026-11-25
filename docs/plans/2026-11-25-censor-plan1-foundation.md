@@ -1360,7 +1360,7 @@ Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>"
 
 **Interfaces:**
 - Consumes: `ProjectContext.root`.
-- Produces: `check_operability(ctx) -> list[CheckResult]` with ids `operability.readme` (w1), `operability.schedule` (w2), `operability.lineage` (w1); `module_available(name: str) -> bool` (monkeypatched in tests); constant `SCHEDULE_GLOBS: tuple[str, ...]`.
+- Produces: `check_operability(ctx) -> list[CheckResult]` with ids `operability.readme` (w1), `operability.schedule` (w2), `operability.lineage` (w1; PASS on project evidence only: `.arsenal/aquila.db`, or `de-aquila` / `de-arsenal[catalog]` in a root `pyproject.toml` or `requirements*.txt`. Final-review fix 4 replaced the original `module_available` seam, which graded the auditor's environment); constant `SCHEDULE_GLOBS: tuple[str, ...]`.
 
 - [ ] **Step 1: Write the failing tests** `packages/censor/tests/test_operability.py`
 
@@ -1712,6 +1712,9 @@ SETTINGS = _json.dumps(
     }
 )
 SECRET_HOOK = "# scan *.yaml and *.yml for secrets\n"
+# lineage evidence: the project declares Aquila (operability.lineage reads the project, not the
+# auditor's environment)
+PYPROJECT = '[project]\nname = "demo"\ndependencies = ["de-arsenal[catalog]>=0.6,<0.7"]\n'
 
 
 def minimal_project(root: Path) -> Path:
@@ -1733,7 +1736,12 @@ def robust_project(root: Path) -> Path:
 def production_project(root: Path) -> Path:
     robust_project(root)
     return write_project(
-        root, {".claude/settings.json": SETTINGS, ".claude/hooks/secret-scan.sh": SECRET_HOOK}
+        root,
+        {
+            ".claude/settings.json": SETTINGS,
+            ".claude/hooks/secret-scan.sh": SECRET_HOOK,
+            "pyproject.toml": PYPROJECT,
+        },
     )
 ```
 
