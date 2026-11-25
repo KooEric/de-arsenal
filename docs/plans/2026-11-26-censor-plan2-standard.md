@@ -160,6 +160,41 @@
 
 ## 조사 결과 (작업 0에서 채운다)
 
-- StateStore 열기의 쓰기 여부:
-- Postgres `TABLESAMPLE` pushdown:
-- Postgres 규모 추정 쿼리:
+2026-11-26 확인. 환경: SQLite 3.51.0, DuckDB 1.5.4(postgres 확장), `postgres:16-alpine` 컨테이너.
+
+- **StateStore 열기의 쓰기 여부: 쓴다. `pipeline_status`를 그대로 쓸 수 없다.**
+  - 최신 스키마의 DB를 열고 `counts`·`pipeline_metrics`만 읽어도 `<name>.db-shm`의 내용과 수정 시각이
+    바뀐다(본체 `.db`는 그대로). StateStore는 열 때마다 `PRAGMA journal_mode=WAL`과 `apply_migrations`를
+    실행하고 부모 폴더를 `mkdir`한다.
+  - 옛 스키마(v1)의 DB를 열면 본체가 v3으로 마이그레이션되고 `backups/<name>-v1-<시각>.sqlite`가 새로
+    생긴다. 평가 대상에 대한 명백한 쓰기다.
+  - SQLite를 `mode=ro`로 직접 열어도 완전하지 않다. `-shm`의 잠금 표시가 바뀌고(내용 해시가 달라짐),
+    `-wal`·`-shm`이 없는 WAL DB는 폴더가 쓰기 가능해도 `unable to open database file`로 실패한다.
+  - `immutable=1`은 아무것도 건드리지 않지만 WAL에만 있는(체크포인트 전) 커밋을 보지 못한다. 실행 중인
+    파이프라인 옆에서 unit 2개 중 1개만 보였다.
+  - **작업 2의 방식**: `<name>.db`와 `<name>.db-wal`을 `<base>/.arsenal/censor/tmp/`로 복사하고 복사본을
+    `StateStore`로 연다. 원본 폴더는 해시·수정 시각·파일 목록이 모두 그대로였고, 복사본에서 WAL의 커밋까지
+    보였다. 마이그레이션이 일어나도 복사본에만 적용된다. `pipeline_status`는 경로를 바꿀 수 없으므로 그
+    구성 요소(`StateStore.counts`, `pipeline_metrics`, `lease`, `pugio.dlq.split_rejected_rows`)를 직접 쓴다.
+    쓰는 쪽이 체크포인트하는 순간에 복사하면 복사본이 깨질 수 있으므로 `sqlite3.Error`는 warn("상태를
+    읽는 중 다른 실행이 쓰고 있음")으로 처리한다. 복사본은 읽은 뒤 지운다.
+- **Postgres `TABLESAMPLE` pushdown: 된다. `--sample`을 Postgres에서도 지원한다.**
+  - `postgres_query('src', 'SELECT * FROM t TABLESAMPLE SYSTEM (10)')`가 `READ_ONLY` ATTACH에서 서버에서
+    실행된다(200,001행 중 19,939행). `BERNOULLI`도 된다.
+  - `REPEATABLE (seed)`를 붙이면 두 번 실행한 결과가 같다(행 수와 합이 일치). 등급의 결정성을 위해 고정
+    seed를 쓴다.
+  - DuckDB 쪽 문법(`FROM src.public.t TABLESAMPLE SYSTEM (10)`)은 파서 오류다. 반드시 `postgres_query`로 보낸다.
+  - `--since` 조건(`ts >= ...`)은 일반 스캔에서도 `POSTGRES_SCAN`의 Filters로 내려간다(EXPLAIN으로 확인).
+  - `READ_ONLY`는 실제로 쓰기를 막는다: DuckDB `INSERT`는 거부되고, `postgres_execute`의 `DELETE`는 서버가
+    `cannot execute DELETE in a read-only transaction`으로 거부한다. 시험 전후 행 수가 같았다.
+- **Postgres 규모 추정 쿼리: 같은 연결에서 읽힌다.**
+  - `SELECT c.reltuples::bigint, pg_total_relation_size(c.oid) FROM pg_class c WHERE c.oid = '<schema.table>'::regclass`.
+  - 한 번도 `ANALYZE`하지 않은 테이블은 `reltuples = -1`이다. 이때는 행 수 추정이 없으므로
+    `pg_total_relation_size`를 `MAX_BYTES`와 비교한다(두 값 중 하나라도 기준을 넘으면 건너뛴다).
+  - `to_regclass('<schema.table>')`가 NULL이면 테이블이 없는 것이다. 스캔 전에 이것으로 가른다.
+- **추가로 확인한 것: `statement_timeout`은 DSN으로 넘겨야 한다.**
+  - `CALL postgres_execute('src', 'SET statement_timeout = ...')`는 적용되지 않는다(이후 `pg_sleep(3)`이 3초를
+    다 썼다). 확장이 쿼리마다 트랜잭션을 새로 열기 때문으로 보인다.
+  - 연결 문자열에 `options=-c statement_timeout=<ms>`를 붙이면 적용된다(200ms 설정에서 0.21초 만에
+    `canceling statement due to statement timeout`, DuckDB `IOException`). 작업 5는 이 방식을 쓰고, 이 오류
+    문구를 시간 초과(na)로 분류한다.
