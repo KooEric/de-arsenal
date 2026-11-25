@@ -343,7 +343,9 @@ def eval_(ctx: typer.Context) -> None:
     """Grade this project with Censor. Same arguments as `censor audit`."""
     try:
         from censor.cli import run_cli
-    except ImportError:
+    except ModuleNotFoundError as e:
+        if e.name not in ("censor", "censor.cli"):
+            raise  # Censor is installed but broken: show the real error, not an install hint
         typer.echo(INSTALL_HINT, err=True)
         raise typer.Exit(2) from None
     code = run_cli(["audit", *ctx.args])

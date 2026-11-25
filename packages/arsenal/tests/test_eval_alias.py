@@ -1,5 +1,5 @@
+import builtins
 import json
-import sys
 from pathlib import Path
 
 import pytest
@@ -38,10 +38,42 @@ def test_arsenal_eval_matches_censor_audit(tmp_path: Path) -> None:
     assert _without_run_id(via_arsenal.stdout) == _without_run_id(via_censor.stdout)
 
 
+def _fail_import(monkeypatch: pytest.MonkeyPatch, missing: str) -> None:
+    real_import = builtins.__import__
+
+    def fake_import(name: str, *args: object, **kwargs: object) -> object:
+        if name == "censor.cli":
+            raise ModuleNotFoundError(f"No module named {missing!r}", name=missing)
+        return real_import(name, *args, **kwargs)  # pyright: ignore[reportArgumentType]
+
+    monkeypatch.setattr(builtins, "__import__", fake_import)
+
+
+@pytest.mark.parametrize("missing", ["censor", "censor.cli"])
 def test_arsenal_eval_without_censor_prints_install_hint(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, missing: str
 ) -> None:
-    monkeypatch.setitem(sys.modules, "censor.cli", None)
+    _fail_import(monkeypatch, missing)
     result = runner.invoke(app, ["eval", str(tmp_path)])
     assert result.exit_code == 2
     assert "de-censor" in result.stderr
+
+
+def test_arsenal_eval_with_a_broken_censor_install_does_not_hide_the_error(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    _fail_import(monkeypatch, "pyarrow")
+    result = runner.invoke(app, ["eval", str(tmp_path)])
+    assert isinstance(result.exception, ModuleNotFoundError)
+    assert result.exception.name == "pyarrow"
+    assert "de-censor" not in result.stderr
+
+
+def test_arsenal_eval_passes_tier_through(tmp_path: Path) -> None:
+    root = _project(tmp_path / "p")
+    quick = runner.invoke(app, ["eval", str(root), "--tier", "quick", "--json-only"])
+    assert quick.exit_code == 1
+    assert json.loads(quick.stdout)["tier"] == "quick"
+    standard = runner.invoke(app, ["eval", str(root), "--tier", "standard"])
+    assert standard.exit_code == 2
+    assert "not available yet" in standard.stderr
