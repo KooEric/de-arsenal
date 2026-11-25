@@ -1704,7 +1704,7 @@ contract:
     - { name: id, type: int64, nullable: false }
 """
 CLAUDE_MD = "Run `arsenal check` before and `arsenal run` after edits.\n"
-DAG = "BashOperator(task_id='run', bash_command='arsenal run')\n"
+DAG = "DAG('daily', schedule='@daily')\nBashOperator(task_id='run', bash_command='arsenal run')\n"
 SETTINGS = _json.dumps(
     {
         "enabledPlugins": {"de-arsenal@de-arsenal": True},

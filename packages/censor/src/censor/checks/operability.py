@@ -18,6 +18,9 @@ SCHEDULE_GLOBS: Final[tuple[str, ...]] = (
     "crontab",
 )
 _SCHEDULE_MARKERS: Final = ("arsenal", "pugio", "gladius")
+# A file is a schedule only if it names the project's tools AND declares a trigger.
+_WORKFLOW_TRIGGER: Final = "schedule:"  # GitHub `on: schedule: - cron:`
+_DAG_TRIGGER: Final = "schedule"  # `schedule=` and `schedule_interval=`
 _NO_SCHEDULE: Final = "no schedule found in dags/, airflow/dags/, .github/workflows/ or crontab"
 
 
@@ -39,6 +42,16 @@ def _r(
     )
 
 
+def _declares_schedule(path: Path, text: str) -> bool:
+    if path.name == "crontab":
+        lines = (ln for ln in text.splitlines() if not ln.lstrip().startswith("#"))
+        return any(m in ln for ln in lines for m in _SCHEDULE_MARKERS)
+    if not any(marker in text for marker in _SCHEDULE_MARKERS):
+        return False
+    trigger = _DAG_TRIGGER if path.suffix == ".py" else _WORKFLOW_TRIGGER
+    return trigger in text
+
+
 def _schedule_file(root: Path) -> Path | None:
     for pattern in SCHEDULE_GLOBS:
         for path in sorted(root.glob(pattern)):
@@ -46,7 +59,7 @@ def _schedule_file(root: Path) -> Path | None:
                 text = path.read_text(encoding="utf-8").lower()
             except (OSError, UnicodeDecodeError):
                 continue
-            if any(marker in text for marker in _SCHEDULE_MARKERS):
+            if _declares_schedule(path, text):
                 return path
     return None
 

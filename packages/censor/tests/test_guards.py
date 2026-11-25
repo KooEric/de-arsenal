@@ -55,3 +55,7 @@ def test_unparseable_spec_is_skipped(tmp_path: Path) -> None:
     bare_project(tmp_path)
     (tmp_path / "collect.yaml").write_text(": : :\n", encoding="utf-8")
     assert check_guards(load_context(tmp_path)) == []
+
+
+def test_empty_validate_mapping_counts_as_no_validate_block(tmp_path: Path) -> None:
+    assert _statuses(tmp_path, COLLECT_BARE + "validate: {}\n") == _statuses(tmp_path, COLLECT_BARE)

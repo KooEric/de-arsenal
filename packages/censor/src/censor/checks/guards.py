@@ -34,6 +34,8 @@ def _rules(validate: dict[str, Any]) -> list[dict[str, Any]]:
 def _pipeline_guards(spec: SpecFile, raw: dict[str, Any]) -> list[CheckResult]:
     validate_raw: object = raw.get("validate")
     validate = cast(dict[str, Any], validate_raw) if isinstance(validate_raw, dict) else None
+    if not validate:  # an empty or non-mapping block guards nothing
+        validate = None
     results = [
         _r(
             "validate",

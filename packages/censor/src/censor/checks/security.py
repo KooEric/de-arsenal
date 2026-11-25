@@ -13,12 +13,15 @@ _TOKEN_PATTERNS: Final[tuple[tuple[str, re.Pattern[str]], ...]] = (
     ("AWS access key", re.compile(r"\bAKIA[0-9A-Z]{16}\b")),
     ("GitHub token", re.compile(r"\b(?:ghp_[A-Za-z0-9]{36}|github_pat_[A-Za-z0-9_]{20,})\b")),
     ("Slack token", re.compile(r"\bxox[baprs]-[A-Za-z0-9-]{10,}\b")),
-    ("API secret key", re.compile(r"\bsk-[A-Za-z0-9_-]{20,}\b")),
+    ("API secret key", re.compile(r"(?<![\w/.-])sk-[A-Za-z0-9_-]{20,}\b")),
 )
 _URL_CREDENTIALS: Final = re.compile(r"[a-z][a-z0-9+.-]*://[^\s/:@]+:[^\s/@]+@", re.IGNORECASE)
 _SECRET_KEY: Final = re.compile(
     r"^\s*[\"']?(authorization|x-api-key|api[_-]?key|token|password|secret)[\"']?\s*:\s*(.*)$",
     re.IGNORECASE,
+)
+_NON_SECRET_SCALARS: Final = frozenset(
+    {"null", "~", "true", "false", "yes", "no", "on", "off", "|", ">", "|-", ">-", "|+", ">+"}
 )
 _FIX: Final = (
     "move the value to an environment variable (`dsn_env`, `token_env`, `${VAR}`) and rotate it"
@@ -27,18 +30,18 @@ _FIX: Final = (
 
 def _literal_value(value: str) -> bool:
     value = value.split(" #", 1)[0].strip().strip("\"'").strip()
-    return bool(value) and _ENV_REF not in value
+    return bool(value) and _ENV_REF not in value and value.lower() not in _NON_SECRET_SCALARS
 
 
 def _line_secret(line: str) -> str | None:
-    if line.lstrip().startswith("#"):
-        return None
     for kind, pattern in _TOKEN_PATTERNS:
         if pattern.search(line):
             return kind
     match = _URL_CREDENTIALS.search(line)
     if match and _ENV_REF not in match.group(0):
         return "credentials in URL"
+    if line.lstrip().startswith("#"):
+        return None  # only the key-name heuristic skips comments: `# password: x` is prose
     key = _SECRET_KEY.match(line)
     if key and _literal_value(key.group(2)):
         return f"literal {key.group(1).lower()}"

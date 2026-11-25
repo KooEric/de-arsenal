@@ -37,7 +37,9 @@ def _settings(root: Path) -> tuple[dict[str, Any], str | None]:
         return {}, None
     try:
         loaded: object = json.loads(path.read_text(encoding="utf-8"))
-    except (OSError, UnicodeDecodeError, json.JSONDecodeError):
+    except OSError:
+        return {}, ".claude/settings.json is unreadable"
+    except (UnicodeDecodeError, json.JSONDecodeError):
         return {}, ".claude/settings.json is not valid JSON"
     return (cast(dict[str, Any], loaded), None) if isinstance(loaded, dict) else ({}, None)
 
@@ -47,7 +49,10 @@ def _claude_md(root: Path) -> CheckResult:
     fix = "add a CLAUDE.md that says to run `arsenal check` before and `arsenal run` after edits"
     if not path.is_file():
         return _r("agent.claude_md", 2, Status.FAIL, "CLAUDE.md", "no CLAUDE.md", fix)
-    text = path.read_text(encoding="utf-8", errors="replace")
+    try:
+        text = path.read_text(encoding="utf-8", errors="replace")
+    except OSError:
+        return _r("agent.claude_md", 2, Status.WARN, "CLAUDE.md", "CLAUDE.md is unreadable", fix)
     missing = [c for c in REQUIRED_COMMANDS if c not in text]
     if missing:
         evidence = "CLAUDE.md does not mention " + ", ".join(f"`{c}`" for c in missing)
@@ -57,13 +62,16 @@ def _claude_md(root: Path) -> CheckResult:
 
 def _plugin(settings: dict[str, Any], problem: str | None) -> CheckResult:
     enabled: object = settings.get("enabledPlugins", {})
-    names = list(cast(dict[str, object], enabled)) if isinstance(enabled, dict) else []
-    ok = any(name.startswith(PLUGIN_PREFIX) for name in names)
-    evidence = problem or (
-        "de-arsenal plugin enabled for this project"
-        if ok
-        else "de-arsenal plugin not enabled in .claude/settings.json"
-    )
+    entries = cast(dict[str, object], enabled) if isinstance(enabled, dict) else {}
+    named = {name: value for name, value in entries.items() if name.startswith(PLUGIN_PREFIX)}
+    ok = any(value is True for value in named.values())
+    if ok:
+        detail = "de-arsenal plugin enabled for this project"
+    elif named:
+        detail = "de-arsenal plugin is disabled in .claude/settings.json"
+    else:
+        detail = "de-arsenal plugin not enabled in .claude/settings.json"
+    evidence = problem or detail
     return _r(
         "agent.plugin",
         1,
@@ -100,7 +108,12 @@ def _secret_hook(root: Path) -> CheckResult:
     hooks = root / ".claude" / "hooks"
     found = False
     for path in sorted(hooks.glob("*")) if hooks.is_dir() else []:
-        text = path.read_text(encoding="utf-8", errors="replace").lower() if path.is_file() else ""
+        try:
+            text = (
+                path.read_text(encoding="utf-8", errors="replace").lower() if path.is_file() else ""
+            )
+        except OSError:
+            continue
         if "secret" in text and ("yaml" in text or "yml" in text):
             found = True
             break
