@@ -28,7 +28,7 @@ from pydantic import BaseModel, ConfigDict
 
 from arsenal_core.errors import FatalError
 from augur.catalog import Catalog
-from augur.generate import Trace, ask, execute
+from augur.generate import Trace, allowed_dirs, ask, execute
 from augur.llm import Provider
 
 FAILURE_MODES = (
@@ -135,7 +135,7 @@ def run_case(
     case: EvalCase, catalog: Catalog, provider: Provider, *, top_k: int
 ) -> tuple[EvalResult, Trace]:
     try:
-        _, golden_rows = execute(case.golden_sql)
+        _, golden_rows = execute(case.golden_sql, dirs=allowed_dirs(catalog))
     except duckdb.Error as e:
         raise FatalError(f"golden SQL failed for {case.id}: {e}") from e
     trace, generated_rows = ask(case.question, catalog, provider, top_k=top_k)
