@@ -47,7 +47,7 @@ def test_list_and_diff(tmp_path: Path) -> None:
     production_project(root)
     second = audit_project(root, now=T2)
     save_report(second, root, markdown="")
-    assert [r.run_id for r in list_reports(root)] == [first.run_id, second.run_id]
+    assert [r.run_id for r in list_reports(root).reports] == [first.run_id, second.run_id]
     changes = {c.id: c for c in diff_reports(first, second)}
     assert changes["guards.validate:collect.yaml"].before == Status.FAIL
     assert changes["guards.validate:collect.yaml"].after == Status.PASS
@@ -57,3 +57,48 @@ def test_list_and_diff(tmp_path: Path) -> None:
 def test_load_missing_run_is_fatal(tmp_path: Path) -> None:
     with pytest.raises(FatalError, match="no saved run"):
         load_report(tmp_path, "20260101-000000-quick")
+
+
+def test_load_corrupt_run_is_fatal_not_validation_error(tmp_path: Path) -> None:
+    runs = censor_dir(tmp_path) / "runs"
+    runs.mkdir(parents=True)
+    (runs / "bad.json").write_text("{oops")
+    with pytest.raises(FatalError, match=r"saved run bad is unreadable"):
+        load_report(tmp_path, "bad")
+
+
+@pytest.mark.parametrize("run_id", ["../x", "a/b", "a\\b", ".hidden", ""])
+def test_load_rejects_run_id_that_is_not_a_plain_stem(tmp_path: Path, run_id: str) -> None:
+    with pytest.raises(FatalError, match="invalid run id"):
+        load_report(tmp_path, run_id)
+
+
+def test_list_skips_corrupt_files_and_reports_them(tmp_path: Path) -> None:
+    root = minimal_project(tmp_path)
+    good = audit_project(root, now=T1)
+    save_report(good, root, markdown="")
+    bad = censor_dir(root) / "runs" / "bad.json"
+    bad.write_text("{oops")
+    listing = list_reports(root)
+    assert [r.run_id for r in listing.reports] == [good.run_id]
+    assert listing.skipped == [bad]
+
+
+def test_list_without_history_dir_is_empty(tmp_path: Path) -> None:
+    listing = list_reports(tmp_path)
+    assert listing.reports == [] and listing.skipped == []
+
+
+def test_failed_parquet_write_leaves_no_json_and_no_temp_files(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    def boom(*_args: object, **_kwargs: object) -> None:
+        raise pa.ArrowInvalid("boom")
+
+    monkeypatch.setattr("censor.history.pq.write_table", boom)
+    root = minimal_project(tmp_path)
+    report = audit_project(root, now=T1)
+    with pytest.raises(OSError, match="boom"):
+        save_report(report, root, markdown="# r\n")
+    runs = censor_dir(root) / "runs"
+    assert list(runs.iterdir()) == []

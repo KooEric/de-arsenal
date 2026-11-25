@@ -2,6 +2,8 @@ import json
 from datetime import UTC, datetime
 from pathlib import Path
 
+import pyarrow as pa
+import pytest
 from _projects import minimal_project, production_project
 from typer.testing import CliRunner
 
@@ -68,3 +70,60 @@ def test_run_cli_returns_exit_code(tmp_path: Path) -> None:
     assert run_cli(["audit", str(production_project(tmp_path)), "--json-only"]) == 0
     assert run_cli(["audit", str(tmp_path / "missing")]) == 2
     assert run_cli(["no-such-command"]) == 2
+
+
+def _saved_run(root: Path) -> str:
+    first = audit_project(root, now=datetime(2026, 11, 25, 9, 0, tzinfo=UTC))
+    save_report(first, root, markdown="")
+    return first.run_id
+
+
+def test_report_skips_corrupt_run_with_warning(tmp_path: Path) -> None:
+    root = minimal_project(tmp_path)
+    run_id = _saved_run(root)
+    (root / ".arsenal" / "censor" / "runs" / "bad.json").write_text("{oops")
+    result = runner.invoke(app, ["report", str(root)])
+    assert result.exit_code == 0, result.output
+    assert run_id in result.stdout
+    assert "bad.json" not in result.stdout
+    assert "bad.json" in result.stderr
+
+
+def test_compare_with_corrupt_run_exits_2_without_traceback(tmp_path: Path) -> None:
+    root = minimal_project(tmp_path)
+    run_id = _saved_run(root)
+    (root / ".arsenal" / "censor" / "runs" / "bad.json").write_text("{oops")
+    result = runner.invoke(app, ["compare", run_id, "bad", "--project", str(root)])
+    assert result.exit_code == 2
+    assert "unreadable" in result.stderr
+    assert result.exception is None or isinstance(result.exception, SystemExit)
+
+
+def test_compare_rejects_path_traversal_run_id(tmp_path: Path) -> None:
+    result = runner.invoke(app, ["compare", "../x", "y", "--project", str(tmp_path)])
+    assert result.exit_code == 2
+    assert "invalid run id" in result.stderr
+
+
+def test_parquet_failure_exits_2_with_json_and_no_partial_run(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    def boom(*_args: object, **_kwargs: object) -> None:
+        raise pa.ArrowInvalid("boom")
+
+    monkeypatch.setattr("censor.history.pq.write_table", boom)
+    root = minimal_project(tmp_path)
+    result = runner.invoke(app, ["audit", str(root), "--json-only"])
+    assert result.exit_code == 2
+    assert json.loads(result.stdout)["run_id"]
+    assert "could not save" in result.stderr
+    runs = root / ".arsenal" / "censor" / "runs"
+    assert list(runs.iterdir()) == []
+
+
+def test_report_and_compare_without_history_dir(tmp_path: Path) -> None:
+    listing = runner.invoke(app, ["report", str(tmp_path)])
+    assert listing.exit_code == 0
+    assert listing.stdout == ""
+    diff = runner.invoke(app, ["compare", "a", "b", "--project", str(tmp_path)])
+    assert diff.exit_code == 2

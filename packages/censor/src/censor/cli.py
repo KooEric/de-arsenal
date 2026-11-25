@@ -54,7 +54,10 @@ def audit(
 @app.command()
 def report(project: Annotated[Path, typer.Argument()] = Path(".")) -> None:
     """List saved runs: run id, grade, score."""
-    for saved in list_reports(project.absolute()):
+    listing = list_reports(project.absolute())
+    for path in listing.skipped:
+        _err(f"censor: skipped unreadable saved run {path}")
+    for saved in listing.reports:
         score = "-" if saved.score is None else f"{saved.score:.1f}"
         typer.echo(f"{saved.run_id}\t{saved.grade or '-'}\t{score}")
 
