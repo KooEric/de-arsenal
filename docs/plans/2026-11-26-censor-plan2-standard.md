@@ -4,7 +4,7 @@
 > 적은 상세 계획이 아니다. 각 작업을 시작하기 전에 "읽을 것"의 파일을 먼저 읽고, 작업마다 테스트를 먼저
 > 쓴다(TDD). 작업 0은 나머지 작업의 전제를 확인하는 조사이므로 반드시 먼저 한다.
 
-- 상태: 계획만 있음, 구현 전 (2026-11-26)
+- 상태: 구현됨 (2026-11-26, 브랜치 `feat/censor-standard`). 상세 계획: [2026-11-26-censor-plan2-detail.md](2026-11-26-censor-plan2-detail.md). 기본 tier 변경(작업 6)은 사용자 결정 대기
 - 선행: Plan 1 완료, **v0.7.0 배포됨** (14개 패키지, `de-censor` 포함). `main` = `c3ee7e2`.
 - 설계 스펙: [2026-11-25-censor-design.md](2026-11-25-censor-design.md) §3(차원), §6(규모 보호), §8(오류), §9(테스트)
 - Plan 1 상세 계획(코드 스타일·테스트 방식의 본보기): [2026-11-25-censor-plan1-foundation.md](2026-11-25-censor-plan1-foundation.md)
@@ -91,6 +91,9 @@
 - 프로젝트 대상에서는 스펙에서 대상을 유도한다: sink 경로와 `merge_key`, transform의 `output`. 유도할 수 없으면 na.
 - 프로파일링 SQL은 DuckDB 하나로 쓴다(파일은 `read_parquet`/`read_csv`, DuckDB 파일은 읽기 전용 연결).
 - NULL 비율의 warn/fail 기준값은 이름 있는 상수로 둔다. 값은 구현하면서 정하고 이 문서에 적는다.
+  - 정한 값(`checks/data_health.py`): `NULL_WARN_RATIO = 0.5`(컬럼의 절반 이상이 NULL이면 warn),
+    `NULL_FAIL_RATIO = 1.0`(값이 하나도 없는 컬럼은 fail). 키 컬럼은 따로 본다(NULL이 하나라도 있으면 fail).
+  - 신뢰성의 DLQ 기준(`checks/reliability.py`): `DLQ_FAIL_RATIO = 0.05`. 걸러진 행이 있으면 warn, 5%를 넘으면 fail.
 
 ### 작업 4: 규모 보호 (스펙 §6 그대로)
 
