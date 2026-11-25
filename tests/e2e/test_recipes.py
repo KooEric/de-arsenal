@@ -231,3 +231,39 @@ def test_csv_cleanup_recipe_passes_censor_correctness(tmp_path: Path) -> None:
     assert correctness and all(c["status"] == "pass" for c in correctness)
     # the recipe ships without a validate block, so guards fail and the exit code says so
     assert result.exit_code == 1
+
+
+def test_csv_cleanup_recipe_standard_audit_scores_state_and_data(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """init -> run -> `censor audit . --tier standard`: the three Standard dimensions score."""
+    import hashlib
+
+    from censor.cli import app as censor_app
+
+    dest = tmp_path / "csv-proj"
+    assert runner.invoke(app, ["init", "csv-cleanup", "--dest", str(dest)]).exit_code == 0
+    monkeypatch.chdir(dest)  # state and data paths in the recipe are relative to the project
+    run_result = runner.invoke(app, ["run"])
+    assert run_result.exit_code == 0, run_result.output
+
+    def snapshot() -> dict[str, str]:
+        return {
+            str(p.relative_to(dest)): hashlib.sha256(p.read_bytes()).hexdigest()
+            for p in sorted(dest.rglob("*"))
+            if p.is_file() and ".arsenal/censor" not in p.as_posix()
+        }
+
+    before = snapshot()
+    result = runner.invoke(censor_app, ["audit", ".", "--tier", "standard", "--json-only"])
+    report = json.loads(result.stdout)
+    assert report["tier"] == "standard"
+    scores = {d["dimension"]: d["score"] for d in report["dimensions"]}
+    assert scores["reliability"] == 10.0
+    assert scores["freshness"] is not None and scores["data_health"] is not None
+    statuses = {c["id"]: c["status"] for c in report["checks"]}
+    assert statuses["reliability.failed_units:collect.yaml"] == "pass"
+    assert statuses["freshness.last_success:collect.yaml"] == "pass"
+    assert statuses["data_health.rows:transform.yaml"] == "pass"
+    assert statuses["data_health.key_unique:transform.yaml"] == "pass"  # dedup: [id]
+    assert snapshot() == before  # the audit wrote nothing outside .arsenal/censor/
