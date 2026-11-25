@@ -12,6 +12,17 @@ minor.
 
 ## [Unreleased]
 
+### Security
+
+- Augur: the read-only guard no longer trusts the first word of the generated SQL.
+  `is_select()` now parses with DuckDB and accepts exactly one SELECT statement, so
+  `-- comment` + `COPY`, `SELECT 1; COPY ...`, `EXPLAIN ANALYZE COPY ...` and comment +
+  `ATTACH` are rejected as `NON_SELECT` (all four wrote files in 0.6.16). Generated and
+  golden SQL now run on a connection limited to the catalog's folders
+  (`allowed_directories`, `enable_external_access=false`, locked configuration, no
+  extension auto-install), so files outside the lake and `https://` paths fail with a
+  Permission Error. `de-augur` now requires `duckdb>=1.3`.
+
 ## [0.6.16] - 2026-11-25
 
 Augur works with Claude 5.x models (0.6.15 sent `temperature`, which they reject
