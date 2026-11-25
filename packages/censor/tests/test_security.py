@@ -84,3 +84,72 @@ def test_check_security_fails_as_blocker_without_leaking_the_value(tmp_path: Pat
     assert SECRET_TOKEN not in bad.evidence
     assert bad.evidence.count("GitHub token") == 2
     assert results["transform.yaml"].status == Status.PASS
+
+
+@pytest.mark.parametrize(
+    ("text", "kind"),
+    [
+        ("headers: { Authorization: Bearer abc123def }\n", "literal authorization"),
+        ('headers: {"X-Api-Key": "abc"}\n', "literal x-api-key"),
+        ("options: {api_key: x}\n", "literal api_key"),
+        ("users:\n  - password: x\n", "literal password"),
+        ("client_secret: abc\n", "literal client_secret"),
+        ("access_token: abc\n", "literal access_token"),
+        ("api_token: abc\n", "literal api_token"),
+        ("passwd: abc\n", "literal passwd"),
+        ("url: https://h/x?api_key=abc123\n", "secret in query string"),
+        ("key: |\n  -----BEGIN RSA PRIVATE KEY-----\n  MIIB\n", "private key"),
+        ('dsn: "host=h password=pw"\n', "password in DSN"),
+        ("dsn: postgresql://${U}:literalpw@h/db\n", "credentials in URL"),
+        ("note: '-----BEGIN PRIVATE KEY-----'\n", "private key"),
+        ("# -----BEGIN OPENSSH PRIVATE KEY-----\n", "private key"),
+    ],
+)
+def test_detects_secret_shapes_the_line_scan_missed(text: str, kind: str) -> None:
+    found = find_secrets(text)
+    assert [k for _, k in found] == [kind]
+
+
+def test_secret_line_number_points_at_the_value() -> None:
+    text = "name: x\nsource:\n  headers:\n    - {Authorization: Bearer abc}\n"
+    assert find_secrets(text) == [(4, "literal authorization")]
+
+
+def test_block_scalar_secret_reports_the_line_inside_the_block() -> None:
+    text = "name: x\nkey: |\n  line one\n  -----BEGIN EC PRIVATE KEY-----\n"
+    assert find_secrets(text) == [(4, "private key")]
+
+
+@pytest.mark.parametrize(
+    "text",
+    [
+        "password: 'true'\n",
+        'password: "null"\n',
+        "password: 'No'\n",
+        'token: ""\n',
+        "headers: {Authorization: 'Bearer ${TOKEN}'}\n",
+        "url: https://h/x?api_key=${KEY}\n",
+        "url: https://h/x?page=2&limit=10\n",
+        'dsn: "host=h password=${PG_PASSWORD}"\n',
+        "dsn: postgresql://${U}:${P}@h/db\n",
+        "users:\n  - password_env: PG_PASSWORD\n",
+        "auth: {token_url: 'https://a/token', client_id: abc}\n",
+        "keys:\n  - id\n  - password\n",
+    ],
+)
+def test_ignores_quoted_non_secret_scalars_and_env_refs(text: str) -> None:
+    assert find_secrets(text) == []
+
+
+def test_unparseable_yaml_falls_back_to_line_scan() -> None:
+    text = "name: [unclosed\npassword: hunter2\n"
+    assert find_secrets(text) == [(2, "literal password")]
+
+
+def test_multiple_secrets_are_sorted_by_line() -> None:
+    text = "a: 1\npassword: x\n# AKIAABCDEFGHIJKLMNOP\ntoken: y\n"
+    assert find_secrets(text) == [
+        (2, "literal password"),
+        (3, "AWS access key"),
+        (4, "literal token"),
+    ]
