@@ -1,0 +1,27 @@
+# Redshift query → UNLOAD to S3 → COPY into another Redshift, one month per unit.
+# pugio transfer run examples/transfer/redshift-to-redshift.yaml
+name: events-to-dw
+
+source:
+  engine: redshift                 # uv tool install "de-arsenal[redshift]"
+  dsn_env: SRC_REDSHIFT_DSN        # redshift://user:password@source-cluster:5439/prod
+  iam_role_env: SRC_UNLOAD_ROLE    # role the source cluster writes staging_path with
+  max_file_size_mb: 256            # optional; Redshift's default is 6.2 GB per file
+  query: |
+    SELECT event_id, user_id, event_type, created_at::date AS event_date
+    FROM app.events
+
+split:
+  column: event_date
+  start: 2025-01-01
+  end: 2026-01-01
+  every: month
+
+staging_path: s3://my-staging-bucket/arsenal
+
+target:
+  dsn_env: DW_REDSHIFT_DSN
+  table: analytics.events
+  iam_role_env: DW_COPY_ROLE
+  mode: merge                      # delete rows with the same key, then insert
+  merge_key: [event_id]

@@ -12,6 +12,20 @@ minor.
 
 ## [Unreleased]
 
+### Added
+
+- `pugio transfer run|status` (experimental): a Hive or Redshift query is exported by the
+  source engine straight to S3 as Parquet (`INSERT OVERWRITE DIRECTORY` / `UNLOAD`), then
+  copied into Redshift with `COPY`, so large results never pass through `pugio`. `split`
+  cuts the query into date or integer ranges that are loaded and resumed one at a time; a
+  unit whose load failed reuses its export on the next run. `target.mode` is `replace`
+  (swap the range) or `merge` (swap by key). Before exporting, the query's column names
+  and type families are compared with the target table's, position by position, because
+  COPY loads Parquet by position (`check_types: false` compares names only,
+  `check_columns: false` turns both off). `--start`/`--end` narrow the split for one
+  run; `examples/transfer/airflow/` runs a transfer as a daily Airflow 3 DAG that way. New
+  extra `hive` (`impyla`). See `examples/transfer/`.
+
 ### Changed
 
 - Augur's default Anthropic model is now `claude-sonnet-5-5` (was `claude-sonnet-4-6`).
