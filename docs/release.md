@@ -1,5 +1,9 @@
 # v0.6.16 패치 릴리스 절차
 
+> **0.6.x 태그 동결 (feat/censor 머지 이후)**: `uv build --all-packages`가 `de-censor`도 빌드하는데,
+> PyPI에 `de-censor` pending publisher가 아직 없다. 그래서 v0.6.x 태그는 더 만들지 않고 다음 릴리스는
+> v0.7.0이다(Censor 설계 §10, `docs/plans/2026-11-25-censor-design.md`). `release.yml`은 그대로 둔다.
+
 PyPI의 0.6.15 Augur가 Anthropic API에 `temperature`를 보내, Claude 5.x 모델이 첫 요청부터 400으로
 거부하던 문제의 수정이 핵심이다. 함께 나가는 것: Augur 기본 Anthropic 모델 `claude-sonnet-5-5`,
 experimental `pugio transfer run|status`와 새 extra `hive`(`impyla`). 내역은 [CHANGELOG](../CHANGELOG.md).
