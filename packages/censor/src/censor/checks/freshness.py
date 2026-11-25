@@ -1,10 +1,99 @@
-"""Standard tier: freshness (filled in by the next task)."""
+"""How recent is the last success, and is there a limit that says when it is too old?"""
 
 from __future__ import annotations
 
-from censor.model import CheckResult
+from datetime import datetime, timedelta
+from typing import Final
+
+from arsenal_core.errors import FatalError
+from censor.context import SpecFile
+from censor.model import CheckResult, Dimension, Status
+from censor.result import make_result
+from censor.state import DatasetState, read_dataset_state, read_pipeline_state
 from censor.target import AuditContext
+
+_DIM: Final = Dimension.FRESHNESS
+_DATASET: Final = ".arsenal/dataset.duckdb"
+
+
+def age_hours(now: datetime, then: datetime) -> float:
+    return (now - then) / timedelta(hours=1)
+
+
+def _last_success(ctx: AuditContext, spec: SpecFile) -> CheckResult:
+    check_id = f"freshness.last_success:{spec.name}"
+
+    def result(status: Status, evidence: str, fix: str = "") -> CheckResult:
+        return make_result(check_id, _DIM, 2, status, spec.name, evidence, fix)
+
+    try:
+        state = read_pipeline_state(ctx.root, spec, ctx.now)
+    except FatalError:
+        state = None  # an unreadable DLQ record is reported by reliability
+    if state is None:
+        return result(Status.NA, "never run: nothing to measure")
+    if state.busy:
+        return result(Status.NA, "state could not be read")
+    if state.last_completed_at is None:
+        return result(Status.FAIL, "no unit has ever completed", "fix the failures, then rerun")
+    age = age_hours(ctx.now, state.last_completed_at)
+    seen = f"last unit completed {state.last_completed_at:%Y-%m-%d %H:%M} UTC ({age:.1f}h ago)"
+    limit = ctx.max_age_hours
+    if limit is not None and age > limit:
+        return result(
+            Status.FAIL, f"{seen}, limit {limit:g}h", "run the pipeline; check its schedule"
+        )
+    return result(Status.PASS, seen)
+
+
+def _dataset_state(dataset: DatasetState) -> CheckResult:
+    check_id = "freshness.dataset_state"
+    fix = "check the input, then `arsenal dataset preview` and `arsenal dataset apply`"
+    if dataset.state == "published":
+        when = f"{dataset.last_success:%Y-%m-%d %H:%M} UTC" if dataset.last_success else "unknown"
+        return make_result(check_id, _DIM, 3, Status.PASS, _DATASET, f"published, last {when}")
+    if dataset.state == "stale":
+        evidence = f"stale: the input has not changed for more than {dataset.max_age_hours:g}h"
+        return make_result(check_id, _DIM, 3, Status.FAIL, _DATASET, evidence, fix)
+    if dataset.state == "failed":
+        evidence = "the last `arsenal dataset` run failed"
+        return make_result(check_id, _DIM, 3, Status.FAIL, _DATASET, evidence, fix)
+    reason = "locked by a running `arsenal dataset`" if dataset.state == "busy" else "never run"
+    return make_result(check_id, _DIM, 3, Status.NA, _DATASET, reason)
+
+
+def _max_age_set(ctx: AuditContext, dataset: DatasetState | None) -> CheckResult:
+    check_id = "freshness.max_age_set"
+    if ctx.max_age_hours is not None:
+        evidence = f"--max-age-hours {ctx.max_age_hours:g}"
+        return make_result(check_id, _DIM, 1, Status.PASS, "project", evidence)
+    if dataset is not None and dataset.max_age_hours is not None:
+        evidence = f"arsenal dataset max_age_hours: {dataset.max_age_hours:g}"
+        return make_result(check_id, _DIM, 1, Status.PASS, _DATASET, evidence)
+    return make_result(
+        check_id,
+        _DIM,
+        1,
+        Status.WARN,
+        "project",
+        "no freshness limit: nothing says when this data is too old",
+        "pass `--max-age-hours`, or set it with `arsenal dataset apply --max-age-hours`",
+    )
+
+
+def _project(ctx: AuditContext) -> list[CheckResult]:
+    if ctx.project is None:
+        return []
+    results = [_last_success(ctx, spec) for spec in ctx.project.pipelines]
+    dataset = read_dataset_state(ctx.root, ctx.now)
+    if dataset is not None:
+        results.append(_dataset_state(dataset))
+    if any(r.status != Status.NA for r in results):
+        results.append(_max_age_set(ctx, dataset))
+    return results
 
 
 def check_freshness(ctx: AuditContext) -> list[CheckResult]:
+    if ctx.kind == "project":
+        return _project(ctx)
     return []
