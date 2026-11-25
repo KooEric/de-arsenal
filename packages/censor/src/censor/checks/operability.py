@@ -8,6 +8,7 @@ from typing import Final
 
 from censor.context import ProjectContext
 from censor.model import CheckResult, Dimension, Status
+from censor.result import make_result
 
 # Fixed locations only: globbing the whole tree would walk data/ and .venv/.
 SCHEDULE_GLOBS: Final[tuple[str, ...]] = (
@@ -51,15 +52,7 @@ def _lineage_evidence(root: Path) -> str | None:
 def _r(
     check_id: str, weight: int, status: Status, subject: str, evidence: str, fix: str
 ) -> CheckResult:
-    return CheckResult(
-        id=check_id,
-        dimension=Dimension.OPERABILITY,
-        weight=weight,
-        status=status,
-        subject=subject,
-        evidence=evidence,
-        fix=fix if status != Status.PASS else "",
-    )
+    return make_result(check_id, Dimension.OPERABILITY, weight, status, subject, evidence, fix)
 
 
 def _declares_schedule(path: Path, text: str) -> bool:

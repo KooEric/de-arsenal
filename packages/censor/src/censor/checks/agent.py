@@ -11,6 +11,7 @@ from typing import Any, Final, cast
 
 from censor.context import ProjectContext
 from censor.model import CheckResult, Dimension, Status
+from censor.result import make_result
 
 PLUGIN_PREFIX: Final = "de-arsenal@"
 REQUIRED_COMMANDS: Final = ("arsenal check", "arsenal run")
@@ -20,15 +21,7 @@ _STATE_DIR: Final = ".arsenal"
 def _r(
     check_id: str, weight: int, status: Status, subject: str, evidence: str, fix: str
 ) -> CheckResult:
-    return CheckResult(
-        id=check_id,
-        dimension=Dimension.AGENT_READINESS,
-        weight=weight,
-        status=status,
-        subject=subject,
-        evidence=evidence,
-        fix=fix if status != Status.PASS else "",
-    )
+    return make_result(check_id, Dimension.AGENT_READINESS, weight, status, subject, evidence, fix)
 
 
 def _settings(root: Path) -> tuple[dict[str, Any], str | None]:

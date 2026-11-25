@@ -12,6 +12,7 @@ from arsenal_core.errors import ArsenalError
 from arsenal_core.spec import load_pipeline
 from censor.context import ProjectContext
 from censor.model import CheckResult, Dimension, Status
+from censor.result import make_result
 from gladius.compile import compile_sql
 from gladius.loader import load_transform
 
@@ -22,16 +23,8 @@ _ENV_NOT_SET: Final = "environment variable not set"
 def _result(
     check_id: str, weight: int, status: Status, subject: str, evidence: str, fix: str = ""
 ) -> CheckResult:
-    return CheckResult(
-        id=check_id,
-        dimension=_DIM,
-        weight=weight,
-        status=status,
-        blocker=status == Status.FAIL,
-        subject=subject,
-        evidence=evidence,
-        fix=fix,
-    )
+    blocker = status == Status.FAIL
+    return make_result(check_id, _DIM, weight, status, subject, evidence, fix, blocker=blocker)
 
 
 def _name(ctx: ProjectContext, path: Path) -> str:

@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Any, cast
+from typing import Any, Literal, cast
 
 import yaml
 from arsenal.project import ArsenalProject, DbtProjectRef, load_project
@@ -38,6 +38,10 @@ class ProjectContext:
     pipelines: tuple[SpecFile, ...]
     transforms: tuple[Path | DbtProjectRef, ...]
     transform_files: tuple[SpecFile, ...]
+
+    @property
+    def kind(self) -> Literal["project"]:
+        return "project"
 
 
 def _reason(error: Exception) -> str:
