@@ -30,6 +30,21 @@ def test_detects_literal_secrets(line: str, kind: str) -> None:
 
 
 @pytest.mark.parametrize(
+    ("text", "expected"),
+    [
+        ("x: 1 # AKIAABCDEFGHIJKLMNOP\n", [(1, "AWS access key")]),
+        ("x: 1 # postgres://u:pw@h/db\n", [(1, "credentials in URL")]),
+        ("a: AKIAABCDEFGHIJKLMNOP\n", [(1, "AWS access key")]),
+        ("x: 1 # password: hunter2\n", []),
+    ],
+)
+def test_trailing_comments_are_scanned_for_patterns_once(
+    text: str, expected: list[tuple[int, str]]
+) -> None:
+    assert find_secrets(text) == expected
+
+
+@pytest.mark.parametrize(
     "line",
     [
         "  dsn_env: PG_DSN",

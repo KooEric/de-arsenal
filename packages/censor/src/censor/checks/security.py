@@ -155,10 +155,9 @@ def find_secrets(text: str) -> list[tuple[int, str]]:
         if document is not None:
             walker.walk(document)
     for number, line in enumerate(text.splitlines(), start=1):
-        if line.lstrip().startswith("#"):
-            kind = _pattern_secret(line)
-            if kind:
-                walker.found.add((number, kind))
+        kind = _pattern_secret(line)
+        if kind:
+            walker.found.add((number, kind))
     return sorted(walker.found)
 
 
