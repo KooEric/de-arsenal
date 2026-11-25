@@ -5,6 +5,7 @@
 """
 
 import csv
+import json
 from pathlib import Path
 
 import duckdb
@@ -217,3 +218,16 @@ def test_empty_input_folder_is_a_clear_error(tmp_path: Path) -> None:
     assert "matches no files" in result.output and "allow_empty" in result.output
     assert not list((dest / "data").rglob("*.parquet"))
     assert not (dest / "data" / "clean.tmp").exists()
+
+
+def test_csv_cleanup_recipe_passes_censor_correctness(tmp_path: Path) -> None:
+    from censor.cli import app as censor_app
+
+    dest = tmp_path / "csv-proj"
+    assert runner.invoke(app, ["init", "csv-cleanup", "--dest", str(dest)]).exit_code == 0
+    result = runner.invoke(censor_app, ["audit", str(dest), "--json-only"])
+    report = json.loads(result.stdout)
+    correctness = [c for c in report["checks"] if c["dimension"] == "correctness"]
+    assert correctness and all(c["status"] == "pass" for c in correctness)
+    # the recipe ships without a validate block, so guards fail and the exit code says so
+    assert result.exit_code == 1

@@ -39,10 +39,12 @@ plugins/de-arsenal/skills/evaluate/SKILL.md            CLI 실행 · 결과 설�
 schemas/censor-report.json                              stdout JSON 계약
 ```
 
-- `de-censor` 의존: `arsenal-core`, `de-gladius`(compile), `pugio`(상태·DLQ 읽기), `duckdb`. `de-augur`, `de-aquila`는
-  extra(`de-censor[augur]`, `de-censor[catalog]`)로 둔다. 없으면 해당 체크는 na와 설치 안내.
-- `de-arsenal`은 Censor에 직접 의존하지 않는다. 새 extra `de-arsenal[eval]` = `de-censor`. `arsenal eval`은 import 실패 시
-  `pip install 'de-arsenal[eval]'`을 안내하고 종료 코드 2.
+- `de-censor` 의존: `de-arsenal`(`load_project`), `arsenal-core`, `de-gladius`(compile), `pyarrow`, `pyyaml`, `typer`.
+  Plan 2에서 `pugio`(상태·DLQ)와 `duckdb`를 쓴다(둘 다 `de-arsenal`이 이미 가져온다). `de-augur`, `de-aquila`는
+  extra(`de-censor[augur]`, `de-censor[catalog]`)로 둔다.
+- `de-arsenal`은 `de-censor`에 의존하지 않는다(`[eval]` extra 없음). `de-censor`가 `de-arsenal`에 의존하므로 반대 방향을
+  선언하면 순환이 된다. `arsenal eval`은 지연 import하고, 없으면 `pip install de-censor`
+  (또는 `uv tool install de-arsenal --with de-censor`)를 안내하고 종료 코드 2.
 - `arsenal eval [ARGS]`와 `censor audit [ARGS]`는 같은 인자, 같은 출력, 같은 종료 코드를 낸다.
 
 **CLI**
