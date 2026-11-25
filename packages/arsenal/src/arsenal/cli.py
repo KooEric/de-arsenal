@@ -329,6 +329,28 @@ def query(sql: str, fmt: str = typer.Option("table", "--format")) -> None:
         raise typer.Exit(1)
 
 
+INSTALL_HINT = (
+    "arsenal eval needs Censor: pip install de-censor "
+    "(or: uv tool install de-arsenal --with de-censor)"
+)
+
+
+@app.command(
+    "eval",
+    context_settings={"allow_extra_args": True, "ignore_unknown_options": True},
+)
+def eval_(ctx: typer.Context) -> None:
+    """Grade this project with Censor. Same arguments as `censor audit`."""
+    try:
+        from censor.cli import run_cli
+    except ImportError:
+        typer.echo(INSTALL_HINT, err=True)
+        raise typer.Exit(2) from None
+    code = run_cli(["audit", *ctx.args])
+    if code:
+        raise typer.Exit(code)
+
+
 # 개별 도구는 서브커맨드로 그대로 노출 — 우산은 감싸되 가리지 않는다
 app.add_typer(dataset.app, name="dataset")
 app.add_typer(pugio_app, name="collect", help="수집 (pugio)")
