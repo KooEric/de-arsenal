@@ -40,6 +40,9 @@ Without `split`, the whole query is one unit.
   earlier run saved, for example after the staging files expired or the source data
   changed before the load was retried.
 - Two runs of the same transfer cannot overlap. The second refuses to start.
+- `--start`/`--end` replace `split.start`/`split.end` for one run (`--end` exclusive),
+  e.g. a scheduler's data interval. [`airflow/`](airflow/README.md) runs a transfer as a
+  daily Airflow DAG this way.
 
 ## Modes
 

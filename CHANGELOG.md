@@ -22,8 +22,9 @@ minor.
   (swap the range) or `merge` (swap by key). Before exporting, the query's column names
   and type families are compared with the target table's, position by position, because
   COPY loads Parquet by position (`check_types: false` compares names only,
-  `check_columns: false` turns both off). New extra `hive` (`impyla`). See
-  `examples/transfer/`.
+  `check_columns: false` turns both off). `--start`/`--end` narrow the split for one
+  run; `examples/transfer/airflow/` runs a transfer as a daily Airflow 3 DAG that way. New
+  extra `hive` (`impyla`). See `examples/transfer/`.
 
 ### Changed
 

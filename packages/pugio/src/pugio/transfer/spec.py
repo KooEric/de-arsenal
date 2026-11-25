@@ -176,6 +176,32 @@ class TransferSpec(_Frozen):
         return value.rstrip("/")
 
 
+def with_range(spec: TransferSpec, start: str | None, end: str | None) -> TransferSpec:
+    """The same transfer over ``[start, end)`` of its split column (e.g. one scheduler run).
+
+    A bound left as ``None`` keeps the spec's value. Unit ids depend only on the range
+    boundaries, so a day run alone and as part of a longer range are the same unit.
+    """
+
+    if start is None and end is None:
+        return spec
+    if spec.split is None:
+        raise FatalError("--start/--end need a split in the transfer spec")
+    bounds = spec.split.model_dump()
+    if start is not None:
+        bounds["start"] = start
+    if end is not None:
+        bounds["end"] = end
+    try:
+        split = TransferSplitSpec.model_validate(bounds)
+    except ValidationError as error:
+        details = "; ".join(str(item["msg"]) for item in error.errors())
+        raise FatalError(
+            f"invalid --start/--end for split {spec.split.column!r}: {details}"
+        ) from error
+    return spec.model_copy(update={"split": split})
+
+
 def load_transfer(path: Path) -> TransferSpec:
     try:
         raw = yaml.safe_load(path.read_text(encoding="utf-8"))

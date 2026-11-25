@@ -10,6 +10,7 @@ from typer.testing import CliRunner
 from arsenal_core.errors import FatalError
 from pugio import cli
 from pugio.transfer.runner import FailedUnit, TransferReport, TransferStatus
+from pugio.transfer.spec import TransferSpec
 
 runner = CliRunner()
 
@@ -74,3 +75,30 @@ def test_invalid_spec_exits_1(tmp_path: Path) -> None:
     for command in ("run", "status"):
         result = runner.invoke(cli.app, ["transfer", command, str(bad)])
         assert result.exit_code == 1 and "invalid transfer spec" in result.output
+
+
+def test_run_passes_the_range_override(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    seen: list[object] = []
+
+    def report(spec: TransferSpec, reexport: bool = False) -> TransferReport:
+        seen.append(spec.split)
+        return TransferReport(1, 0, 1, 0, 3)
+
+    path = tmp_path / "ranged.yaml"
+    path.write_text(
+        write_spec(tmp_path).read_text(encoding="utf-8")
+        + "split: {column: d, start: 2026-01-01, end: 2026-12-31, every: day}\n",
+        encoding="utf-8",
+    )
+    monkeypatch.setattr(cli, "run_transfer", report)
+    args = ["transfer", "run", str(path), "--start", "2026-03-01", "--end", "2026-03-02"]
+    result = runner.invoke(cli.app, args)
+    assert result.exit_code == 0, result.output
+    [split] = seen
+    assert str(split.start) == "2026-03-01" and str(split.end) == "2026-03-02"  # type: ignore[attr-defined]
+
+
+def test_range_override_without_split_exits_1(tmp_path: Path) -> None:
+    args = ["transfer", "run", str(write_spec(tmp_path)), "--start", "2026-03-01"]
+    result = runner.invoke(cli.app, args)
+    assert result.exit_code == 1 and "split" in result.output

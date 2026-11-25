@@ -16,7 +16,7 @@ from pugio.ddl import trino_hive_external_table
 from pugio.dlq import dlq_dir, read_reason, remove_dlq, split_rejected_rows
 from pugio.runner import run_pipeline
 from pugio.transfer.runner import run_transfer, transfer_status
-from pugio.transfer.spec import load_transfer
+from pugio.transfer.spec import load_transfer, with_range
 
 app = typer.Typer(help="Pugio — 수집·전송. 재실행은 곧 재개다.")
 dlq_app = typer.Typer(help="dead-letter queue — 격리된 unit 조회·재시도")
@@ -226,6 +226,12 @@ def dlq_retry(spec_path: Path, unit: str = typer.Option(..., "--unit")) -> None:
     typer.echo(f"requeued {unit}")
 
 
+_START = typer.Option(
+    None, "--start", help="Override split.start (inclusive), e.g. a scheduler's interval start"
+)
+_END = typer.Option(None, "--end", help="Override split.end (exclusive)")
+
+
 @transfer_app.command("run")
 def transfer_run(
     spec_path: Path,
@@ -234,10 +240,13 @@ def transfer_run(
         "--reexport",
         help="Run the source query again for units whose export an earlier run saved",
     ),
+    start: str | None = _START,
+    end: str | None = _END,
 ) -> None:
     """Export each unit with the source engine, then COPY it into Redshift. Reruns resume."""
     try:
-        report = run_transfer(load_transfer(spec_path), reexport=reexport)
+        spec = with_range(load_transfer(spec_path), start, end)
+        report = run_transfer(spec, reexport=reexport)
     except ArsenalError as e:
         typer.echo(f"error: {e}", err=True)
         raise typer.Exit(1) from e
@@ -248,10 +257,12 @@ def transfer_run(
 
 
 @transfer_app.command("status")
-def transfer_status_command(spec_path: Path) -> None:
-    """Unit counts by state, and the error of each failed unit."""
+def transfer_status_command(
+    spec_path: Path, start: str | None = _START, end: str | None = _END
+) -> None:
+    """Unit counts by state, and the error of each failed unit in the range."""
     try:
-        status = transfer_status(load_transfer(spec_path))
+        status = transfer_status(with_range(load_transfer(spec_path), start, end))
     except ArsenalError as e:
         typer.echo(f"error: {e}", err=True)
         raise typer.Exit(1) from e

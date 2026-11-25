@@ -10,7 +10,7 @@ import pytest
 from pydantic import ValidationError
 
 from arsenal_core.errors import FatalError
-from pugio.transfer.spec import TransferSpec, load_transfer
+from pugio.transfer.spec import TransferSpec, load_transfer, with_range
 
 
 def raw(**overrides: Any) -> dict[str, Any]:
@@ -152,10 +152,12 @@ def test_load_transfer_reads_yaml_and_reports_errors(tmp_path: Path) -> None:
         load_transfer(broken)
 
 
-_EXAMPLES = sorted((Path(__file__).resolve().parents[3] / "examples" / "transfer").glob("*.yaml"))
+_EXAMPLES = sorted((Path(__file__).resolve().parents[3] / "examples" / "transfer").rglob("*.yaml"))
 
 
-@pytest.mark.parametrize("path", _EXAMPLES, ids=[p.name for p in _EXAMPLES])
+@pytest.mark.parametrize(
+    "path", _EXAMPLES, ids=[p.relative_to(p.parents[1]).as_posix() for p in _EXAMPLES]
+)
 def test_transfer_examples_are_valid_specs(path: Path) -> None:
     assert load_transfer(path).name
 
@@ -165,3 +167,36 @@ def test_both_checks_are_on_by_default_and_names_off_is_enough_to_skip_both() ->
     assert spec.check_columns and spec.check_types
     # The type check compares the same positions, so it only runs with the name check.
     assert not TransferSpec.model_validate(raw(check_columns=False)).check_columns
+
+
+def test_with_range_replaces_the_split_bounds() -> None:
+    spec = TransferSpec.model_validate(
+        raw(split={"column": "d", "start": "2026-01-01", "end": "2026-02-01", "every": "day"})
+    )
+    narrowed = with_range(spec, "2026-01-10", "2026-01-11")
+    assert narrowed.split is not None
+    assert (narrowed.split.start, narrowed.split.end) == (
+        dt.date(2026, 1, 10),
+        dt.date(2026, 1, 11),
+    )
+    assert narrowed.split.every == "day" and narrowed.name == spec.name
+
+
+def test_with_range_keeps_the_bound_that_is_not_given() -> None:
+    spec = TransferSpec.model_validate(
+        raw(split={"column": "id", "start": 0, "end": 100, "every": 10})
+    )
+    narrowed = with_range(spec, None, "50")
+    assert narrowed.split is not None and (narrowed.split.start, narrowed.split.end) == (0, 50)
+
+
+def test_with_range_needs_a_split_and_valid_bounds() -> None:
+    with pytest.raises(FatalError, match="split"):
+        with_range(TransferSpec.model_validate(raw()), "2026-01-01", "2026-01-02")
+    spec = TransferSpec.model_validate(
+        raw(split={"column": "d", "start": "2026-01-01", "end": "2026-02-01", "every": "day"})
+    )
+    with pytest.raises(FatalError, match="before"):
+        with_range(spec, "2026-01-05", "2026-01-05")
+    with pytest.raises(FatalError, match="--start"):
+        with_range(spec, "yesterday", None)
