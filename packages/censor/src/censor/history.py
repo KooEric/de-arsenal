@@ -32,6 +32,7 @@ def censor_dir(base: Path) -> Path:
 def _atomic_write(path: Path, write: Callable[[Path], object]) -> None:
     """Write via a temp file in the same directory, then replace; clean up on failure."""
     tmp = path.with_name(f".{path.name}.tmp")
+    tmp.unlink(missing_ok=True)  # never write through a planted temp symlink
     try:
         write(tmp)
         os.replace(tmp, path)
@@ -50,11 +51,21 @@ def _write_parquet(report: AuditReport, tmp: Path) -> None:
         raise OSError(f"could not write parquet: {e}") from e
 
 
+def _ensure_inside(base: Path, root: Path, dirs: tuple[Path, ...]) -> None:
+    """Refuse to write history anywhere but under `base`: no symlinked dirs, no escape."""
+    for path in (base / ".arsenal", root, *dirs):
+        if path.is_symlink():
+            raise OSError(f"{path} is a symlink; refusing to write run history through it")
+    if not root.resolve().is_relative_to(base.resolve()):
+        raise OSError(f"{root} resolves outside {base}; refusing to write run history there")
+
+
 def save_report(report: AuditReport, base: Path, *, markdown: str) -> Path:
     """Write parquet and markdown first and the JSON last: the JSON is what marks a run."""
     root = censor_dir(base)
     runs = root / "runs"
     reports = root / "reports"
+    _ensure_inside(base, root, (runs, reports))
     runs.mkdir(parents=True, exist_ok=True)
     reports.mkdir(parents=True, exist_ok=True)
     gitignore = root / ".gitignore"

@@ -45,3 +45,13 @@ def test_unreadable_or_non_mapping_spec_has_no_raw(tmp_path: Path) -> None:
     assert ctx.pipelines[0].raw is None
     assert ctx.transform_files[0].raw is None
     assert ctx.transform_files[0].text == ""
+    assert ctx.pipelines[0].read_error is None
+    assert ctx.transform_files[0].read_error is not None
+
+
+def test_undecodable_spec_records_read_error(tmp_path: Path) -> None:
+    bare_project(tmp_path)
+    (tmp_path / "collect.yaml").write_bytes(b"name: \xff\xfe\n")
+    ctx = load_context(tmp_path)
+    assert ctx.pipelines[0].read_error is not None
+    assert ctx.pipelines[0].raw is None

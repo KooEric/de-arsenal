@@ -153,3 +153,28 @@ def test_multiple_secrets_are_sorted_by_line() -> None:
         (3, "AWS access key"),
         (4, "literal token"),
     ]
+
+
+def test_unreadable_spec_is_na_not_pass(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    bare_project(tmp_path)
+    real_read_text = Path.read_text
+
+    def flaky(self: Path, encoding: str | None = None) -> str:
+        if self.name == "collect.yaml":
+            raise PermissionError("permission denied")
+        return real_read_text(self, encoding=encoding)
+
+    monkeypatch.setattr(Path, "read_text", flaky)
+    results = {r.subject: r for r in check_security(load_context(tmp_path))}
+    bad = results["collect.yaml"]
+    assert bad.status == Status.NA and not bad.blocker
+    assert bad.evidence.startswith("could not read: ")
+    assert "permission denied" in bad.evidence
+    assert results["transform.yaml"].status == Status.PASS
+
+
+def test_missing_spec_is_na(tmp_path: Path) -> None:
+    bare_project(tmp_path)
+    (tmp_path / "transform.yaml").unlink()
+    results = {r.subject: r for r in check_security(load_context(tmp_path))}
+    assert results["transform.yaml"].status == Status.NA

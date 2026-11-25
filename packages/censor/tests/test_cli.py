@@ -127,3 +127,14 @@ def test_report_and_compare_without_history_dir(tmp_path: Path) -> None:
     assert listing.stdout == ""
     diff = runner.invoke(app, ["compare", "a", "b", "--project", str(tmp_path)])
     assert diff.exit_code == 2
+
+
+def test_symlinked_history_dir_exits_2_and_writes_nothing_outside(tmp_path: Path) -> None:
+    root = minimal_project(tmp_path / "p")
+    outside = tmp_path / "outside"
+    outside.mkdir()
+    (root / ".arsenal").symlink_to(outside, target_is_directory=True)
+    result = runner.invoke(app, ["audit", str(root), "--json-only"])
+    assert result.exit_code == 2
+    assert "could not save" in result.stderr
+    assert list(outside.iterdir()) == []

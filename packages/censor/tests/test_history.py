@@ -102,3 +102,32 @@ def test_failed_parquet_write_leaves_no_json_and_no_temp_files(
         save_report(report, root, markdown="# r\n")
     runs = censor_dir(root) / "runs"
     assert list(runs.iterdir()) == []
+
+
+@pytest.mark.parametrize("link", [".arsenal", ".arsenal/censor", "runs", "reports"])
+def test_save_refuses_symlinked_history_dirs(tmp_path: Path, link: str) -> None:
+    root = minimal_project(tmp_path / "p")
+    outside = tmp_path / "outside"
+    outside.mkdir()
+    base = censor_dir(root)
+    target = {".arsenal": root / ".arsenal", ".arsenal/censor": base}.get(link, base / link)
+    target.parent.mkdir(parents=True, exist_ok=True)
+    target.symlink_to(outside, target_is_directory=True)
+    with pytest.raises(OSError, match="symlink"):
+        save_report(audit_project(root, now=T1), root, markdown="")
+    assert list(outside.iterdir()) == []
+
+
+def test_save_refuses_history_dir_that_resolves_outside_the_project(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    root = minimal_project(tmp_path / "p")
+    outside = tmp_path / "outside"
+
+    def escaped(_base: Path) -> Path:
+        return outside / "censor"
+
+    monkeypatch.setattr("censor.history.censor_dir", escaped)
+    with pytest.raises(OSError, match="outside"):
+        save_report(audit_project(root, now=T1), root, markdown="")
+    assert not outside.exists()

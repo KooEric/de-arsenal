@@ -20,6 +20,7 @@ class SpecFile:
     root: Path
     text: str
     raw: dict[str, Any] | None
+    read_error: str | None = None
 
     @property
     def name(self) -> str:
@@ -39,11 +40,17 @@ class ProjectContext:
     transform_files: tuple[SpecFile, ...]
 
 
+def _reason(error: Exception) -> str:
+    if isinstance(error, OSError) and error.strerror:
+        return error.strerror
+    return str(error) or type(error).__name__
+
+
 def _read_spec(path: Path, root: Path) -> SpecFile:
     try:
         text = path.read_text(encoding="utf-8")
-    except (OSError, UnicodeDecodeError):
-        return SpecFile(path, root, "", None)
+    except (OSError, UnicodeDecodeError) as e:
+        return SpecFile(path, root, "", None, read_error=_reason(e))
     try:
         loaded: object = yaml.safe_load(text)
     except yaml.YAMLError:

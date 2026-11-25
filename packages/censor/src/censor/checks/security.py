@@ -163,6 +163,15 @@ def find_secrets(text: str) -> list[tuple[int, str]]:
 
 
 def _check_file(spec: SpecFile) -> CheckResult:
+    if spec.read_error is not None:
+        return CheckResult(
+            id=f"security.secrets:{spec.name}",
+            dimension=Dimension.SECURITY,
+            weight=5,
+            status=Status.NA,
+            subject=spec.name,
+            evidence=f"could not read: {spec.read_error}",
+        )
     found = find_secrets(spec.text)
     evidence = (
         "; ".join(f"line {n}: {kind}" for n, kind in found) if found else "no literal secrets"
