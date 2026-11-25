@@ -17,6 +17,7 @@ dependencies = [
     "de-augur",
     "de-aquila",
     "de-pilum",
+    "de-censor",
 ]
 
 [tool.uv.workspace]
@@ -36,6 +37,7 @@ de-scorpio = { workspace = true }
 de-augur = { workspace = true }
 de-aquila = { workspace = true }
 de-pilum = { workspace = true }
+de-censor = { workspace = true }
 
 [dependency-groups]
 dev = [
@@ -68,7 +70,7 @@ target-version = "py311"
 select = ["E", "F", "I", "UP", "B", "SIM"]
 
 [tool.ruff.lint.isort]
-known-first-party = ["arsenal_core", "pugio", "gladius", "augur", "aquila", "pilum"]
+known-first-party = ["arsenal_core", "pugio", "gladius", "augur", "aquila", "pilum", "censor"]
 
 [tool.pyright]
 include = ["packages", "benchmarks", "scripts"]

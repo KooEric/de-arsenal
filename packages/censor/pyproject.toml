@@ -1,0 +1,40 @@
+[project]
+name = "de-censor"
+version = "0.6.16"
+description = "Censor — audit a DE Arsenal project or dataset and grade it, with evidence and fixes"
+readme = "README.md"
+requires-python = ">=3.11"
+license = "Apache-2.0"
+license-files = ["LICENSE"]
+dependencies = [
+    "arsenal-core>=0.6,<0.7",
+    "de-arsenal>=0.6,<0.7",
+    "de-gladius>=0.6,<0.7",
+    "pyarrow>=17",
+    "pydantic>=2",
+    "pyyaml>=6",
+    "typer>=0.12",
+]
+classifiers = [
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "License :: OSI Approved :: Apache Software License",
+    "Operating System :: OS Independent",
+    "Intended Audience :: Developers",
+    "Topic :: Database",
+]
+
+[project.urls]
+Homepage = "https://github.com/KooEric/de-arsenal"
+Repository = "https://github.com/KooEric/de-arsenal"
+
+[project.scripts]
+censor = "censor.cli:app"
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/censor"]
