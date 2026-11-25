@@ -59,7 +59,12 @@ size is unknown) the data-health checks are skipped and the report says how to n
 | `--memory-limit 4GB` | DuckDB memory limit; more spills to `.arsenal/censor/tmp/` |
 | `--timeout 120` | seconds per query; a query that runs out is `na`, not a failure |
 
-Samples are repeatable: by key hash when `--key` is given (so every row of a sampled key is
-read), otherwise a seeded row sample; on Postgres `TABLESAMPLE SYSTEM` runs on the server.
+Samples are repeatable. For files and DuckDB: by key hash when `--key` is given (so every row
+of a sampled key is read), otherwise a seeded row sample. For a Postgres table:
+`TABLESAMPLE SYSTEM` with a fixed seed, run on the server, whatever the key (a Postgres view
+is sampled in DuckDB instead).
+
+Auditing Postgres needs DuckDB's `postgres` extension. DuckDB downloads it once into its own
+directory (`~/.duckdb/extensions`); that is the only thing written outside `.arsenal/censor/`.
 
 Design: `docs/plans/2026-11-25-censor-design.md`.

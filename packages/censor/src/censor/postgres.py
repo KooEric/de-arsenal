@@ -42,7 +42,7 @@ def with_statement_timeout(dsn: str, seconds: float) -> str:
     """
     if "options=" in dsn:
         return dsn
-    setting = f"-c statement_timeout={int(seconds * 1000)}"
+    setting = f"-c statement_timeout={max(1, int(seconds * 1000))}"  # 0 would mean no limit
     if "://" in dsn:
         return f"{dsn}{'&' if '?' in dsn else '?'}options={quote(setting)}"
     return f"{dsn} options='{setting}'"
@@ -89,14 +89,34 @@ def _server_sql(sql: str) -> str:
     return f"postgres_query('{_ATTACHED}', '{sql.replace(chr(39), chr(39) * 2)}')"
 
 
+def _load_extension(con: duckdb.DuckDBPyConnection) -> None:
+    """Load DuckDB's postgres extension; install it only when it is not there yet.
+
+    Installing downloads into DuckDB's own extension directory (`~/.duckdb/extensions`): the one
+    thing Censor may write outside `.arsenal/censor/`, once, and never to the audited target.
+    """
+    try:
+        con.execute("LOAD postgres")
+        return
+    except duckdb.Error:
+        pass
+    try:
+        con.execute("INSTALL postgres")
+        con.execute("LOAD postgres")
+    except duckdb.Error as e:
+        raise FatalError(
+            "could not install DuckDB's postgres extension (it is downloaded once; "
+            "check the network): " + (str(e).strip().splitlines() or ["no detail"])[0]
+        ) from e
+
+
 def postgres_relation(
     con: duckdb.DuckDBPyConnection, target: PostgresTarget, scan: ScanOptions
 ) -> tuple[str, Scale]:
     schema, name = split_table(target.table)
     dsn = with_statement_timeout(_dsn(target), scan.timeout_seconds)
+    _load_extension(con)
     try:
-        con.execute("INSTALL postgres")
-        con.execute("LOAD postgres")
         attach = dsn.replace("'", "''")
         con.execute(f"ATTACH '{attach}' AS {_ATTACHED} (TYPE POSTGRES, READ_ONLY)")
         qualified = f"{quote_ident(schema)}.{quote_ident(name)}"
@@ -132,10 +152,15 @@ def narrow_postgres(
     scan: ScanOptions,
     key: tuple[str, ...],
     time_column: str | None,
+    *,
+    is_table: bool,
 ) -> tuple[str, str | None]:
-    """`--sample` runs on the server (TABLESAMPLE), so only the sampled blocks cross the wire."""
+    """`--sample` runs on the server (TABLESAMPLE), so only the sampled blocks cross the wire.
+
+    Postgres has no TABLESAMPLE for a view or a foreign table: those are sampled in DuckDB.
+    """
     percent = scan.sample_percent
-    if percent is None:
+    if percent is None or not is_table:
         return narrow(relation, scan, key, time_column)
     if scan.since is not None and time_column is None:
         raise FatalError("--since needs --time-column")

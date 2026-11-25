@@ -163,6 +163,19 @@ def audit(
         if data is not None and not base.is_dir():
             raise FatalError(f"no such directory: {project}")
         chosen = tier or (Tier.STANDARD if data is not None else DEFAULT_PROJECT_TIER)
+        given = {
+            "--key": key,
+            "--time-column": time_column,
+            "--max-age-hours": max_age_hours,
+            "--sample": sample,
+            "--since": since,
+            "--full": full or None,
+        }
+        unused = [name for name, value in given.items() if value is not None]
+        if chosen is Tier.QUICK and unused:
+            raise FatalError(
+                f"{', '.join(unused)} needs --tier standard: the quick tier reads no data"
+            )
         request = AuditRequest(
             root=base,
             tier="quick" if chosen is Tier.QUICK else "standard",

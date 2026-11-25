@@ -34,7 +34,8 @@ minor.
 ### Changed
 
 - Censor reads only: run state is read from a copy under `.arsenal/censor/tmp/`, DuckDB files
-  and Postgres are attached read-only. Nothing is written outside `.arsenal/censor/`.
+  and Postgres are attached read-only. Nothing is written outside `.arsenal/censor/`
+  (DuckDB downloads its `postgres` extension once into `~/.duckdb/extensions`).
 - `censor audit` exits 2 when `arsenal.yaml` cannot be read (it was a failed check, exit 1),
   and `censor report` exits 2 for a directory that does not exist (it printed nothing, exit 0).
 - `arsenal eval --help` shows the options it forwards to `censor audit`.

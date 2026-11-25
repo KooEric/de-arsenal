@@ -15,6 +15,7 @@ def test_statement_timeout_is_added_to_both_dsn_forms() -> None:
     )
     keyword = with_statement_timeout("host=h dbname=db", 120)
     assert keyword == "host=h dbname=db options='-c statement_timeout=120000'"
+    assert with_statement_timeout("host=h", 0.0001).endswith("statement_timeout=1'")
     own = "postgresql://h/db?options=-c%20search_path%3Dx"
     assert with_statement_timeout(own, 5) == own
 

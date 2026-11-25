@@ -179,6 +179,16 @@ def test_a_view_has_no_size_so_it_is_read_only_when_narrowed(dsn: str, tmp_path:
     assert "size unknown" in outcome.report.notices[0]
 
 
+def test_a_view_is_sampled_in_duckdb_because_postgres_cannot(dsn: str, tmp_path: Path) -> None:
+    import psycopg
+
+    with psycopg.connect(dsn, autocommit=True) as con:
+        con.execute("CREATE OR REPLACE VIEW orders_view AS SELECT * FROM orders")
+    outcome = _audit(tmp_path, "orders_view", key=("id",), scan=ScanOptions(sample_percent=10))
+    assert _by_kind(outcome)["data_health.key_unique"].status == Status.WARN
+    assert outcome.report.sample == "10% of the keys (by key hash)"
+
+
 def test_an_empty_server_side_sample_is_na_not_a_failure(dsn: str, tmp_path: Path) -> None:
     outcome = _audit(tmp_path, "dirty", scan=ScanOptions(sample_percent=0.0001))
     rows = _by_kind(outcome)["data_health.rows"]

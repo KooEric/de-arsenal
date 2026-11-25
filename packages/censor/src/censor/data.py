@@ -212,7 +212,9 @@ def open_source(
         else:
             from censor.postgres import narrow_postgres
 
-            narrowed, sample = narrow_postgres(relation, target, scan, key, time_column)
+            narrowed, sample = narrow_postgres(
+                relation, target, scan, key, time_column, is_table=not scale.unknown
+            )
         if sample is not None and not key:
             con.execute("SET threads = 1")  # a seeded row sample repeats only on one thread
         yield DataSource(

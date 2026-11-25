@@ -124,6 +124,7 @@ def test_unreadable_target_prints_the_report_then_exits_2(tmp_path: Path) -> Non
         (["--files", "a", "--since", "2026-11-01"], "--since needs --time-column"),
         (["--table", "t", "--postgres-dsn-env", "CENSOR_UNSET_VAR"], "CENSOR_UNSET_VAR"),
         (["--files", "a", "--memory-limit", "big"], "--memory-limit"),
+        (["--key", "id", "--full"], "--key, --full needs --tier standard"),
         (["--files", "a", "--timeout", "0"], "--timeout"),
     ],
 )
