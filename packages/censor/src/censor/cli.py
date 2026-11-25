@@ -35,14 +35,14 @@ def audit(
     lang: Annotated[str, typer.Option("--lang", help="Report language: en or ko")] = "en",
     json_only: Annotated[bool, typer.Option("--json-only", help="No summary on stderr")] = False,
     tier: Annotated[
-        Tier, typer.Option("--tier", help="quick reads files only; standard is Plan 2")
+        Tier, typer.Option("--tier", help="quick reads files only; standard is not available yet")
     ] = Tier.QUICK,
 ) -> None:
     """Grade a project (quick tier: reads files only, runs nothing)."""
     if lang not in ("en", "ko"):
         raise typer.BadParameter("use en or ko", param_hint="--lang")
     if tier is not Tier.QUICK:
-        _err(f"censor: tier {tier.value} is not available yet (Plan 2)")
+        _err(f"censor: tier {tier.value} is not available in this version")
         raise typer.Exit(EXIT_TOOL_ERROR)
     report_lang: Lang = "ko" if lang == "ko" else "en"
     try:

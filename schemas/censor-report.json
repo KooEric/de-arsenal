@@ -123,7 +123,7 @@
       "type": "string"
     },
     "tier": {
-      "description": "quick reads files only; standard (Plan 2) also inspects state and data",
+      "description": "quick reads files only; standard (not available yet) also reads state and data",
       "enum": [
         "quick",
         "standard"

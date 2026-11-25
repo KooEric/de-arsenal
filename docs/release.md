@@ -1,7 +1,80 @@
-> **0.6.x 태그 동결 (feat/censor 머지 이후)**: `uv build --all-packages`가 `de-censor`도 빌드하는데,
-> PyPI에 `de-censor` pending publisher가 아직 없다. 그래서 v0.6.17 다음에는 v0.6.x 태그를 만들지 않고
-> 다음 릴리스는 v0.7.0이다(Censor 설계 §10, `docs/plans/2026-11-25-censor-design.md`). `release.yml`은
-> 그대로 둔다.
+# v0.7.0 릴리스 절차
+
+14번째 패키지 **Censor**(`de-censor`, experimental)가 처음 배포된다. 프로젝트를 실행하지 않고 파일만
+읽어 등급을 매기는 감사 도구이고, `arsenal eval`로도 실행된다. 내역은 [CHANGELOG](../CHANGELOG.md),
+사용자 절차는 [upgrade-0.7.md](upgrade-0.7.md).
+
+**minor인 이유**: 새 PyPI 프로젝트가 들어가고 교차 핀을 `>=0.7,<0.8`로 옮긴다. 기존 명령·옵션·스펙
+필드·저장 형식·상태 파일은 바뀌지 않고 상태 마이그레이션도 없다(StateStore v3, `aquila.db` v2 그대로).
+
+**순서를 지켜야 하는 이유**: `main`에는 이미 `de-censor`가 들어 있어서 태그를 push하면 `release.yml`이
+14개를 모두 올리려 한다. `de-censor`는 PyPI에 프로젝트가 없으므로, pending publisher 등록(4번)과 수동
+최초 게시(5번)를 태그보다 먼저 한다. 그 전에 태그를 push하면 게시가 중간에 실패한다.
+
+## 확정 정책
+
+- 배포 패키지 14개를 v0.7.0으로 동기화한다: `arsenal-core`, `de-arsenal`, `pugio`, `de-gladius`,
+  `de-scorpio`, `de-scutum`, `de-onager`, `spatha`, `de-augur`, `de-hasta`, `de-ballista`, `de-aquila`,
+  `de-pilum`, **`de-censor`** (굵은 것은 PyPI 첫 게시).
+- `de-arsenal`은 `de-censor`에 의존하지 않는다. `de-censor`가 `de-arsenal`에 의존한다. `arsenal eval`은
+  Censor가 없으면 설치 안내를 내고 종료 코드 2로 끝난다.
+- Censor는 Quick 단계(파일만 읽음)만 배포한다. `--tier standard`는 종료 코드 2다.
+- 상태 표기: Censor는 **experimental**. 나머지는 0.6과 같다.
+
+## 절차
+
+1. 이 PR CI green → `main` 머지
+2. `main`에서 검증
+
+   ```bash
+   uv sync
+   uv run python scripts/check_release_metadata.py   # "14 packages at v0.7.0"
+   uv run ruff check . && uv run ruff format --check .
+   uv run pyright
+   uv run python scripts/gen_schema_docs.py --check
+   uv run pytest
+   uv build --all-packages && ls dist/ | wc -l       # sdist + wheel × 14 = 28
+   ```
+
+3. 수동 점검
+   - [ ] 새 디렉터리에서 `arsenal init csv-cleanup` → `arsenal run` → `censor audit .`이 등급을
+         출력하고 종료 코드 1로 끝난다(레시피에 `validate`가 없어서 품질 가드가 실패한다).
+   - [ ] 같은 디렉터리에서 `arsenal eval .`이 같은 등급을 낸다.
+   - [ ] `.arsenal/censor/runs/`에 JSON과 Parquet, `reports/`에 Markdown이 생기고 `censor report`가 그
+         실행을 보여 준다.
+   - [x] CHANGELOG `## [0.7.0]`의 날짜 (PR에서 2026-11-25로 기입. 태그가 다른 날이면 고친다).
+4. PyPI 준비 — 신규 배포명 1개 (계정 소유자). PyPI **Publishing → Pending publishers**에 등록한다.
+
+   | 필드 | 값 |
+   |---|---|
+   | PyPI project name | `de-censor` |
+   | Owner / Repository | `KooEric` / `de-arsenal` |
+   | Workflow name | `release.yml` |
+   | Environment name | `pypi` |
+
+5. 검증 전용 실행 → `de-censor` 최초 게시 → 태그
+
+   ```bash
+   gh workflow run release.yml -f version=0.7.0 -f publish_package=none
+   gh workflow run release.yml -f version=0.7.0 -f publish_package=de-censor
+   gh release create v0.7.0 --target main --title v0.7.0 --generate-notes
+   ```
+
+   각 실행이 성공한 것을 확인한 뒤 다음 줄로 넘어간다. 태그 실행이 나머지 13개를 게시하고, 먼저 게시된
+   `de-censor`는 `skip-existing`으로 건너뛴다.
+
+6. 게시 확인 — 14개 모두 `200`, 새 환경 설치
+
+   ```bash
+   for p in arsenal-core de-arsenal pugio de-gladius de-scorpio de-scutum de-onager spatha \
+            de-augur de-hasta de-ballista de-aquila de-pilum de-censor; do
+     curl -s -o /dev/null -w "$p %{http_code}\n" "https://pypi.org/pypi/$p/0.7.0/json"
+   done
+   uv tool install --force de-arsenal==0.7.0 --with de-censor==0.7.0
+   arsenal eval --tier quick .          # arsenal.yaml이 있는 디렉터리에서
+   ```
+
+---
 
 # v0.6.17 패치 릴리스 절차
 

@@ -76,4 +76,4 @@ def test_arsenal_eval_passes_tier_through(tmp_path: Path) -> None:
     assert json.loads(quick.stdout)["tier"] == "quick"
     standard = runner.invoke(app, ["eval", str(root), "--tier", "standard"])
     assert standard.exit_code == 2
-    assert "not available yet" in standard.stderr
+    assert "not available in this version" in standard.stderr

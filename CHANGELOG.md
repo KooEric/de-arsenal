@@ -12,8 +12,12 @@ minor.
 
 ## [Unreleased]
 
-Ships in `0.7.0`. No `0.6.x` tag is cut after `0.6.17`: `de-censor` is a new PyPI project
-and has no publisher yet (see `docs/release.md`).
+## [0.7.0] - 2026-11-25
+
+A 14th package, Censor (`de-censor`, experimental), audits a project from its files and
+grades it. All 14 packages move to `0.7.0` and internal pins move to `>=0.7,<0.8`, so
+upgrade them together. No existing command, option, spec field or state file changes,
+and there are no state migrations. Upgrade steps: [docs/upgrade-0.7.md](docs/upgrade-0.7.md).
 
 ### Added
 

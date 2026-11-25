@@ -129,6 +129,7 @@ sink별·도구별로 무엇을 보장하고 무엇을 보장하지 않는지는
 | **Aquila** | SQLite 파일 하나로 된 카탈로그: 데이터셋, 스키마 이력, lineage(`arsenal dataset` 게시 포함), 계약, 태그 | `de-aquila` | preview |
 | **Augur** | 자연어 질문을 SQL로. eval 하네스 포함 | `de-augur` | experimental |
 | **Pilum** | Reverse ETL: 바뀐 레코드를 HTTP 끝점과 Slack으로, 변경당 한 번 보낸다 | `de-pilum` | experimental |
+| **Censor** | 감사: 프로젝트를 파일만 읽고 채점한다(스펙, 검증 규칙, 평문 비밀값, 스케줄, 에이전트 설정). 고칠 곳을 근거와 함께 알려 준다. `arsenal eval`로도 실행 | `de-censor` | experimental |
 
 **stable**: 같은 minor 안에서는 YAML 필드가 추가만 되고, 상태 파일은 앞으로 마이그레이션된다.
 **beta**: 동작하고 테스트되지만 이 저장소 밖 사용 사례가 적다.
@@ -149,8 +150,9 @@ sink별·도구별로 무엇을 보장하고 무엇을 보장하지 않는지는
 | …+ Spark on Kubernetes 실행 (Ballista) | `uv tool install "de-arsenal[distributed]"` |
 | …+ 카탈로그 (Aquila) | `uv tool install "de-arsenal[catalog]"` |
 | …+ reverse ETL (Pilum) | `uv tool install "de-arsenal[dispatch]"` |
+| …+ `arsenal eval` 프로젝트 감사 (Censor) | `uv tool install de-arsenal --with de-censor` |
 | …+ dbt·dlt 프로젝트 | `"de-arsenal[dbt]"` · `"de-arsenal[dlt]"` |
-| 도구 하나만 | `pip install pugio` · `de-gladius` · `de-hasta` · `de-aquila` · `de-pilum` · … |
+| 도구 하나만 | `pip install pugio` · `de-gladius` · `de-hasta` · `de-aquila` · `de-pilum` · `de-censor` · … |
 
 기본 설치는 Spark·Kubernetes·Iceberg·Postgres 드라이버를 끌어오지 않는다
 (`packages/arsenal/tests/test_base_install.py`가 확인한다).
@@ -393,7 +395,7 @@ Sonnet의 실패 4건은 SQL이 틀렸다기보다 골든 SQL과 해석이 달�
 | [docs/11-real-data-experiments.md](docs/11-real-data-experiments.md) · [experiments/](experiments/real-data/README.md) | 실제 API·데이터(GitHub, GitLab, 공항 CSV, NYC 택시) 실험 결과, 찾은 버그와 확인한 한계 |
 | [examples/real-world/](examples/real-world/) | GitHub, Notion, Slack, Stripe, 공공데이터포털 수집 스펙과 Cloudflare D1 스냅샷 내보내기 |
 | [examples/deploy/](examples/deploy/README.md) | cron, GitHub Actions, 컨테이너로 주기 실행 |
-| [CHANGELOG.md](CHANGELOG.md) · [0.6 업그레이드](docs/upgrade-0.6.md) | 변경 내역과 업그레이드 방법 |
+| [CHANGELOG.md](CHANGELOG.md) · [0.7 업그레이드](docs/upgrade-0.7.md) | 변경 내역과 업그레이드 방법 |
 | [docs/README.md](docs/README.md) | 설계 문서, 결정 기록, 릴리스 절차 |
 
 레퍼런스와 CHANGELOG는 영어, 가이드와 설계 문서는 한국어다.

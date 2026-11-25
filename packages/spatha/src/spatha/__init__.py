@@ -5,7 +5,7 @@ from importlib.metadata import PackageNotFoundError, version
 try:
     __version__ = version("spatha")
 except PackageNotFoundError:
-    __version__ = "0.6.17"
+    __version__ = "0.7.0"
 
 from spatha.actions import TaskFailedError, TaskTimeoutError, default_runner
 from spatha.workflow import BallistaReconcileAction, ExecutionWindow, TaskSpec, Workflow
