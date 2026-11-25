@@ -1,3 +1,26 @@
+# v0.6.17 패치 릴리스 절차
+
+Augur의 읽기 전용 가드 보강이 전부다(#53). 0.6.16까지는 생성 SQL의 첫 단어만 검사해서, 주석으로
+시작하거나 문장을 이어 붙이거나 `EXPLAIN ANALYZE`를 앞에 두면 `COPY`·`ATTACH`가 실행됐다. 이제
+DuckDB 파서로 SELECT 한 문장만 통과시키고, 실행 연결은 카탈로그 폴더 밖 파일·URL·확장 설치를 막는다.
+내역은 [CHANGELOG](../CHANGELOG.md).
+
+**patch인 이유**: 명령·옵션·저장 형식·상태 파일이 바뀌지 않는다. 예전에 통과하던 쓰기·다중 문장 SQL이
+이제 `NON_SELECT`로 기록되고, 카탈로그 밖 경로를 읽던 SQL은 실행 오류가 된다. 둘 다 원래 의도한
+동작이다. `de-augur`의 `duckdb` 하한이 `>=1.3`으로 오른다(lock은 1.5.4). 교차 핀 `>=0.6,<0.7` 유지,
+상태 마이그레이션·신규 PyPI 프로젝트 없음.
+
+1. 이 PR CI green → `main` 머지
+2. `main`에서 검증: 아래 0.6.0 절차의 2번과 같다. 기대값은 "13 packages at v0.6.17", 산출물 26개.
+3. 태그 `v0.6.17` 게시: Releases → `v0.6.17` 새 태그, target `main`.
+4. 게시 확인: 13개 패키지의 `https://pypi.org/pypi/<name>/0.6.17/json`이 모두 `200`.
+5. 수동 점검 (PyPI에서 설치한 0.6.17로)
+   - [ ] 깨끗한 환경에서 `uv tool install de-augur==0.6.17` 뒤
+         `python -c "from augur.generate import is_select; assert not is_select('-- x\nCOPY (SELECT 1) TO \'a.csv\'')"`.
+   - [ ] `augur ask`가 기존처럼 답한다(기본 모델 `claude-sonnet-5-5`).
+
+---
+
 # v0.6.16 패치 릴리스 절차
 
 > **0.6.x 태그 동결 (feat/censor 머지 이후)**: `uv build --all-packages`가 `de-censor`도 빌드하는데,

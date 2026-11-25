@@ -39,6 +39,19 @@ export OPENAI_BASE_URL=https://generativelanguage.googleapis.com/v1beta/openai
 augur eval packages/augur/eval/cases.yaml --provider openai --model gemini-flash-latest
 ```
 
+## 읽기 전용 가드
+
+생성 SQL은 두 겹으로 막는다.
+
+1. **문장 판정.** DuckDB 파서(`extract_statements`)로 나눠, 문장이 정확히 하나이고 종류가 SELECT일
+   때만 실행한다(`WITH`·괄호 SELECT·UNION 포함). `-- 주석` 뒤의 `COPY`, `SELECT 1; COPY ...`,
+   `EXPLAIN ANALYZE COPY ...`는 NON_SELECT로 기록된다. 파싱이 안 되는 문장은 실행 단계의 EXEC_ERROR로 둔다.
+2. **실행 연결.** 확장 자동 설치·로드를 끄고, `allowed_directories`를 카탈로그 경로의 폴더로 건 뒤
+   `enable_external_access=false`, `lock_configuration=true`. 카탈로그 폴더 밖 파일(`read_text('/etc/hosts')`)과
+   `https://` 경로는 Permission Error가 나고, SQL로 설정을 다시 열 수 없다. 골든 SQL도 같은 연결에서 돈다.
+
+0.6.16까지는 SQL 첫 단어만 보는 정규식이라 위 우회가 실제로 파일을 썼다.
+
 ## 실패 모드 (자동 분류, 단계 순)
 
 | 모드 | 판정 | 원인 층 |

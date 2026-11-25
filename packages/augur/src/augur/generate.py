@@ -3,12 +3,15 @@
 설계 원칙:
 - 프롬프트는 결정적(스키마 렌더 순서 고정, temperature 0). 같은 입력이면 같은 프롬프트.
 - SELECT만 허용. DDL/DML은 실행 전에 차단(FatalError가 아니라 trace에 NON_SELECT로 기록).
+  판정은 DuckDB 파서로 한다(문장 1개 + SELECT 종류). 실행 연결은 카탈로그 폴더 밖 파일·URL·
+  확장 설치를 막는다. 모델이 규칙을 어겨도 쓰기·외부 접근이 일어나지 않게 하는 두 번째 벽.
 - 자가 수정(repair)은 최대 1회. 무한 재시도는 실패를 숨긴다.
 - LLM 출력 원문(raw)을 그대로 저장. 후처리로 잃는 정보가 없어야 사후 분석이 된다.
 """
 
 import hashlib
 import json
+import os
 import re
 import time
 import typing as t
@@ -52,9 +55,32 @@ def extract_sql(raw: str) -> str:
 
 
 def is_select(sql: str) -> bool:
-    """쓰기 문장만 차단한다. 'SELEC ...' 같은 오타는 실행 단계에서 EXEC_ERROR로 잡히게 둔다 —
-    가드가 문법 오류까지 삼키면 실패 모드가 섞인다."""
-    return bool(sql.strip()) and not WRITE_RE.match(sql)
+    """문장이 정확히 하나이고 DuckDB가 SELECT로 파싱할 때만 True.
+
+    첫 단어 정규식만으로는 `-- 주석\nCOPY ...`, `SELECT 1; COPY ...`,
+    `EXPLAIN ANALYZE COPY ...`가 통과해 실제로 파일을 썼다. 파서가 문장 종류를 정한다.
+    'SELEC ...' 같은 파싱 실패는 True로 두어 실행 단계의 EXEC_ERROR로 잡히게 한다 —
+    파싱이 안 되는 문장은 실행될 수도 없고, 가드가 문법 오류까지 삼키면 실패 모드가 섞인다."""
+    if not sql.strip() or WRITE_RE.match(sql):
+        return False
+    con = duckdb.connect()
+    try:
+        stmts = con.extract_statements(sql)
+    except duckdb.Error:
+        return True
+    finally:
+        con.close()
+    return len(stmts) == 1 and stmts[0].type == duckdb.StatementType.SELECT
+
+
+def allowed_dirs(catalog: Catalog) -> tuple[str, ...]:
+    """카탈로그 경로(glob 허용)마다 glob 앞까지의 폴더를 절대 경로로. 실행은 이 안만 읽는다."""
+    dirs: set[str] = set()
+    for doc in catalog.tables:
+        head = re.split(r"[*?\[{]", doc.path, maxsplit=1)[0]
+        base = head if head.endswith(("/", os.sep)) else os.path.dirname(head)
+        dirs.add(os.path.join(os.path.abspath(base or "."), ""))
+    return tuple(sorted(dirs))
 
 
 @dataclass
@@ -80,8 +106,25 @@ class Trace:
         return json.dumps(asdict(self), ensure_ascii=False)
 
 
-def execute(sql: str) -> tuple[list[str], list[tuple[t.Any, ...]]]:
-    con = duckdb.connect()
+def _sandboxed(dirs: tuple[str, ...] | None) -> duckdb.DuckDBPyConnection:
+    """확장 자동 설치·로드 끔. dirs가 있으면 그 폴더 밖 파일과 URL을 막고 설정을 잠근다.
+    순서가 중요하다: enable_external_access=false 뒤에는 allowed_directories를 바꿀 수 없다."""
+    con = duckdb.connect(
+        config={"autoinstall_known_extensions": False, "autoload_known_extensions": False}
+    )
+    if dirs is not None:
+        listed = ", ".join("'" + d.replace("'", "''") + "'" for d in dirs)
+        con.execute(f"SET allowed_directories = [{listed}]")
+        con.execute("SET enable_external_access = false")
+        con.execute("SET lock_configuration = true")
+    return con
+
+
+def execute(
+    sql: str, *, dirs: tuple[str, ...] | None = None
+) -> tuple[list[str], list[tuple[t.Any, ...]]]:
+    """dirs를 주면 그 폴더 안 파일만 읽는다(ask·eval은 카탈로그에서 구해 넘긴다)."""
+    con = _sandboxed(dirs)
     try:
         rel = con.execute(sql)
         cols = [str(d[0]) for d in (rel.description or [])]
@@ -120,16 +163,18 @@ def ask(
     if not is_select(sql):
         trace.error = "NON_SELECT: statement rejected before execution"
     else:
-        rows = _execute_with_repair(trace, user, provider)
+        rows = _execute_with_repair(trace, user, provider, allowed_dirs(catalog))
     trace.latency_ms = int((time.perf_counter() - started) * 1000)
     return trace, rows
 
 
-def _execute_with_repair(trace: Trace, user: str, provider: Provider) -> list[tuple[t.Any, ...]]:
+def _execute_with_repair(
+    trace: Trace, user: str, provider: Provider, dirs: tuple[str, ...]
+) -> list[tuple[t.Any, ...]]:
     sql = trace.sql
     for attempt in range(MAX_REPAIR_ATTEMPTS + 1):
         try:
-            cols, rows = execute(sql)
+            cols, rows = execute(sql, dirs=dirs)
             trace.executed, trace.sql, trace.columns, trace.row_count = True, sql, cols, len(rows)
             trace.error = None
             return rows
