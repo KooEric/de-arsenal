@@ -29,8 +29,8 @@ def _last_success(ctx: AuditContext, spec: SpecFile) -> CheckResult:
 
     try:
         state = read_pipeline_state(ctx.root, spec, ctx.now)
-    except FatalError:
-        state = None  # an unreadable DLQ record is reported by reliability
+    except FatalError:  # an unreadable DLQ record; reliability reports it as an error
+        return result(Status.NA, "state could not be read")
     if state is None:
         return result(Status.NA, "never run: nothing to measure")
     if state.busy:
@@ -59,7 +59,11 @@ def _dataset_state(dataset: DatasetState) -> CheckResult:
     if dataset.state == "failed":
         evidence = "the last `arsenal dataset` run failed"
         return make_result(check_id, _DIM, 3, Status.FAIL, _DATASET, evidence, fix)
-    reason = "locked by a running `arsenal dataset`" if dataset.state == "busy" else "never run"
+    reasons = {
+        "busy": "locked by a running `arsenal dataset`",
+        "unreadable": "the store could not be read",
+    }
+    reason = reasons.get(dataset.state, "never run")
     return make_result(check_id, _DIM, 3, Status.NA, _DATASET, reason)
 
 

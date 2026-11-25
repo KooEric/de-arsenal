@@ -2,9 +2,11 @@
 
 from __future__ import annotations
 
+import re
 from dataclasses import dataclass, field, replace
 from datetime import UTC, datetime
 from pathlib import Path
+from typing import Final
 
 from arsenal_core.errors import FatalError
 from censor import __version__
@@ -15,6 +17,8 @@ from censor.readings import read_targets
 from censor.runner import run_checks
 from censor.scoring import score_checks
 from censor.target import AuditContext, DataTarget, ScanOptions, Tier, kind_of
+
+_MEMORY_LIMIT: Final = re.compile(r"\d+(\.\d+)?\s*[KMGT]i?B", re.IGNORECASE)
 
 
 def new_run_id(tier: str, now: datetime | None = None) -> str:
@@ -50,6 +54,8 @@ def _validate(request: AuditRequest) -> None:
         raise FatalError("--sample must be above 0 and at most 100 (percent)")
     if scan.since is not None and request.time_column is None:
         raise FatalError("--since needs --time-column")
+    if not _MEMORY_LIMIT.fullmatch(scan.memory_limit.strip()):
+        raise FatalError(f"invalid --memory-limit {scan.memory_limit!r}: use a size such as 4GB")
     if scan.timeout_seconds <= 0:
         raise FatalError("--timeout must be above 0 seconds")
     if request.max_age_hours is not None and request.max_age_hours < 0:

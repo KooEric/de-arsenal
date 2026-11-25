@@ -26,6 +26,7 @@ from pugio.dlq import split_rejected_rows
 
 DEFAULT_STATE_DIR: Final = ".arsenal"
 _WAL_SUFFIX: Final = "-wal"
+_COPY_ATTEMPTS: Final = 3
 
 
 @dataclass(frozen=True)
@@ -54,12 +55,37 @@ def pipeline_identity(root: Path, spec: SpecFile) -> tuple[str, Path] | None:
     return name, directory if directory.is_absolute() else root / directory
 
 
+class _StateChanging(Exception):
+    """The state DB or its WAL kept changing while it was being copied."""
+
+
+def _stamp(*paths: Path) -> list[tuple[int, int] | None]:
+    stats = [p.stat() if p.exists() else None for p in paths]
+    return [None if s is None else (s.st_size, s.st_mtime_ns) for s in stats]
+
+
+def _copy_consistent(db: Path, copy: Path) -> None:
+    """Copy the DB and its WAL as one snapshot: retry while a writer changes either file.
+
+    A checkpoint between the two copies would pair an old DB with a new WAL, which SQLite
+    opens without complaint and answers from with stale counts.
+    """
+    wal = db.with_name(db.name + _WAL_SUFFIX)
+    wal_copy = copy.with_name(copy.name + _WAL_SUFFIX)
+    for _ in range(_COPY_ATTEMPTS):
+        before = _stamp(db, wal)
+        shutil.copyfile(db, copy)
+        wal_copy.unlink(missing_ok=True)
+        if wal.exists():
+            shutil.copyfile(wal, wal_copy)
+        if _stamp(db, wal) == before:
+            return
+    raise _StateChanging
+
+
 def _read_copy(db: Path, name: str, scratch: Path, now: datetime) -> PipelineState:
     copy = scratch / db.name
-    shutil.copyfile(db, copy)
-    wal = db.with_name(db.name + _WAL_SUFFIX)
-    if wal.exists():
-        shutil.copyfile(wal, copy.with_name(copy.name + _WAL_SUFFIX))
+    _copy_consistent(db, copy)
     store = StateStore(copy, backup_dir=scratch / "backups")
     try:
         units = store.counts(name)
@@ -92,7 +118,7 @@ def read_pipeline_state(root: Path, spec: SpecFile, now: datetime) -> PipelineSt
     try:
         with scratch_dir(root) as scratch:
             state = _read_copy(db, name, scratch, now)
-    except (sqlite3.Error, FatalError, RuntimeError, ValueError):
+    except (sqlite3.Error, FatalError, RuntimeError, ValueError, OSError, _StateChanging):
         # A copy taken while a run checkpoints can be torn; a newer schema cannot be read.
         return PipelineState(name=name, busy=True)
     if state.never_ran:
@@ -113,7 +139,7 @@ DATASET_STORE: Final = Path(".arsenal") / "dataset.duckdb"  # `arsenal.dataset.S
 
 @dataclass(frozen=True)
 class DatasetState:
-    state: str  # published | stale | failed | never_run | busy
+    state: str  # published | stale | failed | never_run | busy | unreadable
     has_published: bool = False
     last_success: datetime | None = None
     last_input_change: datetime | None = None
@@ -140,12 +166,18 @@ def read_dataset_state(root: Path, now: datetime) -> DatasetState | None:
             row = db.execute(
                 "SELECT count(*) FROM duckdb_tables() WHERE table_name = 'published'"
             ).fetchone()
-    except duckdb.Error:  # locked by a running `arsenal dataset apply`
+    except duckdb.IOException:  # locked by a running `arsenal dataset apply`
         return DatasetState(state="busy")
+    except (duckdb.Error, KeyError, ValueError, TypeError):  # not a store this version wrote
+        return DatasetState(state="unreadable")
     rules: object = report.get("rules")
     limit: object = cast(dict[str, Any], rules).get("max_age_hours") if rules else None
     max_age = float(limit) if isinstance(limit, int | float) else None
-    changed = _moment(report.get("last_input_change"))
+    try:
+        changed = _moment(report.get("last_input_change"))
+        succeeded = _moment(report.get("last_success"))
+    except ValueError:
+        return DatasetState(state="unreadable")
     state = str(report["state"])
     if state in ("published", "stale") and changed is not None:
         stale = max_age is not None and now - changed > timedelta(hours=max_age)
@@ -154,7 +186,7 @@ def read_dataset_state(root: Path, now: datetime) -> DatasetState | None:
     return DatasetState(
         state=state,
         has_published=bool(row and row[0]),
-        last_success=_moment(report.get("last_success")),
+        last_success=succeeded,
         last_input_change=changed,
         max_age_hours=max_age,
         error=error if isinstance(error, str) else None,

@@ -14,6 +14,11 @@ from censor.reading import DataReading
 from censor.target import AuditContext, DataTarget, FilesTarget, PostgresTarget
 
 
+def _first_line(text: str) -> str:
+    lines = text.strip().splitlines()
+    return lines[0] if lines else "the query failed without a message"
+
+
 def _skipped_for_scale(
     ctx: AuditContext, target: DataTarget, label: str, scale: Scale
 ) -> DataReading:
@@ -55,9 +60,9 @@ def read_target(
                 return _skipped_for_scale(ctx, target, label, source.scale)
             return DataReading(
                 label,
-                key,
-                time_column,
-                profile=profile(source, key, time_column),
+                source.key,
+                source.time_column,
+                profile=profile(source),
                 sample=source.sample,
                 newest_file_at=source.newest_file_at,
             )
@@ -70,7 +75,7 @@ def read_target(
             raise
         return DataReading(label, skipped=clean(e))
     except duckdb.Error as e:
-        return DataReading(label, key, time_column, failure=clean(e).strip().splitlines()[0])
+        return DataReading(label, key, time_column, failure=_first_line(clean(e)))
 
 
 def read_targets(ctx: AuditContext) -> tuple[DataReading, ...]:

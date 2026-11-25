@@ -55,3 +55,13 @@ def test_undecodable_spec_records_read_error(tmp_path: Path) -> None:
     ctx = load_context(tmp_path)
     assert ctx.pipelines[0].read_error is not None
     assert ctx.pipelines[0].raw is None
+
+
+def test_a_manifest_that_cannot_be_read_is_a_tool_error(tmp_path: Path) -> None:
+    import pytest
+
+    from arsenal_core.errors import FatalError
+
+    (tmp_path / "arsenal.yaml").write_bytes(b"\xff\xfe\x00name")
+    with pytest.raises(FatalError, match="cannot read"):
+        load_context(tmp_path)

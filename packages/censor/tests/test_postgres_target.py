@@ -133,7 +133,7 @@ def test_since_narrows_the_scan(dsn: str, tmp_path: Path) -> None:
 
 
 def test_statement_timeout_is_na(dsn: str, tmp_path: Path) -> None:
-    outcome = _audit(tmp_path, "slow", key=("id",), scan=ScanOptions(timeout_seconds=1))
+    outcome = _audit(tmp_path, "slow", key=("id",), scan=ScanOptions(timeout_seconds=1, full=True))
     check = _by_kind(outcome)["data_health.skipped"]
     assert check.status == Status.NA and check.evidence == "timeout 1s"
     assert not outcome.report.has_failures and outcome.tool_errors == ()
@@ -171,3 +171,16 @@ def test_unset_dsn_variable_names_the_variable_only(
     monkeypatch.delenv(DSN_ENV, raising=False)
     with pytest.raises(FatalError, match=f"environment variable not set: {DSN_ENV}"):
         _audit(tmp_path, "orders")
+
+
+def test_a_view_has_no_size_so_it_is_read_only_when_narrowed(dsn: str, tmp_path: Path) -> None:
+    outcome = _audit(tmp_path, "slow", key=("id",))
+    assert _by_kind(outcome)["data_health.skipped"].status == Status.NA
+    assert "size unknown" in outcome.report.notices[0]
+
+
+def test_an_empty_server_side_sample_is_na_not_a_failure(dsn: str, tmp_path: Path) -> None:
+    outcome = _audit(tmp_path, "dirty", scan=ScanOptions(sample_percent=0.0001))
+    rows = _by_kind(outcome)["data_health.rows"]
+    assert rows.status == Status.NA and "sample is empty" in rows.evidence
+    assert not outcome.report.has_failures

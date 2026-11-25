@@ -241,3 +241,38 @@ def test_spill_directory_is_under_censor_tmp_and_left_empty(tmp_path: Path) -> N
     tmp = tmp_path / ".arsenal" / "censor" / "tmp"
     assert tmp.is_dir() and not list(tmp.iterdir())
     assert sorted(p.name for p in tmp_path.iterdir()) == [".arsenal", "data"]
+
+
+def test_key_and_time_column_match_without_regard_to_case(tmp_path: Path) -> None:
+    write_parquet(tmp_path / "a.parquet", ROWS)
+    target = FilesTarget(str(tmp_path / "*.parquet"))
+    checks = _by_kind(_audit(tmp_path, target, key=("ID",), time_column="TS"))
+    assert checks["data_health.key_unique"].evidence == "(id) is unique"
+    assert checks["data_health.period"].status == Status.PASS
+
+
+def test_a_duckdb_view_is_read_only_when_narrowed(tmp_path: Path) -> None:
+    import duckdb
+
+    store = write_duckdb(tmp_path / "x.duckdb", "t", 10)
+    with duckdb.connect(str(store)) as db:
+        db.execute("CREATE VIEW v AS SELECT * FROM t")
+    assert "data_health.skipped" in _by_kind(_audit(tmp_path, DuckDBTarget(store, "v")))
+    full = _audit(tmp_path, DuckDBTarget(store, "v"), scan=ScanOptions(full=True))
+    assert _by_kind(full)["data_health.rows"].evidence == "10 rows"
+
+
+def test_a_timestamp_python_cannot_represent_does_not_crash(tmp_path: Path) -> None:
+    import duckdb
+
+    store = tmp_path / "x.duckdb"
+    with duckdb.connect(str(store)) as db:
+        db.execute("CREATE TABLE t AS SELECT 1 AS id, TIMESTAMPTZ '290000-01-01 00:00:00+00' AS ts")
+    outcome = _audit(tmp_path, DuckDBTarget(store, "t"), time_column="ts", max_age_hours=1)
+    assert _by_kind(outcome)["data_health.period"].status == Status.PASS
+    assert _by_kind(outcome)["freshness.data_age"].status == Status.NA
+
+
+def test_invalid_memory_limit_is_rejected_before_anything_is_read(tmp_path: Path) -> None:
+    with pytest.raises(FatalError, match="--memory-limit"):
+        _audit(tmp_path, FilesTarget("x"), scan=ScanOptions(memory_limit="lots"))

@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import os
+import secrets
 import shutil
 import tempfile
 from collections.abc import Callable, Generator
@@ -34,7 +35,8 @@ def censor_dir(base: Path) -> Path:
 
 def _atomic_write(path: Path, write: Callable[[Path], object]) -> None:
     """Write via a temp file in the same directory, then replace; clean up on failure."""
-    tmp = path.with_name(f".{path.name}.tmp")
+    # A name no other audit of the same project uses, so two runs at once do not collide.
+    tmp = path.with_name(f".{path.name}.{os.getpid()}.{secrets.token_hex(4)}.tmp")
     tmp.unlink(missing_ok=True)  # never write through a planted temp symlink
     try:
         write(tmp)
@@ -114,12 +116,18 @@ def save_report(report: AuditReport, base: Path, *, markdown: str) -> Path:
     reports = root / "reports"
     _prepare_root(base, (runs, reports))
     json_path = runs / f"{report.run_id}.json"
-    _atomic_write(runs / f"{report.run_id}.parquet", lambda t: _write_parquet(report, t))
-    _atomic_write(
-        reports / f"{report.run_id}.md", lambda t: t.write_text(markdown, encoding="utf-8")
-    )
+    parquet_path = runs / f"{report.run_id}.parquet"
+    markdown_path = reports / f"{report.run_id}.md"
     body = report.model_dump_json(indent=2) + "\n"
-    _atomic_write(json_path, lambda t: t.write_text(body, encoding="utf-8"))
+    try:
+        _atomic_write(parquet_path, lambda t: _write_parquet(report, t))
+        _atomic_write(markdown_path, lambda t: t.write_text(markdown, encoding="utf-8"))
+        _atomic_write(json_path, lambda t: t.write_text(body, encoding="utf-8"))
+    except BaseException:
+        # Without its JSON a run does not exist: leave no half-saved Parquet for aggregates.
+        parquet_path.unlink(missing_ok=True)
+        markdown_path.unlink(missing_ok=True)
+        raise
     return json_path
 
 

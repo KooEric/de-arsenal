@@ -69,6 +69,10 @@ def load_context(root: Path) -> ProjectContext:
     if not manifest_path.is_file():
         raise FatalError(f"no {MANIFEST_NAME} in {root}; pass a DE Arsenal project directory")
     try:
+        manifest_path.read_text(encoding="utf-8")
+    except (OSError, UnicodeDecodeError) as e:  # an unreadable target is a tool error (exit 2)
+        raise FatalError(f"cannot read {manifest_path}: {_reason(e)}") from e
+    try:
         manifest = load_project(manifest_path)
     except ArsenalError as e:
         return ProjectContext(root, None, str(e), (), (), ())

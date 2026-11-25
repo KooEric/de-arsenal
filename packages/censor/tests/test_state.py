@@ -2,6 +2,7 @@ import sqlite3
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
 
+import pytest
 from _projects import bare_project
 from _state import PIPELINE, snapshot, write_split_dlq, write_state
 
@@ -107,3 +108,40 @@ def test_state_dir_from_the_spec_is_resolved_against_the_project(tmp_path: Path)
     write_state(root, at=RAN, done=1, state_dir="var/state")
     state = _read(root)
     assert state is not None and state.units == {"done": 1}
+
+
+def test_a_state_db_that_keeps_changing_during_the_copy_reads_as_busy(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    import shutil
+
+    root = bare_project(tmp_path)
+    db = write_state(root, at=RAN, done=1)
+    real_copy = shutil.copyfile
+    stamps = iter(range(100))
+
+    def copy_while_a_writer_checkpoints(src: Path, dst: Path) -> object:
+        if Path(src) == db:  # the "writer" changes the DB after it was stamped
+            import os
+
+            n = next(stamps)
+            os.utime(db, ns=(n, n))
+        return real_copy(src, dst)
+
+    monkeypatch.setattr(shutil, "copyfile", copy_while_a_writer_checkpoints)
+    state = _read(root)
+    assert state is not None and state.busy
+
+
+def test_a_malformed_dataset_store_is_unreadable_not_a_crash(tmp_path: Path) -> None:
+    import duckdb
+
+    from censor.state import read_dataset_state
+
+    store = tmp_path / ".arsenal" / "dataset.duckdb"
+    store.parent.mkdir()
+    with duckdb.connect(str(store)) as db:
+        db.execute("CREATE TABLE runs (id BIGINT, report VARCHAR)")
+        db.execute("""INSERT INTO runs VALUES (1, '{"rules": {"max_age_hours": 1}}')""")
+    dataset = read_dataset_state(tmp_path, NOW)
+    assert dataset is not None and dataset.state == "unreadable"

@@ -61,8 +61,10 @@ def _declares_schedule(path: Path, text: str) -> bool:
         return any(m in ln for ln in lines for m in _SCHEDULE_MARKERS)
     if not any(marker in text for marker in _SCHEDULE_MARKERS):
         return False
-    trigger = _DAG_TRIGGER if path.suffix == ".py" else _WORKFLOW_TRIGGER
-    return trigger in text
+    if path.suffix != ".py":
+        return _WORKFLOW_TRIGGER in text
+    code = (ln.split("#", 1)[0] for ln in text.splitlines())  # a comment schedules nothing
+    return any(_DAG_TRIGGER in ln for ln in code)
 
 
 def _schedule_file(root: Path) -> Path | None:

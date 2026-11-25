@@ -49,6 +49,8 @@ class DataSource:
     columns: tuple[str, ...]
     scale: Scale
     timeout_seconds: float
+    key: tuple[str, ...] = ()  # as the data spells the columns
+    time_column: str | None = None
     sample: str | None = None  # how the sample was drawn, for the report header
     newest_file_at: datetime | None = None
 
@@ -134,15 +136,22 @@ def _duckdb_relation(con: duckdb.DuckDBPyConnection, target: DuckDBTarget) -> tu
         raise TargetUnreadable(f"no table {target.table} in {target.path}")
     found_schema, estimated = rows[0]
     relation = f"{_ATTACHED}.{quote_ident(found_schema)}.{quote_ident(table)}"
-    return relation, Scale(estimated_rows=None if estimated is None else int(estimated))
+    if estimated is None:  # a view
+        return relation, Scale(unknown=True)
+    return relation, Scale(estimated_rows=int(estimated))
 
 
-def _require_columns(columns: tuple[str, ...], wanted: tuple[str, ...], label: str) -> None:
-    missing = [c for c in wanted if c not in columns]
+def resolve_columns(
+    columns: tuple[str, ...], wanted: tuple[str, ...], label: str
+) -> tuple[str, ...]:
+    """`wanted` spelled as the data spells it (DuckDB matches names without regard to case)."""
+    by_lower = {c.lower(): c for c in columns}
+    missing = [c for c in wanted if c.lower() not in by_lower]
     if missing:
         raise FatalError(
             f"{label} has no column {', '.join(missing)} (columns: {', '.join(columns)})"
         )
+    return tuple(by_lower[c.lower()] for c in wanted)
 
 
 def narrow(
@@ -195,7 +204,9 @@ def open_source(
         except duckdb.Error as e:
             raise TargetUnreadable(f"could not read {target.label}: {e}") from e
         columns = tuple(str(row[0]) for row in described)
-        _require_columns(columns, (*key, *((time_column,) if time_column else ())), target.label)
+        key = resolve_columns(columns, key, target.label)
+        if time_column is not None:
+            (time_column,) = resolve_columns(columns, (time_column,), target.label)
         if isinstance(target, FilesTarget | DuckDBTarget):
             narrowed, sample = narrow(relation, scan, key, time_column)
         else:
@@ -204,13 +215,25 @@ def open_source(
             narrowed, sample = narrow_postgres(relation, target, scan, key, time_column)
         if sample is not None and not key:
             con.execute("SET threads = 1")  # a seeded row sample repeats only on one thread
-        yield DataSource(con, narrowed, columns, scale, scan.timeout_seconds, sample, newest)
+        yield DataSource(
+            con, narrowed, columns, scale, scan.timeout_seconds, key, time_column, sample, newest
+        )
     finally:
         con.close()
 
 
-def profile(source: DataSource, key: tuple[str, ...], time_column: str | None) -> Profile:
+def _moment(epoch: object) -> datetime | None:
+    if not isinstance(epoch, int | float):
+        return None
+    try:
+        return datetime.fromtimestamp(float(epoch), UTC)
+    except (ValueError, OverflowError, OSError):  # a year Python cannot represent
+        return None
+
+
+def profile(source: DataSource) -> Profile:
     """Row count, NULLs per column, key NULLs and duplicates, and the period."""
+    key, time_column = source.key, source.time_column
     select = ["count(*)"]
     select += [f"count(*) FILTER (WHERE {quote_ident(c)} IS NULL)" for c in source.columns]
     if time_column is not None:
@@ -231,7 +254,7 @@ def profile(source: DataSource, key: tuple[str, ...], time_column: str | None) -
     time_max_at: datetime | None = None
     if time_column is not None:
         time_min, time_max, epoch = row[1 + n : 4 + n]
-        time_max_at = None if epoch is None else datetime.fromtimestamp(float(epoch), UTC)
+        time_max_at = _moment(epoch)
     duplicates: int | None = None
     if key:
         keys = ", ".join(quote_ident(k) for k in key)

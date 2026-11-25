@@ -26,6 +26,9 @@ def _r(
 
 def _rows(reading: DataReading, profile: Profile) -> CheckResult:
     sampled = " in the sample" if reading.sample else ""
+    if profile.rows == 0 and reading.sample:
+        evidence = f"the sample is empty ({reading.sample}): nothing to measure"
+        return _r("rows", reading, 2, Status.NA, evidence)
     if profile.rows == 0:
         fix = "check that the pipeline wrote output and that the path or table is the right one"
         return _r("rows", reading, 2, Status.FAIL, f"0 rows{sampled}", fix)

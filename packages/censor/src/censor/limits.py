@@ -18,6 +18,7 @@ class Scale:
     files: int | None = None
     bytes: int | None = None
     estimated_rows: int | None = None
+    unknown: bool = False  # a view or a partitioned parent: the catalog has no size for it
 
 
 def list_files(pattern: str) -> list[Path]:
@@ -32,7 +33,8 @@ def measure_files(paths: list[Path]) -> Scale:
 
 def exceeds(scale: Scale) -> bool:
     return (
-        (scale.files is not None and scale.files > MAX_FILES)
+        scale.unknown  # fail closed: an unmeasured target is read only when the user narrows it
+        or (scale.files is not None and scale.files > MAX_FILES)
         or (scale.bytes is not None and scale.bytes > MAX_BYTES)
         or (scale.estimated_rows is not None and scale.estimated_rows > MAX_ESTIMATED_ROWS)
     )
@@ -47,6 +49,8 @@ def _count(value: int) -> str:
 
 def describe(scale: Scale) -> str:
     """`18,432 files, 41.2 GB (estimated 620M rows)`, with only the parts that were measured."""
+    if scale.unknown:
+        return "size unknown (a view or a partitioned table has no size in the catalog)"
     parts: list[str] = []
     if scale.files is not None:
         parts.append(f"{scale.files:,} files")

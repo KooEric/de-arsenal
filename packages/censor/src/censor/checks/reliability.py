@@ -129,7 +129,7 @@ def _pipeline(ctx: AuditContext, spec: SpecFile) -> list[CheckResult]:
                 spec,
                 1,
                 Status.WARN,
-                "the state database could not be read: a run is probably running and writing it",
+                "the state database could not be read: a run is writing it, or the file is damaged",
                 "audit again when the run has finished",
             ),
         ]

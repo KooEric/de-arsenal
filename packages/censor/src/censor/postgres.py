@@ -16,9 +16,10 @@ from censor.target import PostgresTarget, ScanOptions
 from gladius.compile.ident import quote_ident
 
 _ATTACHED: Final = "src"
-_IDENT: Final = re.compile(r"^[A-Za-z_][A-Za-z0-9_$]*$")
+_IDENT: Final = re.compile(r"[A-Za-z_][A-Za-z0-9_$]*")
 _REDACTED: Final = "<redacted-dsn>"
 DEFAULT_SCHEMA: Final = "public"
+_SIZED_RELKINDS: Final = ("r", "m")  # tables and materialized views; others report no size
 
 
 def _dsn(target: PostgresTarget) -> str:
@@ -74,7 +75,7 @@ def _connect_failure(message: str) -> str:
 def split_table(table: str) -> tuple[str, str]:
     schema, _, name = table.rpartition(".")
     schema = schema or DEFAULT_SCHEMA
-    if not _IDENT.match(schema) or not _IDENT.match(name):
+    if not _IDENT.fullmatch(schema) or not _IDENT.fullmatch(name):
         raise FatalError(f"invalid table name {table!r}: use `table` or `schema.table`")
     return schema, name
 
@@ -95,7 +96,8 @@ def postgres_relation(
         con.execute(f"ATTACH '{attach}' AS {_ATTACHED} (TYPE POSTGRES, READ_ONLY)")
         qualified = f"{quote_ident(schema)}.{quote_ident(name)}"
         size = _server_sql(
-            "SELECT c.reltuples::bigint, pg_total_relation_size(c.oid) FROM pg_class c "
+            "SELECT c.reltuples::bigint, pg_total_relation_size(c.oid), c.relkind::text "
+            "FROM pg_class c "
             f"WHERE c.oid = to_regclass('{qualified}')"
         )
         rows = run_query(con, f"SELECT * FROM {size}", scan.timeout_seconds)
@@ -108,7 +110,9 @@ def postgres_relation(
         ) from None  # the driver's own text names the host, port and user: never chain it
     if not rows:
         raise TargetUnreadable(f"no table {target.table} (DSN from ${target.dsn_env})")
-    estimated, total_bytes = rows[0]
+    estimated, total_bytes, relkind = rows[0]
+    if relkind not in _SIZED_RELKINDS:
+        return f"{_ATTACHED}.{qualified}", Scale(unknown=True)
     # reltuples is -1 until the table is analysed; the size still bounds it.
     scale = Scale(
         bytes=int(total_bytes),

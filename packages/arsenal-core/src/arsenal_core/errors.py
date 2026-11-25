@@ -13,6 +13,14 @@ class FatalError(ArsenalError):
     """재시도 무의미: 설정 오류, 4xx(401/429 제외), 계약 위반. 즉시 중단."""
 
 
+class MissingEnvError(FatalError):
+    """A spec refers to an environment variable that is not set in this shell."""
+
+    def __init__(self, name: str) -> None:
+        super().__init__(f"environment variable not set: {name}")
+        self.name = name
+
+
 class RetryableError(ArsenalError):
     """일시적 실패: 네트워크, 5xx, 429, lock 충돌. backoff 재시도."""
 
