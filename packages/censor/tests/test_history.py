@@ -131,3 +131,16 @@ def test_save_refuses_history_dir_that_resolves_outside_the_project(
     with pytest.raises(OSError, match="outside"):
         save_report(audit_project(root, now=T1), root, markdown="")
     assert not outside.exists()
+
+
+def test_parquet_rows_carry_run_metadata(tmp_path: Path) -> None:
+    root = minimal_project(tmp_path)
+    report = audit_project(root, now=T1)
+    save_report(report, root, markdown="")
+    parquet = censor_dir(root) / "runs" / f"{report.run_id}.parquet"
+    table = cast("pa.Table", pq.read_table(parquet))  # pyright: ignore[reportUnknownMemberType]
+    rows = cast(list[dict[str, object]], table.to_pylist())
+    assert {r["tier"] for r in rows} == {"quick"}
+    assert {r["target_kind"] for r in rows} == {"project"}
+    assert {r["target"] for r in rows} == {report.target}
+    assert {r["censor_version"] for r in rows} == {report.censor_version}

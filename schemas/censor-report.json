@@ -123,12 +123,27 @@
       "type": "string"
     },
     "tier": {
-      "const": "quick",
+      "description": "quick reads files only; standard (Plan 2) also inspects state and data",
+      "enum": [
+        "quick",
+        "standard"
+      ],
       "title": "Tier",
       "type": "string"
     },
     "target": {
       "title": "Target",
+      "type": "string"
+    },
+    "target_kind": {
+      "description": "What `target` names; Plan 1 audits a DE Arsenal `project` only",
+      "enum": [
+        "project",
+        "files",
+        "duckdb",
+        "postgres"
+      ],
+      "title": "Target Kind",
       "type": "string"
     },
     "censor_version": {
@@ -181,6 +196,7 @@
     "run_id",
     "tier",
     "target",
+    "target_kind",
     "censor_version",
     "score",
     "grade",

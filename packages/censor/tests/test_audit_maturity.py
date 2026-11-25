@@ -53,3 +53,7 @@ def test_literal_secret_caps_production_project_at_c(tmp_path: Path) -> None:
     assert report.capped_by_blocker is True
     assert report.has_failures
     assert any(c.status == Status.FAIL and c.blocker for c in report.checks)
+
+
+def test_report_declares_project_target_kind(tmp_path: Path) -> None:
+    assert audit_project(minimal_project(tmp_path), now=NOW).target_kind == "project"

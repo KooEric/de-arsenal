@@ -42,7 +42,14 @@ def _atomic_write(path: Path, write: Callable[[Path], object]) -> None:
 
 
 def _write_parquet(report: AuditReport, tmp: Path) -> None:
-    rows = [{"run_id": report.run_id, **c.model_dump(mode="json")} for c in report.checks]
+    run = {
+        "run_id": report.run_id,
+        "tier": report.tier,
+        "target": report.target,
+        "target_kind": report.target_kind,
+        "censor_version": report.censor_version,
+    }
+    rows = [{**run, **c.model_dump(mode="json")} for c in report.checks]
     try:
         pq.write_table(  # pyright: ignore[reportUnknownMemberType]
             pa.Table.from_pylist(rows), tmp, compression="zstd"
@@ -58,6 +65,16 @@ def _ensure_inside(base: Path, root: Path, dirs: tuple[Path, ...]) -> None:
             raise OSError(f"{path} is a symlink; refusing to write run history through it")
     if not root.resolve().is_relative_to(base.resolve()):
         raise OSError(f"{root} resolves outside {base}; refusing to write run history there")
+
+
+def unique_run_id(base: Path, run_id: str) -> str:
+    """`run_id`, or `run_id-2`, `-3`, ... when a saved run already has that id."""
+    runs = censor_dir(base) / "runs"
+    candidate, n = run_id, 1
+    while (runs / f"{candidate}.json").exists():
+        n += 1
+        candidate = f"{run_id}-{n}"
+    return candidate
 
 
 def save_report(report: AuditReport, base: Path, *, markdown: str) -> Path:

@@ -138,3 +138,43 @@ def test_symlinked_history_dir_exits_2_and_writes_nothing_outside(tmp_path: Path
     assert result.exit_code == 2
     assert "could not save" in result.stderr
     assert list(outside.iterdir()) == []
+
+
+def test_tier_quick_is_the_default_and_accepted(tmp_path: Path) -> None:
+    root = production_project(tmp_path)
+    result = runner.invoke(app, ["audit", str(root), "--tier", "quick", "--json-only"])
+    assert result.exit_code == 0, result.output
+    assert json.loads(result.stdout)["tier"] == "quick"
+
+
+def test_tier_standard_is_not_available_yet(tmp_path: Path) -> None:
+    root = production_project(tmp_path)
+    result = runner.invoke(app, ["audit", str(root), "--tier", "standard"])
+    assert result.exit_code == 2
+    assert "tier standard is not available yet (Plan 2)" in result.stderr
+    assert result.stdout == ""
+    assert not (root / ".arsenal").exists()
+
+
+def test_unknown_tier_is_a_usage_error(tmp_path: Path) -> None:
+    result = runner.invoke(app, ["audit", str(production_project(tmp_path)), "--tier", "deep"])
+    assert result.exit_code == 2
+
+
+def test_same_second_runs_get_distinct_ids(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    def fixed(tier: str, now: datetime | None = None) -> str:
+        return f"20261125-093000-{tier}"
+
+    monkeypatch.setattr("censor.audit.new_run_id", fixed)
+    root = production_project(tmp_path)
+    ids: list[str] = []
+    for _ in range(3):
+        result = runner.invoke(app, ["audit", str(root), "--json-only"])
+        assert result.exit_code == 0, result.output
+        ids.append(json.loads(result.stdout)["run_id"])
+    assert ids == ["20261125-093000-quick", "20261125-093000-quick-2", "20261125-093000-quick-3"]
+    runs = root / ".arsenal" / "censor" / "runs"
+    for run_id in ids:
+        saved = json.loads((runs / f"{run_id}.json").read_text())
+        assert saved["run_id"] == run_id
+        assert (runs / f"{run_id}.parquet").is_file()

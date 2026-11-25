@@ -26,6 +26,7 @@ def audit_project(root: Path, *, now: datetime | None = None) -> AuditReport:
         run_id=new_run_id("quick", now),
         tier="quick",
         target=str(ctx.root),
+        target_kind="project",
         censor_version=__version__,
         score=scored.score,
         grade=scored.grade,

@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from collections.abc import Sequence
+from enum import StrEnum
 from pathlib import Path
 from typing import Annotated
 
@@ -10,13 +11,18 @@ import typer
 
 from arsenal_core.errors import ArsenalError
 from censor.audit import audit_project
-from censor.history import diff_reports, list_reports, load_report, save_report
+from censor.history import diff_reports, list_reports, load_report, save_report, unique_run_id
 from censor.report import Lang, render_markdown
 
 app = typer.Typer(help="Censor — audit a DE Arsenal project and grade it.", no_args_is_help=True)
 
 EXIT_FAILURES = 1
 EXIT_TOOL_ERROR = 2
+
+
+class Tier(StrEnum):
+    QUICK = "quick"
+    STANDARD = "standard"
 
 
 def _err(message: str) -> None:
@@ -28,16 +34,24 @@ def audit(
     project: Annotated[Path, typer.Argument(help="Project directory")] = Path("."),
     lang: Annotated[str, typer.Option("--lang", help="Report language: en or ko")] = "en",
     json_only: Annotated[bool, typer.Option("--json-only", help="No summary on stderr")] = False,
+    tier: Annotated[
+        Tier, typer.Option("--tier", help="quick reads files only; standard is Plan 2")
+    ] = Tier.QUICK,
 ) -> None:
     """Grade a project (quick tier: reads files only, runs nothing)."""
     if lang not in ("en", "ko"):
         raise typer.BadParameter("use en or ko", param_hint="--lang")
+    if tier is not Tier.QUICK:
+        _err(f"censor: tier {tier.value} is not available yet (Plan 2)")
+        raise typer.Exit(EXIT_TOOL_ERROR)
     report_lang: Lang = "ko" if lang == "ko" else "en"
     try:
-        result = audit_project(project)
+        audited = audit_project(project)
     except ArsenalError as e:
         _err(f"censor: {e}")
         raise typer.Exit(EXIT_TOOL_ERROR) from e
+    run_id = unique_run_id(project.absolute(), audited.run_id)
+    result = audited.model_copy(update={"run_id": run_id})
     typer.echo(result.model_dump_json(indent=2))
     if not json_only:
         score = "-" if result.score is None else f"{result.score:.1f}"

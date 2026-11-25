@@ -63,8 +63,13 @@ class DimensionScore(_Frozen):
 class AuditReport(_Frozen):
     schema_version: Literal[1] = 1
     run_id: str
-    tier: Literal["quick"]
+    tier: Literal["quick", "standard"] = Field(
+        description="quick reads files only; standard (Plan 2) also inspects state and data"
+    )
     target: str
+    target_kind: Literal["project", "files", "duckdb", "postgres"] = Field(
+        description="What `target` names; Plan 1 audits a DE Arsenal `project` only"
+    )
     censor_version: str
     score: float | None = Field(description="0-100, or null when nothing applied")
     grade: str | None
