@@ -12,6 +12,28 @@ minor.
 
 ## [Unreleased]
 
+Ships in `0.7.0`. No `0.6.x` tag is cut after `0.6.17`: `de-censor` is a new PyPI project
+and has no publisher yet (see `docs/release.md`).
+
+### Added
+
+- Censor (`de-censor`, new package): `censor audit [DIR] --tier quick` grades a DE Arsenal
+  project from its files alone, without running it. Five dimensions are scored 0-10 and
+  combined into a 0-100 score and a grade (A+ to F): correctness (the manifest and every
+  spec load and compile, as in `arsenal check`), quality guards (`validate`,
+  `on_violation`, key rules, `schema_drift`, `contract`), security (literal secrets in
+  spec files), operability (README, a schedule, lineage) and agent readiness (CLAUDE.md,
+  the de-arsenal plugin, a deny rule for `.arsenal/`, a secret-scan hook). A literal
+  secret or a spec that does not load caps the grade at C. Every failed check names its
+  evidence and a fix; a secret's value is never printed.
+- `censor report` lists saved runs and `censor compare <a> <b>` shows the checks whose
+  status changed. Each audit is saved under `.arsenal/censor/` as JSON, Parquet (one row
+  per check, queryable with `gladius query`) and a Markdown report (`--lang en|ko`).
+- `arsenal eval` runs `censor audit` with the same arguments. It needs `de-censor`
+  installed (`pip install de-censor`); `de-arsenal` does not depend on it.
+- `schemas/censor-report.json`: the JSON Schema of the report `censor audit` prints to
+  stdout. Exit codes: 0 no failed check, 1 at least one, 2 Censor could not run.
+
 ## [0.6.17] - 2026-11-25
 
 Augur's read-only guard is enforced by the DuckDB parser and a sandboxed connection

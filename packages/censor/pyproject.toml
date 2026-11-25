@@ -1,6 +1,6 @@
 [project]
 name = "de-censor"
-version = "0.6.16"
+version = "0.6.17"
 description = "Censor — audit a DE Arsenal project or dataset and grade it, with evidence and fixes"
 readme = "README.md"
 requires-python = ">=3.11"

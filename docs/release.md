@@ -1,3 +1,8 @@
+> **0.6.x 태그 동결 (feat/censor 머지 이후)**: `uv build --all-packages`가 `de-censor`도 빌드하는데,
+> PyPI에 `de-censor` pending publisher가 아직 없다. 그래서 v0.6.17 다음에는 v0.6.x 태그를 만들지 않고
+> 다음 릴리스는 v0.7.0이다(Censor 설계 §10, `docs/plans/2026-11-25-censor-design.md`). `release.yml`은
+> 그대로 둔다.
+
 # v0.6.17 패치 릴리스 절차
 
 Augur의 읽기 전용 가드 보강이 전부다(#53). 0.6.16까지는 생성 SQL의 첫 단어만 검사해서, 주석으로
@@ -22,10 +27,6 @@ DuckDB 파서로 SELECT 한 문장만 통과시키고, 실행 연결은 카탈�
 ---
 
 # v0.6.16 패치 릴리스 절차
-
-> **0.6.x 태그 동결 (feat/censor 머지 이후)**: `uv build --all-packages`가 `de-censor`도 빌드하는데,
-> PyPI에 `de-censor` pending publisher가 아직 없다. 그래서 v0.6.x 태그는 더 만들지 않고 다음 릴리스는
-> v0.7.0이다(Censor 설계 §10, `docs/plans/2026-11-25-censor-design.md`). `release.yml`은 그대로 둔다.
 
 PyPI의 0.6.15 Augur가 Anthropic API에 `temperature`를 보내, Claude 5.x 모델이 첫 요청부터 400으로
 거부하던 문제의 수정이 핵심이다. 함께 나가는 것: Augur 기본 Anthropic 모델 `claude-sonnet-5-5`,

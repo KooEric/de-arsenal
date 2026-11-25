@@ -1057,7 +1057,7 @@ provides-extras = ["spark-kubernetes", "iceberg", "object-store"]
 
 [[package]]
 name = "de-censor"
-version = "0.6.16"
+version = "0.6.17"
 source = { editable = "packages/censor" }
 dependencies = [
     { name = "arsenal-core" },
