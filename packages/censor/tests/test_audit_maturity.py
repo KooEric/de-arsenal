@@ -1,6 +1,8 @@
+from collections.abc import Callable
 from datetime import UTC, datetime
 from pathlib import Path
 
+import pytest
 from _projects import (
     functional_project,
     minimal_project,
@@ -57,3 +59,20 @@ def test_literal_secret_caps_production_project_at_c(tmp_path: Path) -> None:
 
 def test_report_declares_project_target_kind(tmp_path: Path) -> None:
     assert audit_project(minimal_project(tmp_path), now=NOW).target_kind == "project"
+
+
+@pytest.mark.parametrize(
+    ("build", "score", "grade"),
+    [
+        (minimal_project, 70.2083, "C"),
+        (functional_project, 87.2917, "B"),
+        (robust_project, 96.4583, "A+"),
+        (production_project, 100.0, "A+"),
+    ],
+)
+def test_maturity_fixture_scores_are_pinned(
+    tmp_path: Path, build: Callable[[Path], Path], score: float, grade: str
+) -> None:
+    report = audit_project(build(tmp_path), now=NOW)
+    assert report.score == pytest.approx(score, abs=1e-3)
+    assert report.grade == grade

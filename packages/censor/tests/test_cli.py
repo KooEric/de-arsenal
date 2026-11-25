@@ -10,6 +10,9 @@ from typer.testing import CliRunner
 from censor.audit import audit_project
 from censor.cli import app, run_cli
 from censor.history import save_report
+from censor.model import AuditReport
+
+SCHEMA = Path(__file__).parents[3] / "schemas" / "censor-report.json"
 
 runner = CliRunner()
 
@@ -178,3 +181,12 @@ def test_same_second_runs_get_distinct_ids(tmp_path: Path, monkeypatch: pytest.M
         saved = json.loads((runs / f"{run_id}.json").read_text())
         assert saved["run_id"] == run_id
         assert (runs / f"{run_id}.parquet").is_file()
+
+
+def test_audit_stdout_matches_the_published_schema(tmp_path: Path) -> None:
+    # jsonschema is not in the workspace: validate with the model and pin the committed schema
+    # to the model, so stdout, AuditReport and schemas/censor-report.json cannot drift apart.
+    result = runner.invoke(app, ["audit", str(minimal_project(tmp_path)), "--json-only"])
+    report = AuditReport.model_validate_json(result.stdout)
+    assert report.model_dump(mode="json") == json.loads(result.stdout)
+    assert json.loads(SCHEMA.read_text(encoding="utf-8")) == AuditReport.model_json_schema()
