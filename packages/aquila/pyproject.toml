@@ -1,6 +1,6 @@
 [project]
 name = "de-aquila"
-version = "0.6.15"
+version = "0.6.16"
 description = "Aquila — a file-backed data catalog: datasets, schema history, lineage, contracts and tags"
 readme = "README.md"
 requires-python = ">=3.11"
