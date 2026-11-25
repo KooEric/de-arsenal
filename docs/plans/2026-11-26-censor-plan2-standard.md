@@ -4,7 +4,7 @@
 > 적은 상세 계획이 아니다. 각 작업을 시작하기 전에 "읽을 것"의 파일을 먼저 읽고, 작업마다 테스트를 먼저
 > 쓴다(TDD). 작업 0은 나머지 작업의 전제를 확인하는 조사이므로 반드시 먼저 한다.
 
-- 상태: 구현됨 (2026-11-26, 브랜치 `feat/censor-standard`). 상세 계획: [2026-11-26-censor-plan2-detail.md](2026-11-26-censor-plan2-detail.md). 기본 tier 변경(작업 6)은 사용자 결정 대기
+- 상태: 구현됨 (2026-11-26, 브랜치 `feat/censor-standard`). 상세 계획: [2026-11-26-censor-plan2-detail.md](2026-11-26-censor-plan2-detail.md). 기본 tier는 `quick`으로 둔다(사용자 결정, 2026-11-26). `standard`로 바꾸는 것은 다음 minor에서 다시 본다
 - 선행: Plan 1 완료, **v0.7.0 배포됨** (14개 패키지, `de-censor` 포함). `main` = `c3ee7e2`.
 - 설계 스펙: [2026-11-25-censor-design.md](2026-11-25-censor-design.md) §3(차원), §6(규모 보호), §8(오류), §9(테스트)
 - Plan 1 상세 계획(코드 스타일·테스트 방식의 본보기): [2026-11-25-censor-plan1-foundation.md](2026-11-25-censor-plan1-foundation.md)
