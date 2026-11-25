@@ -8,6 +8,7 @@ from typing import Final
 from arsenal_core.errors import FatalError
 from censor.context import SpecFile
 from censor.model import CheckResult, Dimension, Status
+from censor.reading import DataReading
 from censor.result import make_result
 from censor.state import DatasetState, read_dataset_state, read_pipeline_state
 from censor.target import AuditContext
@@ -93,7 +94,32 @@ def _project(ctx: AuditContext) -> list[CheckResult]:
     return results
 
 
+def _data_age(ctx: AuditContext, reading: DataReading) -> CheckResult:
+    """A bare dataset: the newest time-column value, or the newest file, against the limit."""
+    check_id = f"freshness.data_age:{reading.label}"
+
+    def result(status: Status, evidence: str, fix: str = "") -> CheckResult:
+        return make_result(check_id, _DIM, 2, status, reading.label, evidence, fix)
+
+    if reading.profile is None:
+        return result(Status.NA, reading.skipped or reading.failure or "not profiled")
+    if reading.time_column is not None:
+        newest, what = reading.profile.time_max_at, f"newest {reading.time_column}"
+    else:
+        newest, what = reading.newest_file_at, "newest file written"
+    if newest is None:
+        return result(Status.NA, "no time column given: pass --time-column")
+    age = age_hours(ctx.now, newest)
+    seen = f"{what} {newest:%Y-%m-%d %H:%M} UTC ({age:.1f}h ago)"
+    limit = ctx.max_age_hours
+    if limit is None:
+        return result(Status.NA, f"{seen}; pass --max-age-hours to judge it")
+    if age > limit:
+        return result(Status.FAIL, f"{seen}, limit {limit:g}h", "check that the load still runs")
+    return result(Status.PASS, f"{seen}, limit {limit:g}h")
+
+
 def check_freshness(ctx: AuditContext) -> list[CheckResult]:
     if ctx.kind == "project":
         return _project(ctx)
-    return []
+    return [_data_age(ctx, reading) for reading in ctx.readings]

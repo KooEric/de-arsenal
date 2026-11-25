@@ -2,14 +2,16 @@
 
 from __future__ import annotations
 
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 from datetime import UTC, datetime
 from pathlib import Path
 
+from arsenal_core.errors import FatalError
 from censor import __version__
 from censor.checks import QUICK_CHECKS, STANDARD_CHECKS
 from censor.context import load_context
 from censor.model import AuditReport
+from censor.readings import read_targets
 from censor.runner import run_checks
 from censor.scoring import score_checks
 from censor.target import AuditContext, DataTarget, ScanOptions, Tier, kind_of
@@ -38,6 +40,22 @@ class AuditOutcome:
     tool_errors: tuple[str, ...] = ()  # the target could not be read: exit code 2
 
 
+def _validate(request: AuditRequest) -> None:
+    scan = request.scan
+    if request.data is not None and request.tier == "quick":
+        raise FatalError(
+            "a data target needs --tier standard: the quick tier reads project files only"
+        )
+    if scan.sample_percent is not None and not 0 < scan.sample_percent <= 100:
+        raise FatalError("--sample must be above 0 and at most 100 (percent)")
+    if scan.since is not None and request.time_column is None:
+        raise FatalError("--since needs --time-column")
+    if scan.timeout_seconds <= 0:
+        raise FatalError("--timeout must be above 0 seconds")
+    if request.max_age_hours is not None and request.max_age_hours < 0:
+        raise FatalError("--max-age-hours must not be negative")
+
+
 def _context(request: AuditRequest, now: datetime) -> AuditContext:
     root = request.root.absolute()
     if request.data is None:
@@ -56,8 +74,12 @@ def _context(request: AuditRequest, now: datetime) -> AuditContext:
 
 def run_audit(request: AuditRequest) -> AuditOutcome:
     now = (request.now or datetime.now(UTC)).astimezone(UTC)
+    _validate(request)
     ctx = _context(request, now)
-    groups = QUICK_CHECKS if request.tier == "quick" else STANDARD_CHECKS
+    groups = QUICK_CHECKS
+    if request.tier == "standard":
+        ctx = replace(ctx, readings=read_targets(ctx))
+        groups = STANDARD_CHECKS
     checks = run_checks(ctx, groups)
     scored = score_checks(checks)
     report = AuditReport(
@@ -71,8 +93,11 @@ def run_audit(request: AuditRequest) -> AuditOutcome:
         capped_by_blocker=scored.capped_by_blocker,
         dimensions=scored.dimensions,
         checks=checks,
+        sample=next((r.sample for r in ctx.readings if r.sample), None),
+        since=request.scan.since.isoformat() if request.scan.since else None,
+        notices=[r.notice for r in ctx.readings if r.notice],
     )
-    return AuditOutcome(report)
+    return AuditOutcome(report, tuple(r.tool_error for r in ctx.readings if r.tool_error))
 
 
 def audit_project(root: Path, *, now: datetime | None = None) -> AuditReport:

@@ -8,6 +8,7 @@ from pathlib import Path
 from typing import Final, Literal
 
 from censor.context import ProjectContext
+from censor.reading import DataReading
 
 TargetKind = Literal["project", "files", "duckdb", "postgres"]
 Tier = Literal["quick", "standard"]
@@ -82,3 +83,4 @@ class AuditContext:
     time_column: str | None = None
     max_age_hours: float | None = None
     scan: ScanOptions = field(default_factory=ScanOptions)
+    readings: tuple[DataReading, ...] = ()  # filled before the Standard checks run

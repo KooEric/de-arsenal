@@ -64,11 +64,11 @@ class AuditReport(_Frozen):
     schema_version: Literal[1] = 1
     run_id: str
     tier: Literal["quick", "standard"] = Field(
-        description="quick reads files only; standard (not available yet) also reads state and data"
+        description="quick reads files only; standard also reads run state and data"
     )
     target: str
     target_kind: Literal["project", "files", "duckdb", "postgres"] = Field(
-        description="What `target` names; Plan 1 audits a DE Arsenal `project` only"
+        description="What `target` names: a DE Arsenal project or a bare dataset"
     )
     censor_version: str
     score: float | None = Field(description="0-100, or null when nothing applied")
@@ -76,6 +76,14 @@ class AuditReport(_Frozen):
     capped_by_blocker: bool
     dimensions: list[DimensionScore]
     checks: list[CheckResult]
+    sample: str | None = Field(
+        default=None, description="How the data was sampled (`--sample`); null when all was read"
+    )
+    since: str | None = Field(default=None, description="`--since` date, when one was given")
+    notices: list[str] = Field(
+        default_factory=list[str],
+        description="Guidance for data that was skipped by the scale guard",
+    )
 
     @property
     def has_failures(self) -> bool:
