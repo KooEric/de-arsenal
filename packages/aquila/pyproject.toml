@@ -1,14 +1,14 @@
 [project]
 name = "de-aquila"
-version = "0.6.17"
+version = "0.7.0"
 description = "Aquila — a file-backed data catalog: datasets, schema history, lineage, contracts and tags"
 readme = "README.md"
 requires-python = ">=3.11"
 license = "Apache-2.0"
 license-files = ["LICENSE"]
 dependencies = [
-    "arsenal-core>=0.6,<0.7",
-    "de-scorpio>=0.6,<0.7",
+    "arsenal-core>=0.7,<0.8",
+    "de-scorpio>=0.7,<0.8",
     "pyarrow>=17",
     "pyyaml>=6",
     "typer>=0.12",

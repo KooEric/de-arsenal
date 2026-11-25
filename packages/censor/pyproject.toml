@@ -1,15 +1,15 @@
 [project]
 name = "de-censor"
-version = "0.6.17"
+version = "0.7.0"
 description = "Censor — audit a DE Arsenal project or dataset and grade it, with evidence and fixes"
 readme = "README.md"
 requires-python = ">=3.11"
 license = "Apache-2.0"
 license-files = ["LICENSE"]
 dependencies = [
-    "arsenal-core>=0.6,<0.7",
-    "de-arsenal>=0.6,<0.7",
-    "de-gladius>=0.6,<0.7",
+    "arsenal-core>=0.7,<0.8",
+    "de-arsenal>=0.7,<0.8",
+    "de-gladius>=0.7,<0.8",
     "pyarrow>=17",
     "pydantic>=2",
     "pyyaml>=6",

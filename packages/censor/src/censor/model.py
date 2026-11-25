@@ -64,7 +64,7 @@ class AuditReport(_Frozen):
     schema_version: Literal[1] = 1
     run_id: str
     tier: Literal["quick", "standard"] = Field(
-        description="quick reads files only; standard (Plan 2) also inspects state and data"
+        description="quick reads files only; standard (not available yet) also reads state and data"
     )
     target: str
     target_kind: Literal["project", "files", "duckdb", "postgres"] = Field(

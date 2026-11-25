@@ -135,6 +135,7 @@ and they exchange data only as Parquet files.
 | **Aquila** | Catalog in one SQLite file: datasets, schema history, lineage (including `arsenal dataset` publications), contracts, tags | `de-aquila` | preview |
 | **Augur** | Natural-language questions to SQL, with an eval harness | `de-augur` | experimental |
 | **Pilum** | Reverse ETL: send changed records to HTTP endpoints and Slack, once per change | `de-pilum` | experimental |
+| **Censor** | Audit: grades a project from its files (specs, validation rules, literal secrets, schedule, agent setup) and names what to fix. Also runs as `arsenal eval` | `de-censor` | experimental |
 
 **stable**: YAML fields are only added within a minor series, and state files migrate
 forward. **beta**: works and is tested, but has little use outside this repo.
@@ -156,8 +157,9 @@ The project is pre-1.0 and has no long-term API commitment; see the
 | …plus Spark-on-Kubernetes runs (Ballista) | `uv tool install "de-arsenal[distributed]"` |
 | …plus the catalog (Aquila) | `uv tool install "de-arsenal[catalog]"` |
 | …plus reverse ETL (Pilum) | `uv tool install "de-arsenal[dispatch]"` |
+| …plus project audits with `arsenal eval` (Censor) | `uv tool install de-arsenal --with de-censor` |
 | …plus dbt or dlt projects | `"de-arsenal[dbt]"` · `"de-arsenal[dlt]"` |
-| A single tool | `pip install pugio` · `de-gladius` · `de-hasta` · `de-aquila` · `de-pilum` · … |
+| A single tool | `pip install pugio` · `de-gladius` · `de-hasta` · `de-aquila` · `de-pilum` · `de-censor` · … |
 
 The base install does not pull in Spark, Kubernetes, Iceberg or Postgres drivers
 (`packages/arsenal/tests/test_base_install.py` checks this).
@@ -407,7 +409,7 @@ Two limits were confirmed and addressed in 0.6.0:
 | [docs/11-real-data-experiments.md](docs/11-real-data-experiments.md) · [experiments/](experiments/real-data/README.md) | Results on real APIs and data (GitHub, GitLab, airports CSV, NYC taxi), bugs found, limits confirmed |
 | [examples/real-world/](examples/real-world/) | Specs for GitHub, Notion, Slack, Stripe and data.go.kr; the Cloudflare D1 snapshot exporter |
 | [examples/deploy/](examples/deploy/README.md) | Running on a schedule with cron, GitHub Actions or a container |
-| [CHANGELOG.md](CHANGELOG.md) · [upgrade to 0.6](docs/upgrade-0.6.md) | What changed and how to upgrade |
+| [CHANGELOG.md](CHANGELOG.md) · [upgrade to 0.7](docs/upgrade-0.7.md) | What changed and how to upgrade |
 | [docs/README.md](docs/README.md) | Design documents, decision records and release procedure |
 
 The reference and changelog are in English. The guides and design documents are in Korean.

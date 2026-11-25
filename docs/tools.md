@@ -16,6 +16,7 @@ DE Arsenal은 하나의 거대한 프레임워크가 아니라, Arrow/Parquet와
 | [Augur](../packages/augur/README.md) | Parquet 레이크에 자연어로 묻고, 생성 SQL의 실패 모드를 재고 싶을 때 | `augur index` → `augur ask "..."` → `augur eval` | 스키마 RAG + SELECT-only 가드 + 실패 모드 자동 분류. 결과는 Parquet이라 `gladius query`로 집계한다. |
 | [Aquila](../packages/aquila/README.md) | 어떤 데이터셋이 어디 있고 무엇이 무엇을 읽는지 찾을 때 | `aquila scan` → `aquila search` | 파일 하나, 다른 도구가 의존하지 않음 |
 | [Pilum](../packages/pilum/README.md) | 변환 결과의 변경분을 HTTP 끝점·Slack으로 보낼 때 (experimental) | `pilum plan` → `pilum run` | 바뀐 레코드만, 2xx 뒤에만 기록 |
+| [Censor](../packages/censor/README.md) | 프로젝트를 넘기기 전에 믿을 만한지 점검할 때 (experimental) | `censor audit .` 또는 `arsenal eval .` | 실행 없이 파일만 읽고 등급·근거·고칠 방법을 낸다 |
 | [arsenal-core](../packages/arsenal-core/README.md) | 자체 도구를 만들거나 상태·재시도 규약을 재사용할 때 | Python에서 `StateStore` 사용 | 결정적 unit ID와 SQLite 상태 저장소로 재개·멱등 기반을 제공한다. |
 
 ## 1. Arsenal — 대부분의 사용자에게 시작점
@@ -175,7 +176,36 @@ pilum status dispatch.yaml           # 원장 크기, 마지막 실행, DLQ
 원장이 유일한 기억이므로 끝점을 밖에서 고치면 Pilum은 모른다. 실행 가능한 예제는
 [examples/pilum](../examples/pilum), 상세는 [packages/pilum/README.md](../packages/pilum/README.md).
 
-## 10. arsenal-core — 확장 도구를 위한 신뢰성 기반
+## 10. Censor (`de-censor`) — 프로젝트 감사 (experimental)
+
+파이프라인을 실행하지 않고 프로젝트 파일만 읽어서 등급(A+~F)을 매긴다. 실패한 항목마다 근거(파일과 줄)와
+고칠 방법을 한 줄로 낸다. 비밀값은 종류와 줄 번호만 보여 주고 값은 출력하지 않는다.
+
+```bash
+pip install de-censor                # de-arsenal도 함께 설치된다
+censor audit .                       # stdout: JSON 리포트, stderr: 등급 한 줄
+arsenal eval .                       # 같은 명령
+censor report                        # 저장된 실행의 등급 추이
+censor compare <run_a> <run_b>       # 상태가 바뀐 체크만
+```
+
+| 차원 | 보는 것 |
+|---|---|
+| 정확성 | 매니페스트와 모든 스펙이 로드·컴파일되는가 (`arsenal check`와 같은 규칙) |
+| 품질 가드 | `validate`, `on_violation`, 키 규칙, `schema_drift`, `contract` |
+| 보안 | 스펙 파일의 평문 비밀값 (토큰, URL의 비밀번호, 헤더, PEM 키) |
+| 운영성 | README, 스케줄, lineage |
+| 에이전트 준비도 | CLAUDE.md, de-arsenal 플러그인, `.arsenal/` 삭제 차단, 비밀값 검사 훅 |
+
+평문 비밀값이 있거나 스펙이 로드되지 않으면 다른 점수와 상관없이 등급이 C를 넘지 못한다. 종료 코드는
+0(실패한 체크 없음), 1(하나 이상 실패), 2(Censor가 실행되지 못함)라서 CI 게이트로 쓸 수 있다. 실행 결과는
+`.arsenal/censor/`에 JSON, Parquet, Markdown으로 남는다.
+
+지금은 파일만 읽는 Quick 단계만 있다. 실행 상태와 데이터를 읽는 Standard 단계는 아직 없다
+(`--tier standard`는 종료 코드 2). 리포트 형식은 0.x에서 바뀔 수 있다.
+상세는 [packages/censor/README.md](../packages/censor/README.md).
+
+## 11. arsenal-core — 확장 도구를 위한 신뢰성 기반
 
 일반 사용자는 직접 설치할 필요가 없지만, DE Arsenal에 새 source/sink/도구를
 붙일 때 공통 상태 모델과 재시도 규약을 재사용할 수 있다.

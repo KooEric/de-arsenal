@@ -9,7 +9,7 @@ on:
       version:
         description: "Package version to verify or publish"
         required: true
-        default: "0.6.17"
+        default: "0.7.0"
         type: string
       publish_package:
         description: "Manual PyPI bootstrap package (none = verify only)"
@@ -31,6 +31,7 @@ on:
           - de-ballista
           - de-aquila
           - de-pilum
+          - de-censor
 
 jobs:
   verify-and-build:
@@ -98,6 +99,7 @@ jobs:
             de-ballista) package_prefix="de_ballista" ;;
             de-aquila) package_prefix="de_aquila" ;;
             de-pilum) package_prefix="de_pilum" ;;
+            de-censor) package_prefix="de_censor" ;;
             pugio|spatha) package_prefix="$PUBLISH_PACKAGE" ;;
             *) echo "Unsupported package: $PUBLISH_PACKAGE" >&2; exit 1 ;;
           esac
