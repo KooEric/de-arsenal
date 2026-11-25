@@ -1,0 +1,30 @@
+# Hive query → S3 Parquet → Redshift, one day per unit.
+# pugio transfer run examples/transfer/hive-to-redshift.yaml
+name: hive-orders-to-dw
+max_attempts: 3
+
+source:
+  engine: hive                     # uv tool install "de-arsenal[hive]"
+  dsn_env: HIVE_DSN                # hive://etl:password@hiveserver2:10000/sales?auth=LDAP
+  # Column order must match analytics.orders: COPY loads Parquet columns by position.
+  query: |
+    SELECT order_id, user_id, amount, order_date
+    FROM sales.orders
+    WHERE status = 'paid'
+  settings:
+    tez.queue.name: etl
+  write_scheme: s3a                # Hive outside EMR writes through s3a://
+
+split:                             # each range [lo, hi) is exported and loaded on its own
+  column: order_date
+  start: 2026-01-01
+  end: 2026-02-01                  # exclusive
+  every: day
+
+staging_path: s3://my-staging-bucket/arsenal   # files land in <path>/<name>/<unit_id>/
+
+target:
+  dsn_env: DW_REDSHIFT_DSN         # redshift://user:password@cluster:5439/dw
+  table: analytics.orders          # create it first, with your dist/sort keys
+  iam_role_env: DW_COPY_ROLE       # arn:aws:iam::<account>:role/<name>, can read staging_path
+  mode: replace                    # delete the day in the target, then insert it

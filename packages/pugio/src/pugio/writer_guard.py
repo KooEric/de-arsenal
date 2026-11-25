@@ -84,6 +84,42 @@ class _Heartbeat(threading.Thread):
 
 
 @contextmanager
+def hold_lease(
+    store: StateStore,
+    db: Path,
+    resource_name: str,
+    *,
+    busy: str,
+    detail: str,
+    lost: str,
+    ttl_seconds: float = LEASE_TTL_SECONDS,
+    heartbeat_seconds: float = HEARTBEAT_SECONDS,
+) -> Generator[Callable[[], None], None, None]:
+    """Hold ``resource_name`` with a heartbeat; yields ``check()`` to call between units.
+
+    A held lease fails with ``{busy} (lease held by ...){detail}``; a lost one with ``lost``.
+    """
+
+    token = store.acquire_lease(resource_name, f"pugio-{uuid.uuid4()}", ttl_seconds)
+    if token is None:
+        holder = store.lease(resource_name)
+        who = holder.owner_id if holder is not None else "another process"
+        until = f" until {holder.expires_at}" if holder is not None else ""
+        raise FatalError(f"{busy} (lease held by {who}{until}){detail}")
+    heartbeat = _Heartbeat(db, token, ttl_seconds, heartbeat_seconds)
+    heartbeat.start()
+
+    def check() -> None:
+        if heartbeat.lost:
+            raise FatalError(lost)
+
+    try:
+        yield check
+    finally:
+        store.release_lease(heartbeat.stop())
+
+
+@contextmanager
 def pipeline_lease(
     spec: PipelineSpec,
     store: StateStore,
@@ -94,26 +130,20 @@ def pipeline_lease(
     """Hold the run lease; yields ``check()`` to call between units."""
 
     _register(spec)
-    token = store.acquire_lease(resource(spec), f"pugio-{uuid.uuid4()}", ttl_seconds)
-    if token is None:
-        holder = store.lease(resource(spec))
-        who = holder.owner_id if holder is not None else "another process"
-        until = f" until {holder.expires_at}" if holder is not None else ""
-        raise FatalError(
-            f"pipeline {spec.name!r} is busy (lease held by {who}{until}): another run or "
-            "a compaction of its output is in progress. A crashed run's lease expires by itself"
-        )
-    heartbeat = _Heartbeat(state_path(spec), token, ttl_seconds, heartbeat_seconds)
-    heartbeat.start()
-
-    def check() -> None:
-        if heartbeat.lost:
-            raise FatalError(
-                f"pipeline {spec.name!r} lost its run lease; stopped to avoid racing "
-                "maintenance on its output. Rerun to resume"
-            )
-
-    try:
+    with hold_lease(
+        store,
+        state_path(spec),
+        resource(spec),
+        busy=f"pipeline {spec.name!r} is busy",
+        detail=(
+            ": another run or a compaction of its output is in progress. "
+            "A crashed run's lease expires by itself"
+        ),
+        lost=(
+            f"pipeline {spec.name!r} lost its run lease; stopped to avoid racing "
+            "maintenance on its output. Rerun to resume"
+        ),
+        ttl_seconds=ttl_seconds,
+        heartbeat_seconds=heartbeat_seconds,
+    ) as check:
         yield check
-    finally:
-        store.release_lease(heartbeat.stop())

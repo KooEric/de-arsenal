@@ -20,10 +20,11 @@ of the statements it issues.
 
 from __future__ import annotations
 
+import importlib
 import os
 import re
 from collections.abc import Callable, Sequence
-from typing import Any, Protocol
+from typing import Any, Protocol, cast
 from urllib.parse import unquote, urlsplit
 
 import pyarrow as pa
@@ -136,6 +137,61 @@ def parse_dsn(dsn: str) -> dict[str, Any]:
     }
 
 
+def read_iam_role(env_name: str) -> str:
+    """The IAM role ARN held by ``env_name``; anything else is a configuration error."""
+
+    role = os.environ.get(env_name, "")
+    if not _IAM_ROLE.fullmatch(role):
+        raise FatalError(
+            f"environment variable {env_name!r} must hold an IAM role ARN "
+            "(arn:aws:iam::<account>:role/<name>)"
+        )
+    return role
+
+
+def connect_redshift(dsn_env: str, purpose: str, secrets: list[str]) -> Any:
+    """Open a ``redshift_connector`` connection.
+
+    The DSN and password are appended to ``secrets`` before connecting, so the caller
+    can mask them in the error of a failed connect too.
+    """
+
+    dsn = os.environ.get(dsn_env)
+    if not dsn:
+        raise FatalError(f"environment variable {dsn_env!r} is not set ({purpose} dsn)")
+    arguments = parse_dsn(dsn)
+    secrets.extend([dsn, arguments["password"]])
+    try:
+        driver = cast(Any, importlib.import_module("redshift_connector"))
+    except ImportError as error:
+        raise FatalError(
+            f"{purpose} requires the 'redshift' extra: pip install pugio[redshift]"
+        ) from error
+    return driver.connect(**arguments)
+
+
+def mask_secrets(message: str, secrets: Sequence[str]) -> str:
+    for secret in secrets:
+        if len(secret) >= 4:
+            message = message.replace(secret, "***")
+    return message
+
+
+def classify_driver_error(
+    error: Exception,
+    context: str,
+    secrets: Sequence[str],
+    retryable: frozenset[str] = _RETRYABLE_ERROR_NAMES,
+) -> ArsenalError:
+    """Driver errors by class name, so the driver stays an optional import."""
+
+    message = mask_secrets(str(error), secrets)
+    names = {cls.__name__ for cls in type(error).__mro__}
+    temporary = bool(names & retryable) and not any(marker in message for marker in _FATAL_MARKERS)
+    kind = RetryableError if temporary else FatalError
+    return kind(f"{context}: {message}")
+
+
 class RedshiftSink:
     capabilities = REDSHIFT_CAPABILITIES
 
@@ -155,20 +211,7 @@ class RedshiftSink:
     # --- collaborators ----------------------------------------------------
 
     def _default_connect(self) -> _Connection:
-        dsn = os.environ.get(self._spec.dsn_env)
-        if not dsn:
-            raise FatalError(
-                f"environment variable {self._spec.dsn_env!r} is not set (redshift sink dsn)"
-            )
-        arguments = parse_dsn(dsn)
-        self._secrets = [dsn, arguments["password"]]
-        try:
-            import redshift_connector  # pyright: ignore[reportMissingImports]
-        except ImportError as error:
-            raise FatalError(
-                "redshift sink requires the 'redshift' extra: pip install pugio[redshift]"
-            ) from error
-        return redshift_connector.connect(**arguments)  # pyright: ignore[reportUnknownMemberType, reportUnknownVariableType]
+        return connect_redshift(self._spec.dsn_env, "redshift sink", self._secrets)
 
     def _default_stage(self, unit: UnitSpec, batch: pa.RecordBatch) -> str:
         from pugio.sinks.object_storage import ObjectStorageParquetSink
@@ -180,13 +223,7 @@ class RedshiftSink:
 
     def _iam_role(self) -> str:
         assert self._spec.iam_role_env is not None
-        role = os.environ.get(self._spec.iam_role_env, "")
-        if not _IAM_ROLE.fullmatch(role):
-            raise FatalError(
-                f"environment variable {self._spec.iam_role_env!r} must hold an IAM role ARN "
-                "(arn:aws:iam::<account>:role/<name>)"
-            )
-        return role
+        return read_iam_role(self._spec.iam_role_env)
 
     # --- write ------------------------------------------------------------
 
@@ -211,13 +248,13 @@ class RedshiftSink:
             self._apply(cursor, unit, batch, columns, staged_uri, role)
             con.commit()
         except ArsenalError:
-            _quietly(con.rollback)
+            quietly(con.rollback)
             raise
         except Exception as error:
-            _quietly(con.rollback)
+            quietly(con.rollback)
             raise self._classify(error, f"redshift write failed for unit {unit.unit_id}") from error
         finally:
-            _quietly(con.close)
+            quietly(con.close)
 
     def _apply(
         self,
@@ -261,18 +298,7 @@ class RedshiftSink:
             cursor.execute(f"INSERT INTO {stage} ({names}) VALUES {values}", flat)
 
     def _classify(self, error: Exception, context: str) -> ArsenalError:
-        """Driver errors by class name, so the driver stays an optional import."""
-
-        message = str(error)
-        for secret in self._secrets:
-            if len(secret) >= 4:
-                message = message.replace(secret, "***")
-        names = {cls.__name__ for cls in type(error).__mro__}
-        temporary = bool(names & _RETRYABLE_ERROR_NAMES) and not any(
-            marker in message for marker in _FATAL_MARKERS
-        )
-        kind = RetryableError if temporary else FatalError
-        return kind(f"{context}: {message}")
+        return classify_driver_error(error, context, self._secrets)
 
 
 def _without_null_columns(batch: pa.RecordBatch) -> pa.RecordBatch:
@@ -285,7 +311,7 @@ def _without_null_columns(batch: pa.RecordBatch) -> pa.RecordBatch:
     return pa.RecordBatch.from_arrays(arrays, names=batch.schema.names)
 
 
-def _quietly(action: Callable[[], Any]) -> None:
+def quietly(action: Callable[[], Any]) -> None:
     try:
         action()
     except Exception:  # noqa: BLE001 - cleanup must not hide the original error

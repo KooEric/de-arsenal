@@ -27,6 +27,7 @@ classifiers = [
 postgres = ["pugio[postgres]"]
 excel = ["pugio[excel]"]
 redshift = ["pugio[redshift]"]
+hive = ["pugio[hive]"]
 iceberg = ["pugio[iceberg]"]
 dlt = ["pugio[dlt]"]
 dbt = ["dbt-duckdb>=1.8,<2"]

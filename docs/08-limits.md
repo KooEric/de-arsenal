@@ -209,6 +209,19 @@ preflight에서 거부된다.
 | 타입 | 문자열은 `VARCHAR(65535)`(Redshift의 `TEXT`는 256자다), 날짜·timestamp·decimal·정수 크기별 매핑 | 중첩·배열·바이너리 타입, 기존 테이블의 컬럼 추가·변경(첫 batch로 만든 뒤에는 스키마가 맞아야 한다), sort key·dist key 지정 |
 | 범위 | Pugio 파이프라인 | Hasta 스트림·CDC, Ballista 출력, 여러 writer의 동시 실행(직렬화 충돌은 재시도로 나타난다) |
 
+## pugio transfer의 보장과 한계 (experimental)
+
+`pugio transfer`는 소스 엔진이 쿼리 결과를 S3 Parquet으로 직접 내보내고(Redshift `UNLOAD`, Hive `INSERT OVERWRITE DIRECTORY`), 대상 Redshift가 `COPY`로 가져간다. 행은 `pugio` 프로세스를 거치지 않는다. 사용법은 [examples/transfer/README.md](../examples/transfer/README.md)에 있다.
+
+| 항목 | 보장하는 것 | 보장하지 않는 것 |
+|---|---|---|
+| 멱등·재개 | unit(`split` 범위 하나)마다 export → load → done. load는 임시 테이블 COPY, 삭제, INSERT를 한 트랜잭션에서 처리해 실패하면 대상은 그대로다. 같은 unit을 다시 적재해도 결과가 같다. export가 끝나고 load가 실패한 unit은 재실행 때 export를 건너뛴다 | **실제 Hive·Redshift 클러스터에서의 검증.** 발행하는 SQL문과 상태 전이만 기록용 커넥션으로 확인했다. export 기록 뒤 S3 파일이 지워졌거나 소스 데이터가 바뀌었으면 저장된 export가 그대로 쓰인다(`pugio transfer run --reexport`로 다시 export한다) |
+| 컬럼 매핑 | 대상 테이블의 컬럼 순서대로 COPY된다. 실행마다 첫 export 전에 쿼리 결과 컬럼 이름(`LIMIT 0`)과 대상 테이블 컬럼(`information_schema.columns`)을 위치별로 비교해, 다르면 아무것도 내보내지 않고 멈춘다. 같은 위치의 타입 계열(정수·실수·decimal·문자열·boolean·date·timestamp·timestamptz)도 비교한다. 정수→decimal만 허용한다(`check_types: false`는 이름만, `check_columns: false`는 둘 다 끈다) | 길이·정밀도 비교(`varchar`·`numeric`에 넘치는 값은 COPY에서 실패하고 롤백된다), 배열·map·`SUPER`·`time`·binary 타입(경고만 남긴다), Redshift가 타입을 정하지 못한 리터럴(`unknown`)의 타입, Hive에서 `LIMIT 0`이 작업 없이 끝난다는 보장(버전에 따라 짧은 작업이 돌 수 있다), 이름 기반 매핑(Redshift는 Parquet 컬럼을 위치로 적재하고, Hive 출력 컬럼 이름은 `_col0`…이다), 대상 테이블 생성·스키마 변경 |
+| 범위 조건 | `SELECT * FROM (<query>) arsenal_src WHERE col >= lo AND col < hi`. 날짜는 `DATE '...'` 리터럴 | 파티션 pruning 보장(엔진의 predicate pushdown에 맡긴다. 느리면 `EXPLAIN`으로 확인한다), 타임존이 있는 timestamp 범위 |
+| 빈 결과 | Redshift는 `pg_last_unload_count()`로 판단한다. Hive는 S3 폴더에 데이터 파일이 없고 `SELECT 1 FROM (<query>) LIMIT 1`도 비었을 때만 비었다고 본다. 파일은 없는데 행이 있으면(다른 경로에 쓴 경우) 실패한다. `replace`면 그 범위를 비우고, `merge`면 아무것도 바꾸지 않는다 | Hive staging 폴더에 `.hive-staging` 같은 잔여 객체가 남은 경우(COPY가 Parquet가 아닌 파일에서 실패하고 트랜잭션이 롤백된다) |
+| 대상 테이블 | `CREATE TEMP TABLE (LIKE target)` 뒤 `INSERT ... SELECT *` | `IDENTITY`·기본값 전용 컬럼이 있는 테이블, `merge`에서 `merge_key`가 NULL인 행(매칭되지 않아 다시 적재할 때마다 중복된다), 예약어 이름의 `split.column`(따옴표 없이 쓰인다) |
+| 실행 | 같은 transfer의 동시 실행은 lease로 막는다. 일시적 에러(연결 끊김)는 `max_attempts`까지 재시도한다. `query`나 target 설정을 바꾸면 unit id가 바뀌어 처음부터 다시 적재한다 | 클라이언트 연결이 끊긴 뒤의 재시도가 서버에서 아직 도는 첫 `UNLOAD`·`INSERT OVERWRITE`와 겹치지 않는다는 보장(같은 폴더에 두 실행의 파일이 섞일 수 있다. 의심되면 `--reexport`로 다시 돌린다), unit 병렬 실행(순서대로 하나씩 처리한다), staging 파일 삭제(S3 lifecycle 규칙으로 지운다), Airflow 등 스케줄러 연동(명령 하나라 `BashOperator`로 감쌀 수 있다) |
+
 ## 검증 게이트의 분리 정책
 
 `validate.on_violation`의 `quarantine`은 unit(페이지·파일) 전체를 격리한다. 실데이터는 거의 모든

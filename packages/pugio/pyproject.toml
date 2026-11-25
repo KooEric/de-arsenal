@@ -25,6 +25,7 @@ Repository = "https://github.com/KooEric/de-arsenal"
 excel = ["fastexcel>=0.11"]
 postgres = ["psycopg[binary]>=3.1"]
 redshift = ["redshift_connector>=2.1"]
+hive = ["impyla>=0.19"]
 iceberg = ["pyiceberg>=0.9"]
 dlt = ["dlt>=1.29,<2"]
 

@@ -15,10 +15,16 @@ from arsenal_core.state import StateStore
 from pugio.ddl import trino_hive_external_table
 from pugio.dlq import dlq_dir, read_reason, remove_dlq, split_rejected_rows
 from pugio.runner import run_pipeline
+from pugio.transfer.runner import run_transfer, transfer_status
+from pugio.transfer.spec import load_transfer
 
 app = typer.Typer(help="Pugio — 수집·전송. 재실행은 곧 재개다.")
 dlq_app = typer.Typer(help="dead-letter queue — 격리된 unit 조회·재시도")
 app.add_typer(dlq_app, name="dlq")
+transfer_app = typer.Typer(
+    help="query → S3 → Redshift COPY. The source engine exports; rows skip this machine."
+)
+app.add_typer(transfer_app, name="transfer")
 
 
 @app.command()
@@ -218,6 +224,44 @@ def dlq_retry(spec_path: Path, unit: str = typer.Option(..., "--unit")) -> None:
         raise typer.Exit(1)
     remove_dlq(spec.state_dir, spec.name, unit)
     typer.echo(f"requeued {unit}")
+
+
+@transfer_app.command("run")
+def transfer_run(
+    spec_path: Path,
+    reexport: bool = typer.Option(
+        False,
+        "--reexport",
+        help="Run the source query again for units whose export an earlier run saved",
+    ),
+) -> None:
+    """Export each unit with the source engine, then COPY it into Redshift. Reruns resume."""
+    try:
+        report = run_transfer(load_transfer(spec_path), reexport=reexport)
+    except ArsenalError as e:
+        typer.echo(f"error: {e}", err=True)
+        raise typer.Exit(1) from e
+    typer.echo(
+        f"done: loaded={report.loaded} skipped={report.skipped} rows={report.rows} "
+        f"exported={report.exported} reused_exports={report.reused_exports}"
+    )
+
+
+@transfer_app.command("status")
+def transfer_status_command(spec_path: Path) -> None:
+    """Unit counts by state, and the error of each failed unit."""
+    try:
+        status = transfer_status(load_transfer(spec_path))
+    except ArsenalError as e:
+        typer.echo(f"error: {e}", err=True)
+        raise typer.Exit(1) from e
+    if not status.counts:
+        typer.echo("no runs yet")
+        return
+    for state, n in sorted(status.counts.items()):
+        typer.echo(f"{state}: {n}")
+    for failed in status.failed:
+        typer.echo(f"failed {failed.unit_key}: {failed.error}")
 
 
 if __name__ == "__main__":
