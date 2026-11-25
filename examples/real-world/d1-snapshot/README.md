@@ -11,11 +11,14 @@ mkdir cards && cd cards               # one working directory per dataset
 
 python ../d1_snapshot.py <database-id> card_catalog code input/card_catalog.jsonl
 arsenal dataset preview --files 'input/*.jsonl' --key code --time-column updated_at
-arsenal dataset apply --expect <version from the preview>
+arsenal dataset apply   --files 'input/*.jsonl' --key code --time-column updated_at \
+                        --expect <version from the preview>
 ```
 
-Every later run is the same three commands without the options: the rules from
-the first publication are reused.
+The first `apply` takes the same options as the preview. Without them it stops with
+"첫 실행에는 --files … 지정하세요", because nothing has been published yet to take the
+rules from. Every later run is the same three commands without the options: the rules
+from the first publication are reused.
 
 ```bash
 python ../d1_snapshot.py <database-id> card_catalog code input/card_catalog.jsonl
@@ -23,6 +26,25 @@ arsenal dataset preview               # added / removed / updated since last pub
 arsenal dataset apply --expect <version>
 aquila scan && aquila lineage published --format mermaid      # needs de-arsenal[catalog]
 ```
+
+### Without an API token: `wrangler`
+
+If you are logged in with `wrangler login` (OAuth), `wrangler d1 execute --remote` can
+write the snapshot instead of the script. No `CLOUDFLARE_API_TOKEN` is needed:
+
+```bash
+npx wrangler d1 execute <database-name> --remote --json \
+  --command "SELECT * FROM card_catalog ORDER BY code" \
+  | jq -c -S '.[0].results[]' > input/card_catalog.jsonl
+```
+
+`ORDER BY` on the key and `jq -S` (sorted fields) keep an unchanged table byte-identical
+between runs. The script writes JSON with spaces after `,` and `:` and `jq -c` without,
+so the run that switches between the two shows the file as `revised` with 0 added,
+removed and updated rows; after that it is `unchanged` again. This reads the whole
+table in one query, so for a large table the script's paging is the safer choice.
+
+### What the script does
 
 The script only sends `SELECT`. It pages on the key column, orders rows by key
 and writes fields in a fixed order, so an unchanged table gives a byte-identical
