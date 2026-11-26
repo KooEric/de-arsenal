@@ -12,6 +12,21 @@ minor.
 
 ## [Unreleased]
 
+## [0.7.1] - 2026-11-26
+
+Censor gains the Standard tier (run state and data), dataset audits without a project, and
+a quick-tier warning for a pipeline that has stopped writing. All 14 packages move to
+`0.7.1`; internal pins stay `>=0.7,<0.8`. No state migrations. Censor stays experimental.
+
+### ⚠️ Upgrade notes
+
+- `censor audit` (and `arsenal eval`) on the quick tier now runs `operability.freshness`.
+  A project whose newest output is older than a week, or than `--max-age-hours`, gets a
+  warning and can score a lower grade than under 0.7.0.
+- `censor audit` exits 2 instead of 1 when `arsenal.yaml` cannot be read, and
+  `censor report` exits 2 instead of 0 for a directory that does not exist. CI that reads
+  these exit codes needs updating.
+
 ### Added
 
 - Censor catches a stopped pipeline on the quick tier: `operability.freshness` compares each

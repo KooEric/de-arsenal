@@ -1,3 +1,28 @@
+# v0.7.1 패치 릴리스 절차
+
+Censor Standard 단계(#57)와 멈춘 파이프라인 경고(#58)가 나간다. `censor audit --tier standard`가 실행
+상태와 데이터를 읽어 신뢰성·최신성·데이터 건강을 채점하고, `--files`·`--duckdb`·`--table`로 프로젝트
+없이 데이터셋을 감사한다. Quick 단계에는 `operability.freshness` 경고가 추가된다. 내역은
+[CHANGELOG](../CHANGELOG.md).
+
+**patch인 이유**: Censor는 experimental이고, 나머지 패키지의 명령·옵션·스펙 필드·저장 형식·상태 파일은
+바뀌지 않는다(`arsenal-core`는 `MissingEnvError` 추가뿐). 리포트 스키마는 필드만 추가하고
+`schema_version`은 1 그대로다. Censor 종료 코드 두 가지(읽을 수 없는 `arsenal.yaml` 1→2, 없는 디렉터리의
+`censor report` 0→2)와 Quick 단계의 새 경고는 CHANGELOG 업그레이드 노트에 적었다. 교차 핀
+`>=0.7,<0.8` 유지, 상태 마이그레이션·신규 PyPI 프로젝트 없음.
+
+1. 이 PR CI green → `main` 머지
+2. `main`에서 검증: 아래 0.7.0 절차의 2번과 같다. 기대값은 "14 packages at v0.7.1", 산출물 28개.
+3. 태그 `v0.7.1` 게시: `gh release create v0.7.1 --target main --title v0.7.1 --generate-notes`
+4. 게시 확인: 14개 패키지의 `https://pypi.org/pypi/<name>/0.7.1/json`이 모두 `200`.
+5. 수동 점검 (PyPI에서 설치한 0.7.1로)
+   - [ ] `uv tool install --force de-arsenal==0.7.1 --with de-censor==0.7.1` 뒤 `arsenal.yaml`이 있는
+         디렉터리에서 `censor audit . --tier standard`가 신뢰성·최신성·데이터 건강 항목을 출력한다.
+   - [ ] `censor audit --files 'data/*.parquet' --key id`가 프로젝트 없이 등급을 낸다.
+   - [ ] CHANGELOG `## [0.7.1]`의 날짜 (PR에서 2026-11-26으로 기입. 태그가 다른 날이면 고친다).
+
+---
+
 # v0.7.0 릴리스 절차
 
 14번째 패키지 **Censor**(`de-censor`, experimental)가 처음 배포된다. 프로젝트를 실행하지 않고 파일만

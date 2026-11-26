@@ -20,7 +20,7 @@ from gladius.plan import (
 try:
     __version__ = version("de-gladius")
 except PackageNotFoundError:
-    __version__ = "0.7.0"
+    __version__ = "0.7.1"
 
 
 __all__ = [
