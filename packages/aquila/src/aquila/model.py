@@ -49,6 +49,19 @@ class SchemaObservation:
 
 
 @dataclass(frozen=True)
+class NullCountObservation:
+    """Per-column null counts from a Parquet footer's statistics (newest file).
+
+    Kept apart from the schema snapshot so that data changes never mint schema
+    versions. Columns without statistics, and nested columns, are left out.
+    """
+
+    uri: str
+    counts: dict[str, int]
+    observed_at: str  # ISO-8601 UTC
+
+
+@dataclass(frozen=True)
 class ContractObservation:
     uri: str
     path: str  # spec file that declares it
@@ -79,6 +92,7 @@ class ScanResult:
     datasets: dict[str, DatasetObservation] = field(default_factory=lambda: {})
     edges: list[EdgeObservation] = field(default_factory=lambda: [])
     schemas: list[SchemaObservation] = field(default_factory=lambda: [])
+    null_counts: list[NullCountObservation] = field(default_factory=lambda: [])
     contracts: list[ContractObservation] = field(default_factory=lambda: [])
     freshness: list[FreshnessObservation] = field(default_factory=lambda: [])
     sources: list[SourceFile] = field(default_factory=lambda: [])

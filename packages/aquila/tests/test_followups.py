@@ -88,7 +88,7 @@ def test_a_v1_catalog_migrates_and_keeps_its_rows(lakehouse: Path, tmp_path: Pat
 
     assert store.resolve("legacy") is not None and store.counts()["edges"] == 4
     store.close()
-    assert sqlite3.connect(db).execute("PRAGMA user_version").fetchone()[0] == 3
+    assert sqlite3.connect(db).execute("PRAGMA user_version").fetchone()[0] == 4
 
 
 def test_remote_parquet_footer_through_an_injected_filesystem(tmp_path: Path) -> None:

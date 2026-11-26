@@ -19,7 +19,8 @@ from collections.abc import Callable
 from datetime import UTC, datetime
 from typing import Any, cast
 
-from aquila.model import ScanResult, SchemaObservation, schema_snapshot
+from aquila.model import NullCountObservation, ScanResult, SchemaObservation, schema_snapshot
+from aquila.scanners import footer_fields, footer_null_counts
 
 REMOTE_PARQUET_SCHEMES = {"s3", "gs", "gcs", "abfs", "abfss"}
 
@@ -35,13 +36,6 @@ def _open_filesystem(uri: str) -> tuple[Any, str]:
     if uri.startswith("gcs://"):
         uri = "gs://" + uri.removeprefix("gcs://")
     return cast(tuple[Any, str], pafs.FileSystem.from_uri(uri))
-
-
-def _fields(arrow_schema: Any) -> list[dict[str, Any]]:
-    return [
-        {"name": str(f.name), "type": str(f.type), "nullable": bool(f.nullable)}
-        for f in list(arrow_schema)
-    ]
 
 
 def remote_parquet_schema(
@@ -66,7 +60,9 @@ def remote_parquet_schema(
             return
         newest = files[-1]
         with filesystem.open_input_file(newest.path) as handle:
-            schema: Any = pq.read_schema(handle)
+            footer: Any = pq.ParquetFile(handle)
+            fields = footer_fields(footer.schema_arrow)
+            nulls = footer_null_counts(footer)
         mtime = newest.mtime
         observed = (
             mtime.astimezone(UTC).isoformat()
@@ -77,8 +73,9 @@ def remote_parquet_schema(
         result.skipped.append((uri, f"remote parquet unreadable ({type(exc).__name__})"))
         return
     result.schemas.append(
-        SchemaObservation(uri, schema_snapshot(_fields(schema)), observed, "remote-footer")
+        SchemaObservation(uri, schema_snapshot(fields), observed, "remote-footer")
     )
+    result.null_counts.append(NullCountObservation(uri, nulls, observed))
 
 
 def iceberg_loader(catalog_uri: str, *, token_env: str | None = None) -> TableLoader:
@@ -123,7 +120,7 @@ def iceberg_schemas(uri: str, result: ScanResult, *, load_table: TableLoader) ->
                 stamp = datetime.now(UTC).isoformat()  # an empty table: no snapshot yet
             else:
                 continue  # a schema no snapshot ever used
-            snapshot = schema_snapshot(_fields(schema.as_arrow()))
+            snapshot = schema_snapshot(footer_fields(schema.as_arrow()))
             observations.append(SchemaObservation(uri, snapshot, stamp, "iceberg-catalog"))
     except Exception as exc:  # noqa: BLE001
         result.skipped.append((uri, f"iceberg table unreadable ({type(exc).__name__})"))

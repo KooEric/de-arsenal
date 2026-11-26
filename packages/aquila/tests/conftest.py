@@ -97,6 +97,19 @@ def lakehouse(tmp_path: Path) -> Path:
     store.snapshot_schema("orders", V2)
     store.close()
 
+    raw = root / "lake" / "raw" / "orders"
+    raw.mkdir(parents=True)
+    pq.write_table(  # pyright: ignore[reportUnknownMemberType]  # V2's shape, one null id
+        pa.table(
+            {
+                "id": pa.array([1, None], pa.int64()),
+                "amount": [1.5, 2.5],
+                "email": pa.array(["a@x", None], pa.string()),
+            }
+        ),
+        raw / "part-0.parquet",
+    )
+
     clean = root / "lake" / "clean" / "orders"
     clean.mkdir(parents=True)
     pq.write_table(  # pyright: ignore[reportUnknownMemberType]

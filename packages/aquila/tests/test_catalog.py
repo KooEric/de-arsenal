@@ -90,7 +90,7 @@ def test_contract_change_and_violations_are_reported(lakehouse: Path, tmp_path: 
     orders = store.resolve("orders")
     assert orders is not None
     assert service.contract_findings(store, orders) == [
-        "id: nullable in data, NOT NULL in contract"
+        "id: 1 null value(s) in data, NOT NULL in contract"
     ]
 
     spec = yaml.safe_load((lakehouse / "collect.yaml").read_text())

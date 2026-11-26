@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import re
 from dataclasses import asdict
 from pathlib import Path
 from typing import Any
@@ -92,13 +93,45 @@ def schema_fields(snapshot: str) -> list[dict[str, Any]]:
     return list(json.loads(snapshot))
 
 
+# Parquet has no second-precision timestamp: pyarrow writes timestamp[s] as timestamp[ms].
+_TIMESTAMP = re.compile(r"timestamp\[(s|ms|us|ns)(.*)\]")
+
+
+def type_satisfies(contract_type: str, stored_type: str, *, parquet: bool) -> bool:
+    """Whether data stored as ``stored_type`` satisfies a contract's ``contract_type``."""
+
+    if contract_type == stored_type:
+        return True
+    declared, stored = _TIMESTAMP.fullmatch(contract_type), _TIMESTAMP.fullmatch(stored_type)
+    return (
+        parquet
+        and declared is not None
+        and stored is not None
+        and (declared[1], stored[1]) == ("s", "ms")
+        and declared[2] == stored[2]
+    )
+
+
+def _null_finding(
+    name: str, field: dict[str, Any], nulls: int | None, *, parquet: bool
+) -> str | None:
+    # Parquet footers mark every field nullable, so only the statistics say anything.
+    if parquet:
+        return f"{name}: {nulls} null value(s) in data, NOT NULL in contract" if nulls else None
+    if field.get("nullable") is True:
+        return f"{name}: nullable in data, NOT NULL in contract"
+    return None
+
+
 def contract_findings(store: CatalogStore, dataset: Dataset) -> list[str]:
-    """Where the latest observed schema breaks a declared contract."""
+    """Where the latest observed schema (and, for Parquet, its null counts) breaks a contract."""
 
     latest = store.latest_schema(dataset.dataset_id)
     if latest is None:
         return []
     actual = {f["name"]: f for f in schema_fields(latest.snapshot)}
+    parquet = dataset.format == "parquet"
+    nulls = store.null_counts(dataset.dataset_id) if parquet else {}
     findings: list[str] = []
     for contract in store.contracts(dataset.dataset_id):
         for column in contract.contract.get("columns", []):
@@ -106,10 +139,14 @@ def contract_findings(store: CatalogStore, dataset: Dataset) -> list[str]:
             field = actual.get(name)
             if field is None:
                 findings.append(f"{name}: missing (contract {contract.path})")
-            elif "type" in column and column["type"] != field["type"]:
+            elif "type" in column and not type_satisfies(
+                str(column["type"]), str(field["type"]), parquet=parquet
+            ):
                 findings.append(f"{name}: type {field['type']} != contract {column['type']}")
-            elif column.get("nullable") is False and field.get("nullable") is True:
-                findings.append(f"{name}: nullable in data, NOT NULL in contract")
+            elif column.get("nullable") is False:
+                finding = _null_finding(name, field, nulls.get(name), parquet=parquet)
+                if finding is not None:
+                    findings.append(finding)
         if not contract.contract.get("allow_extra", False):
             declared = {c.get("name") for c in contract.contract.get("columns", [])}
             for extra in sorted(set(actual) - declared):
