@@ -223,3 +223,30 @@ def test_binary_and_macro_workbooks_auto_detect_as_excel(tmp_path: Path, name: s
     with pytest.raises(FatalError) as exc_info:
         src.fetch(next(iter(src.units())))
     assert "cannot auto-detect format" not in str(exc_info.value)
+
+
+def test_csv_empty_cell_is_null_for_strings(tmp_path: Path) -> None:
+    """회귀: 문자열 열의 빈 칸이 ''로 적재돼 not_null 검사와 censor NULL 검사를 통과했다."""
+    batch = _fetch_one(tmp_path, "id,name\nA1,kim\n,\nA3,lee\n")
+
+    assert batch.column("id").to_pylist() == ["A1", None, "A3"]
+    assert batch.column("name").to_pylist() == ["kim", None, "lee"]
+
+
+def test_csv_empty_cell_is_null_for_pinned_and_leading_zero_strings(tmp_path: Path) -> None:
+    batch = _fetch_one(tmp_path, "id,zip\n1,01234\n,\n", column_types={"id": "string"})
+
+    assert batch.column("id").to_pylist() == ["1", None]
+    assert batch.column("zip").to_pylist() == ["01234", None]
+
+
+def test_csv_custom_null_token_applies_to_strings(tmp_path: Path) -> None:
+    batch = _fetch_one(tmp_path, "id,city\n1,N/A\n2,Seoul\n", null_values=["", "N/A"])
+
+    assert batch.column("city").to_pylist() == [None, "Seoul"]
+
+
+def test_csv_quoted_empty_string_is_also_null(tmp_path: Path) -> None:
+    batch = _fetch_one(tmp_path, 'id,name\n1,""\n2,kim\n')
+
+    assert batch.column("name").to_pylist() == [None, "kim"]

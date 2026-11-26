@@ -83,19 +83,27 @@ def _read_csv(
     types: dict[str, Any],
     only: list[str] | None = None,
 ) -> Any:
+    # strings_can_be_null: 없으면 pyarrow는 null_values를 문자열 열에 적용하지 않아
+    # 빈 칸이 ''로 적재되고 not_null·censor NULL 검사를 그대로 통과한다.
     convert_opts = pa_csv.ConvertOptions(  # pyright: ignore[reportUnknownMemberType, reportUnknownVariableType, reportPrivateImportUsage]
-        null_values=null_values, column_types=types, include_columns=only
+        null_values=null_values,
+        strings_can_be_null=True,
+        column_types=types,
+        include_columns=only,
     )
     return pa_csv.read_csv(  # pyright: ignore[reportUnknownMemberType, reportUnknownVariableType, reportPrivateImportUsage]
         path, read_options=read_opts, convert_options=convert_opts
     )
 
 
-def _identifier_columns(path: Path, read_opts: Any, table: pa.Table, pinned: set[str]) -> list[str]:
-    """정수로 추론됐지만 원문에 앞자리 0이 있는 컬럼 (우편번호·사번·계좌번호).
+def _keep_identifiers_as_text(
+    path: Path, read_opts: Any, table: pa.Table, null_values: list[str], pinned: set[str]
+) -> pa.Table:
+    """정수로 추론됐지만 원문에 앞자리 0이 있는 컬럼(우편번호·사번·계좌번호)을 문자열로.
 
     정수 컬럼만 문자열로 한 번 더 읽어 확인한다. 숫자로 두면 "01234"가 1234가 되는
-    조용한 손실이므로 이런 컬럼은 문자열로 남긴다.
+    조용한 손실이므로 이런 컬럼은 문자열로 남긴다. 확인용으로 읽은 문자열 열을 그대로
+    끼워 넣으므로 파일 전체를 세 번째로 다시 파싱하지 않는다.
     """
     candidates = [
         field.name
@@ -103,15 +111,16 @@ def _identifier_columns(path: Path, read_opts: Any, table: pa.Table, pinned: set
         if pa.types.is_integer(field.type) and field.name not in pinned
     ]
     if not candidates:
-        return []
+        return table
     as_text = dict.fromkeys(candidates, pa.string())
-    raw: pa.Table = _read_csv(path, read_opts, [""], as_text, only=candidates)
-    found: list[str] = []
+    raw: pa.Table = _read_csv(path, read_opts, null_values, as_text, only=candidates)
     for name in candidates:
-        hits = pc.match_substring_regex(raw.column(name), _LEADING_ZERO)  # pyright: ignore[reportUnknownMemberType, reportUnknownVariableType, reportAttributeAccessIssue]
+        column = raw.column(name)
+        hits = pc.match_substring_regex(column, _LEADING_ZERO)  # pyright: ignore[reportUnknownMemberType, reportUnknownVariableType, reportAttributeAccessIssue]
         if pc.any(hits).as_py():  # pyright: ignore[reportUnknownMemberType, reportUnknownArgumentType, reportAttributeAccessIssue]
-            found.append(name)
-    return found
+            index = table.schema.get_field_index(name)
+            table = table.set_column(index, pa.field(name, pa.string()), column)
+    return table
 
 
 def _content_hash(path: Path) -> str:
@@ -180,10 +189,7 @@ class FileSource:
                         f"source.column_types names columns that {path} does not have: "
                         f"{missing} (columns: {table.column_names})"
                     )
-                keep_text = _identifier_columns(path, read_opts, table, set(pinned))
-                if keep_text:
-                    pinned.update(dict.fromkeys(keep_text, pa.string()))
-                    table = _read_csv(path, read_opts, nulls, pinned)
+                table = _keep_identifiers_as_text(path, read_opts, table, nulls, set(pinned))
             elif fmt == "jsonl":
                 table = pa_json.read_json(  # pyright: ignore[reportUnknownMemberType, reportUnknownVariableType, reportPrivateImportUsage]
                     path
