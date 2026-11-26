@@ -1,4 +1,30 @@
-# v0.7.1 패치 릴리스 절차
+# v0.7.2 패치 릴리스 절차
+
+Aquila가 Parquet 데이터셋에 거짓 계약 경고를 내던 문제를 고친다(#60). NOT NULL은 파일 통계의 null 개수로,
+`timestamp[s]` 계약은 Parquet이 저장하는 `timestamp[ms]`도 맞는 것으로 판단한다. 내역은
+[CHANGELOG](../CHANGELOG.md).
+
+**0.7.1이 PyPI에 없는 이유**: `v0.7.1` 태그가 #60 머지 28초 뒤 `--target main`으로 만들어져 #60까지
+담겼고, 릴리스 실행(45777440288)은 취소됐다. 그래서 0.7.1은 게시되지 않았다. 태그는 그대로 두고 0.7.2가
+0.7.0 이후 변경을 모두 처음 게시한다. 태그는 반드시 이 PR의 머지 커밋을 확인한 뒤 만든다.
+
+**patch인 이유**: 명령·옵션·스펙 필드·Pugio 상태 파일은 바뀌지 않는다. 상태 마이그레이션이 하나 있다:
+`aquila.db` v3 → v4(`null_counts` 테이블 추가만). 열 때 자동으로 올라가고 되돌릴 수 없다(0.7.0 이하가 v4를
+거부). CHANGELOG 업그레이드 노트에 적었다. 교차 핀 `>=0.7,<0.8` 유지, 신규 PyPI 프로젝트 없음.
+
+1. 이 PR CI green → `main` 머지
+2. `main`에서 검증: 아래 0.7.0 절차의 2번과 같다. 기대값은 "14 packages at v0.7.2", 산출물 28개.
+3. 태그 `v0.7.2` 게시: `gh release create v0.7.2 --target <머지 커밋 SHA> --title v0.7.2 --generate-notes`
+4. 게시 확인: 14개 패키지의 `https://pypi.org/pypi/<name>/0.7.2/json`이 모두 `200`.
+5. 수동 점검 (PyPI에서 설치한 0.7.2로)
+   - [ ] Parquet 싱크와 `timestamp[s]`·NOT NULL 계약이 있는 프로젝트에서 `aquila scan` 뒤
+         `arsenal status`가 `alert: false`를 낸다.
+   - [ ] 0.7.0으로 만든 `aquila.db`가 첫 명령에서 v4로 올라간다(`PRAGMA user_version` = 4).
+   - [ ] CHANGELOG `## [0.7.2]`의 날짜 (PR에서 2026-11-26으로 기입. 태그가 다른 날이면 고친다).
+
+---
+
+# v0.7.1 패치 릴리스 절차 (태그만 있고 PyPI 미게시: 위 0.7.2 참고)
 
 Censor Standard 단계(#57)와 멈춘 파이프라인 경고(#58)가 나간다. `censor audit --tier standard`가 실행
 상태와 데이터를 읽어 신뢰성·최신성·데이터 건강을 채점하고, `--files`·`--duckdb`·`--table`로 프로젝트

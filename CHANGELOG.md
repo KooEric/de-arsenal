@@ -12,6 +12,34 @@ minor.
 
 ## [Unreleased]
 
+## [0.7.2] - 2026-11-26
+
+Aquila stops raising false contract alerts on Parquet datasets. All 14 packages move to
+`0.7.2`; internal pins stay `>=0.7,<0.8`. One state migration: `aquila.db` v3 → v4.
+
+0.7.1 was tagged but never published to PyPI (its release run was cancelled), so this is the
+first release with the 0.7.1 changes below. Upgrading from 0.7.0, read both sections.
+
+### ⚠️ Upgrade notes
+
+- The first Aquila command after upgrading migrates `.arsenal/aquila.db` from v3 to v4 (a new
+  `null_counts` table; nothing is rewritten). The migration is one way: Aquila 0.7.0 and
+  older refuse a v4 catalog ("newer than this Aquila"). To go back, restore a copy of
+  `aquila.db` taken before the upgrade, or delete it and run `aquila scan` again.
+- Run `aquila scan` once after upgrading so the null counts are recorded. Until then a NOT
+  NULL column has no statistics and raises no finding.
+
+### Fixed
+
+- Aquila no longer reports false contract findings on Parquet datasets, so `arsenal status`
+  stops raising `alert: true` for data that meets its contract. A NOT NULL column is now
+  judged by the null counts in the newest file's footer statistics, because Parquet marks
+  every field nullable. A column with no statistics raises no finding. A `timestamp[s]`
+  contract accepts a stored `timestamp[ms]` (same time zone), because Parquet has no seconds
+  unit. A different base type, another timestamp unit, or real nulls in a NOT NULL column are
+  still reported. Null counts go into a new `null_counts` table (`aquila.db` v4, migrated on
+  open) and never create schema versions.
+
 ## [0.7.1] - 2026-11-26
 
 Censor gains the Standard tier (run state and data), dataset audits without a project, and
@@ -61,15 +89,6 @@ a quick-tier warning for a pipeline that has stopped writing. All 14 packages mo
 - `arsenal eval --help` shows the options it forwards to `censor audit`.
 
 ### Fixed
-
-- Aquila no longer reports false contract findings on Parquet datasets, so `arsenal status`
-  stops raising `alert: true` for data that meets its contract. A NOT NULL column is now
-  judged by the null counts in the newest file's footer statistics, because Parquet marks
-  every field nullable. A column with no statistics raises no finding. A `timestamp[s]`
-  contract accepts a stored `timestamp[ms]` (same time zone), because Parquet has no seconds
-  unit. A different base type, another timestamp unit, or real nulls in a NOT NULL column are
-  still reported. Null counts go into a new `null_counts` table (`aquila.db` v4, migrated on
-  open) and never create schema versions.
 
 - Censor Standard: `--max-age-hours` was ignored for a project target, so a pipeline past its
   limit still passed `freshness.last_success`. With no limit, a last success older than a week
