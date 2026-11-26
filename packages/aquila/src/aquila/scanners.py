@@ -16,6 +16,7 @@ from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any, cast
 
+import pyarrow as pa
 import pyarrow.parquet as pq
 import yaml
 
@@ -23,6 +24,7 @@ from aquila.model import (
     ContractObservation,
     EdgeObservation,
     FreshnessObservation,
+    NullCountObservation,
     ScanResult,
     SchemaObservation,
     SourceFile,
@@ -197,8 +199,41 @@ def read_state(path: Path, kind: str, name: str, sink: str, result: ScanResult) 
     result.sources.append(SourceFile(str(path), "state", file_hash(path)))
 
 
+def footer_fields(schema: Any) -> list[dict[str, Any]]:
+    return [
+        {"name": str(f.name), "type": str(f.type), "nullable": bool(f.nullable)}
+        for f in list(schema)
+    ]
+
+
+def footer_null_counts(parquet_file: Any) -> dict[str, int]:
+    """Null count per flat column, summed over row groups; unknown columns are left out.
+
+    A column is unknown when any row group lacks a null count. Nested columns are
+    always left out: their leaf counts are not the column's own nulls.
+    """
+
+    flat = {str(f.name) for f in list(parquet_file.schema_arrow) if not pa.types.is_nested(f.type)}
+    metadata: Any = parquet_file.metadata
+    totals: dict[str, int] = {}
+    unknown: set[str] = set()
+    for i in range(int(metadata.num_row_groups)):
+        group: Any = metadata.row_group(i)
+        for j in range(int(group.num_columns)):
+            chunk: Any = group.column(j)
+            name = str(chunk.path_in_schema)
+            if name not in flat:
+                continue
+            stats: Any = chunk.statistics
+            if stats is None or not stats.has_null_count:
+                unknown.add(name)
+                continue
+            totals = {**totals, name: totals.get(name, 0) + int(stats.null_count)}
+    return {name: count for name, count in totals.items() if name not in unknown}
+
+
 def parquet_schema(uri: str, result: ScanResult) -> None:
-    """Record the footer schema of a local Parquet dataset (its last file, by name)."""
+    """Record the footer schema and null counts of a local Parquet dataset (its last file)."""
 
     if not uri.startswith("file://"):
         return
@@ -215,16 +250,18 @@ def parquet_schema(uri: str, result: ScanResult) -> None:
         return
     newest = files[-1]
     try:
-        schema: list[Any] = list(pq.read_schema(newest))  # pyright: ignore[reportUnknownMemberType, reportUnknownArgumentType]
+        opened: Any = pq.ParquetFile(newest)
+        with opened as footer:
+            fields = footer_fields(footer.schema_arrow)
+            nulls = footer_null_counts(footer)
     except (OSError, ValueError) as exc:
         result.skipped.append((str(newest), f"unreadable parquet footer: {exc}"))
         return
-    fields: list[dict[str, Any]] = [
-        {"name": str(f.name), "type": str(f.type), "nullable": bool(f.nullable)} for f in schema
-    ]
-    snapshot = schema_snapshot(fields)
     observed = datetime.fromtimestamp(newest.stat().st_mtime, UTC).isoformat()
-    result.schemas.append(SchemaObservation(uri, snapshot, observed, "parquet-footer"))
+    result.schemas.append(
+        SchemaObservation(uri, schema_snapshot(fields), observed, "parquet-footer")
+    )
+    result.null_counts.append(NullCountObservation(uri, nulls, observed))
 
 
 def file_hash(path: Path) -> str:

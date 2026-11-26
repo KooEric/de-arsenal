@@ -18,7 +18,7 @@ from typing import Any
 from aquila.model import ScanResult, schema_hash
 from aquila.uri import dataset_id, default_name
 
-SCHEMA_VERSION = 3
+SCHEMA_VERSION = 4
 
 _V1 = (
     """CREATE TABLE datasets (
@@ -150,6 +150,15 @@ class CatalogStore:
                     "source_path TEXT NOT NULL, snapshot TEXT NOT NULL, scanned_at TEXT NOT NULL)"
                 )
                 self._conn.execute("PRAGMA user_version=3")
+        if version < 4:
+            # v4: footer null counts, kept out of schema_versions so data never mints a version
+            with self._conn:
+                self._conn.execute(
+                    "CREATE TABLE null_counts (dataset_id TEXT PRIMARY KEY "
+                    "REFERENCES datasets(dataset_id), "
+                    "counts_json TEXT NOT NULL, observed_at TEXT NOT NULL)"
+                )
+                self._conn.execute("PRAGMA user_version=4")
 
     def publications(self, nodes: Iterable[str]) -> dict[str, dict[str, Any]]:
         wanted = set(nodes)
@@ -160,6 +169,14 @@ class CatalogStore:
             )
             if ident in wanted
         }
+
+    def null_counts(self, ident: str) -> dict[str, int]:
+        """Null count per column from the newest footer; a column absent here is unknown."""
+
+        row = self._conn.execute(
+            "SELECT counts_json FROM null_counts WHERE dataset_id=?", (ident,)
+        ).fetchone()
+        return {str(k): int(v) for k, v in json.loads(row[0]).items()} if row else {}
 
     def close(self) -> None:
         self._conn.close()
@@ -201,6 +218,11 @@ class CatalogStore:
                     dataset_id(schema.uri), schema.snapshot, schema.origin, schema.observed_at
                 ):
                     report.new_schema_versions.append(schema.uri)
+            for nulls in scan.null_counts:
+                self._conn.execute(
+                    "INSERT OR REPLACE INTO null_counts VALUES (?,?,?)",
+                    (dataset_id(nulls.uri), json.dumps(nulls.counts), nulls.observed_at),
+                )
             for contract in scan.contracts:
                 if self._upsert_contract(
                     dataset_id(contract.uri),

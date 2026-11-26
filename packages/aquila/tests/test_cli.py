@@ -49,7 +49,7 @@ def test_show_exits_one_on_contract_findings(lakehouse: Path, tmp_path: Path) ->
     payload = json.loads(out)
     assert code == 1
     assert payload["downstream"] == ["orders_clean (gladius:orders_clean)"]
-    assert payload["contract_findings"] == ["id: nullable in data, NOT NULL in contract"]
+    assert payload["contract_findings"] == ["id: 1 null value(s) in data, NOT NULL in contract"]
 
     code, out = invoke("show", "orders_clean", "--db", db)
     assert code == 0 and json.loads(out)["schema"][0]["name"] == "id"
