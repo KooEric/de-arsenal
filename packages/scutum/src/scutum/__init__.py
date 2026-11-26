@@ -5,7 +5,7 @@ from importlib.metadata import PackageNotFoundError, version
 try:
     __version__ = version("de-scutum")
 except PackageNotFoundError:
-    __version__ = "0.7.2"
+    __version__ = "0.7.3"
 
 from scutum.contract import ContractColumn, ContractReport, DataContract
 from scutum.lock import FileLock, LockConflict, file_lock
