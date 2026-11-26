@@ -1,3 +1,23 @@
+# v0.7.3 패치 릴리스 절차
+
+Pugio 파일 소스가 CSV 문자열 열의 빈 칸을 `''`가 아니라 NULL로 적재한다(#62). 그동안 이 값이
+`validate: not_null`과 Censor의 NULL 검사를 통과했다. 내역은 [CHANGELOG](../CHANGELOG.md).
+
+**patch인 이유**: 명령·옵션·스펙 필드·저장 형식·상태 파일이 바뀌지 않고 상태 마이그레이션도 없다. 빈 칸이
+NULL이 되는 것은 숫자 열과 같게 맞춘 버그 수정이고, `''`에 기대던 변환은 CHANGELOG 업그레이드 노트에 적었다.
+교차 핀 `>=0.7,<0.8` 유지, 신규 PyPI 프로젝트 없음.
+
+1. 이 PR CI green → `main` 머지
+2. `main`에서 검증: 아래 0.7.0 절차의 2번과 같다. 기대값은 "14 packages at v0.7.3", 산출물 28개.
+3. 태그 `v0.7.3` 게시: `gh release create v0.7.3 --target <머지 커밋 SHA> --title v0.7.3 --generate-notes`
+4. 게시 확인: 14개 패키지의 `https://pypi.org/pypi/<name>/0.7.3/json`이 모두 `200`.
+5. 수동 점검 (PyPI에서 설치한 0.7.3으로)
+   - [ ] 문자열 열에 빈 칸이 있는 CSV를 `pugio run`으로 적재하면 그 칸이 NULL이고,
+         `validate: not_null`이 위반으로 잡는다.
+   - [ ] CHANGELOG `## [0.7.3]`의 날짜 (PR에서 2026-11-27로 기입. 태그가 다른 날이면 고친다).
+
+---
+
 # v0.7.2 패치 릴리스 절차
 
 Aquila가 Parquet 데이터셋에 거짓 계약 경고를 내던 문제를 고친다(#60). NOT NULL은 파일 통계의 null 개수로,

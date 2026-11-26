@@ -12,6 +12,31 @@ minor.
 
 ## [Unreleased]
 
+## [0.7.3] - 2026-11-27
+
+Blank cells in CSV string columns now load as NULL. All 14 packages move to `0.7.3`; internal
+pins stay `>=0.7,<0.8`. No state migration.
+
+### ⚠️ Upgrade notes
+
+- A blank cell in a CSV string column used to land as `''` and now lands as NULL, the same as
+  numeric columns already did. Quoted empties (`""`) and any custom `null_values` token (such
+  as `N/A`) become NULL in string columns too. `"NA"` is still data. A transform or query that
+  matched `''` (for example `filter: "id <> ''"`) no longer needs to; one that counted `''`
+  as a value now sees NULL. Data already loaded is not rewritten.
+
+### Fixed
+
+- Pugio's file source loads blank CSV cells in string columns as NULL, so `validate:
+  not_null` and Censor's NULL checks now catch them. pyarrow applies `null_values` to string
+  columns only when `strings_can_be_null` is set, so these cells passed both checks as `''`
+  (#62).
+
+### Changed
+
+- When a CSV column has leading zeros (zip codes, employee numbers), Pugio reuses the text
+  column it read for that check instead of parsing the whole file a third time (#62).
+
 ## [0.7.2] - 2026-11-26
 
 Aquila stops raising false contract alerts on Parquet datasets. All 14 packages move to
