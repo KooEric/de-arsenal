@@ -97,3 +97,24 @@ def test_healthy_dataset_has_no_publication_finding(tmp_path: Path) -> None:
     publish_dataset(root)
     checks = {c.id: c for c in check_reliability(_ctx(root))}
     assert checks["reliability.dataset_publication"].status == Status.NA
+
+
+def test_last_success_older_than_the_default_limit_warns_when_no_limit_is_given(
+    tmp_path: Path,
+) -> None:
+    root = bare_project(tmp_path)
+    write_state(root, at=NOW - timedelta(days=105), done=2)
+    check = _fresh(root)["freshness.last_success:collect.yaml"]
+    assert check.status == Status.WARN
+    assert "default limit 168h" in check.evidence and check.fix
+
+
+def test_a_project_audit_applies_the_given_max_age(tmp_path: Path) -> None:
+    from censor.audit import AuditRequest, run_audit
+
+    root = bare_project(tmp_path)
+    write_state(root, at=RAN, done=2)
+    request = AuditRequest(root=root, tier="standard", now=NOW, max_age_hours=1)
+    checks = {c.id: c for c in run_audit(request).report.checks}
+    assert checks["freshness.last_success:collect.yaml"].status == Status.FAIL
+    assert checks["freshness.max_age_set"].status == Status.PASS

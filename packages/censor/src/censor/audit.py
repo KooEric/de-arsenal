@@ -65,7 +65,13 @@ def _validate(request: AuditRequest) -> None:
 def _context(request: AuditRequest, now: datetime) -> AuditContext:
     root = request.root.absolute()
     if request.data is None:
-        return AuditContext(kind="project", root=root, now=now, project=load_context(root))
+        return AuditContext(
+            kind="project",
+            root=root,
+            now=now,
+            project=load_context(root),
+            max_age_hours=request.max_age_hours,
+        )
     return AuditContext(
         kind=kind_of(request.data),
         root=root,

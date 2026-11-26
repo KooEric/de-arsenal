@@ -14,6 +14,11 @@ minor.
 
 ### Added
 
+- Censor catches a stopped pipeline on the quick tier: `operability.freshness` compares each
+  pipeline's newest output file time (or its state file, for a remote sink) with
+  `--max-age-hours`, or a week when none is given, and warns past it. It reads file times
+  only. The quick tier now accepts `--max-age-hours`.
+
 - Censor Standard tier: `censor audit [DIR] --tier standard` also reads run state and data,
   and scores three more dimensions. Reliability: failed or quarantined units, the share of
   rows set aside by validation, whether output remains after a failure. Freshness: the last
@@ -41,6 +46,10 @@ minor.
 - `arsenal eval --help` shows the options it forwards to `censor audit`.
 
 ### Fixed
+
+- Censor Standard: `--max-age-hours` was ignored for a project target, so a pipeline past its
+  limit still passed `freshness.last_success`. With no limit, a last success older than a week
+  now warns instead of passing.
 
 - Censor: a save that fails part-way no longer leaves a `runs/<id>.parquet` without its JSON;
   two audits of one project at the same time no longer share a temp file; a commented-out
