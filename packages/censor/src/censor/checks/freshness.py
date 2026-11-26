@@ -15,6 +15,8 @@ from censor.target import AuditContext
 
 _DIM: Final = Dimension.FRESHNESS
 _DATASET: Final = ".arsenal/dataset.duckdb"
+# Used when no --max-age-hours is given: older than a week is a warning, not a pass.
+DEFAULT_MAX_AGE_HOURS: Final = 168.0
 
 
 def age_hours(now: datetime, then: datetime) -> float:
@@ -39,11 +41,15 @@ def _last_success(ctx: AuditContext, spec: SpecFile) -> CheckResult:
         return result(Status.FAIL, "no unit has ever completed", "fix the failures, then rerun")
     age = age_hours(ctx.now, state.last_completed_at)
     seen = f"last unit completed {state.last_completed_at:%Y-%m-%d %H:%M} UTC ({age:.1f}h ago)"
+    fix = "run the pipeline; check its schedule"
     limit = ctx.max_age_hours
-    if limit is not None and age > limit:
-        return result(
-            Status.FAIL, f"{seen}, limit {limit:g}h", "run the pipeline; check its schedule"
-        )
+    if limit is not None:
+        if age > limit:
+            return result(Status.FAIL, f"{seen}, limit {limit:g}h", fix)
+        return result(Status.PASS, seen)
+    if age > DEFAULT_MAX_AGE_HOURS:
+        evidence = f"{seen}, default limit {DEFAULT_MAX_AGE_HOURS:g}h"
+        return result(Status.WARN, evidence, f"{fix}; pass --max-age-hours to set your own limit")
     return result(Status.PASS, seen)
 
 

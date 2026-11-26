@@ -22,13 +22,17 @@ attached read-only, Postgres is attached `READ_ONLY`).
 
 | Tier | Reads | Dimensions |
 |---|---|---|
-| `quick` | project files | correctness, quality guards, security, operability, agent readiness |
+| `quick` | project files and their times | correctness, quality guards, security, operability, agent readiness |
 | `standard` | also run state and data | the five above, plus reliability, freshness, data health |
 
+- **Operability** includes a file-time check on every tier: when a pipeline's newest output (or,
+  for a remote sink, its state file) is older than `--max-age-hours`, or a week when none is
+  given, it warns. No data is opened, so a stopped pipeline no longer grades like a running one.
 - **Reliability**: failed or quarantined units, the share of rows validation set aside (DLQ),
   whether output is still there after a failure. A pipeline that never ran is not scored.
 - **Freshness**: the last completed unit, the `arsenal dataset` publication state, and whether
   any limit says when data is too old (`--max-age-hours`, or `arsenal dataset --max-age-hours`).
+  With no limit, a last success older than a week warns instead of passing.
 - **Data health**: row count, key uniqueness and NULLs, NULL ratio per column (warn from 50%,
   fail when a column is entirely NULL), and the period a time column covers. For a project the
   data is found from the specs: Parquet and DuckDB sinks, and transform outputs.

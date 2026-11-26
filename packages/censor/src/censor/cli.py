@@ -166,7 +166,6 @@ def audit(
         given = {
             "--key": key,
             "--time-column": time_column,
-            "--max-age-hours": max_age_hours,
             "--sample": sample,
             "--since": since,
             "--full": full or None,

@@ -150,6 +150,17 @@ def test_tier_quick_is_the_default_and_accepted(tmp_path: Path) -> None:
     assert json.loads(result.stdout)["tier"] == "quick"
 
 
+def test_quick_takes_max_age_hours_for_the_file_time_check(tmp_path: Path) -> None:
+    root = production_project(tmp_path)
+    (root / "data" / "raw").mkdir(parents=True, exist_ok=True)
+    (root / "data" / "raw" / "a.parquet").write_bytes(b"x")
+    result = runner.invoke(app, ["audit", str(root), "--max-age-hours", "2", "--json-only"])
+    assert result.exit_code in (0, 1), result.output
+    checks = {c["id"]: c for c in json.loads(result.stdout)["checks"]}
+    fresh = [c for i, c in checks.items() if i.startswith("operability.freshness:")]
+    assert fresh and all("limit 2h" in c["evidence"] for c in fresh)
+
+
 def test_tier_standard_runs_and_is_recorded(tmp_path: Path) -> None:
     root = production_project(tmp_path)
     result = runner.invoke(app, ["audit", str(root), "--tier", "standard"])

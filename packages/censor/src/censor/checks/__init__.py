@@ -10,6 +10,7 @@ from censor.checks.guards import check_guards
 from censor.checks.operability import check_operability
 from censor.checks.reliability import check_reliability
 from censor.checks.security import check_security
+from censor.checks.staleness import check_staleness
 from censor.context import ProjectContext
 from censor.model import CheckResult, Dimension
 from censor.runner import CheckGroup
@@ -37,6 +38,8 @@ QUICK_CHECKS: tuple[Group, ...] = (
     _project("security", Dimension.SECURITY, check_security),
     _project("operability", Dimension.OPERABILITY, check_operability),
     _project("agent", Dimension.AGENT_READINESS, check_agent_readiness),
+    # File times only: a stopped pipeline must not grade like a running one.
+    CheckGroup("staleness", Dimension.OPERABILITY, check_staleness, kinds=PROJECT_ONLY),
 )
 
 STANDARD_CHECKS: tuple[Group, ...] = (
