@@ -124,8 +124,8 @@ def test_a_state_db_that_keeps_changing_during_the_copy_reads_as_busy(
         if Path(src) == db:  # the "writer" changes the DB after it was stamped
             import os
 
-            n = next(stamps)
-            os.utime(db, ns=(n, n))
+            moment = 1_700_000_000 + next(stamps)  # whole seconds: Windows keeps 100 ns
+            os.utime(db, (moment, moment))
         return real_copy(src, dst)
 
     monkeypatch.setattr(shutil, "copyfile", copy_while_a_writer_checkpoints)

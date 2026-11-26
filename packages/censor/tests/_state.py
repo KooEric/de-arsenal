@@ -21,7 +21,7 @@ def snapshot(root: Path) -> dict[str, tuple[str, int, int]]:
             continue
         stat = path.stat()
         digest = hashlib.sha256(path.read_bytes()).hexdigest()
-        found[str(rel)] = (digest, stat.st_size, stat.st_mtime_ns)
+        found[rel.as_posix()] = (digest, stat.st_size, stat.st_mtime_ns)
     return found
 
 

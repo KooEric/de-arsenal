@@ -20,7 +20,7 @@ RAN = datetime.now(UTC) - timedelta(hours=3)
 
 def _dirs(root: Path) -> list[str]:
     return sorted(
-        str(p.relative_to(root))
+        p.relative_to(root).as_posix()
         for p in root.rglob("*")
         if p.is_dir() and p.relative_to(root).parts[:2] != (".arsenal", "censor")
     )

@@ -1,5 +1,6 @@
 import builtins
 import json
+import re
 from pathlib import Path
 
 import pytest
@@ -82,7 +83,8 @@ def test_arsenal_eval_passes_tier_through(tmp_path: Path) -> None:
 def test_arsenal_eval_help_shows_the_options_it_forwards() -> None:
     result = runner.invoke(app, ["eval", "--help"])
     assert result.exit_code == 0
-    assert "--tier" in result.output and "--files" in result.output
+    plain = re.sub(r"\x1b\[[0-9;]*m", "", result.output)  # CI terminals get styled help
+    assert "--tier" in plain and "--files" in plain
 
 
 def test_arsenal_eval_forwards_a_data_target(tmp_path: Path) -> None:
