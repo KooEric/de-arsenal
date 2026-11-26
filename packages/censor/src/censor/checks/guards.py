@@ -6,6 +6,7 @@ from typing import Any, Final, cast
 
 from censor.context import ProjectContext, SpecFile
 from censor.model import CheckResult, Dimension, Status
+from censor.result import make_result
 
 _DIM: Final = Dimension.GUARDS
 
@@ -13,15 +14,8 @@ _DIM: Final = Dimension.GUARDS
 def _r(
     kind: str, spec: SpecFile, weight: int, status: Status, evidence: str, fix: str
 ) -> CheckResult:
-    return CheckResult(
-        id=f"guards.{kind}:{spec.name}",
-        dimension=_DIM,
-        weight=weight,
-        status=status,
-        subject=spec.name,
-        evidence=evidence,
-        fix=fix if status != Status.PASS else "",
-    )
+    check_id = f"guards.{kind}:{spec.name}"
+    return make_result(check_id, _DIM, weight, status, spec.name, evidence, fix)
 
 
 def _rules(validate: dict[str, Any]) -> list[dict[str, Any]]:

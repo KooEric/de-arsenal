@@ -337,7 +337,12 @@ INSTALL_HINT = (
 
 @app.command(
     "eval",
-    context_settings={"allow_extra_args": True, "ignore_unknown_options": True},
+    # No help option of its own: `arsenal eval --help` shows Censor's options, which it forwards.
+    context_settings={
+        "allow_extra_args": True,
+        "ignore_unknown_options": True,
+        "help_option_names": [],
+    },
 )
 def eval_(ctx: typer.Context) -> None:
     """Grade this project with Censor. Same arguments as `censor audit`."""

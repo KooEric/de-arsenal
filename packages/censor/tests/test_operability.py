@@ -117,3 +117,18 @@ def test_lineage_ignores_the_auditors_own_environment(tmp_path: Path) -> None:
 
     assert importlib.util.find_spec("aquila") is not None  # installed in this workspace
     assert _lineage(bare_project(tmp_path))[0] == Status.WARN
+
+
+def test_a_commented_out_schedule_is_not_a_schedule(tmp_path: Path) -> None:
+    from censor.checks.operability import _schedule_file  # pyright: ignore[reportPrivateUsage]
+
+    dag = tmp_path / "dags" / "daily.py"
+    dag.parent.mkdir()
+    dag.write_text(
+        "# schedule='@daily' goes here later\nBashOperator(bash_command='arsenal run')\n"
+    )
+    assert _schedule_file(tmp_path) is None
+    dag.write_text(
+        "DAG('d', schedule='@daily')  # nightly\nBashOperator(bash_command='arsenal run')\n"
+    )
+    assert _schedule_file(tmp_path) == dag

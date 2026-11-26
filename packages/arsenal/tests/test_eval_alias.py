@@ -1,5 +1,6 @@
 import builtins
 import json
+import re
 from pathlib import Path
 
 import pytest
@@ -74,6 +75,22 @@ def test_arsenal_eval_passes_tier_through(tmp_path: Path) -> None:
     quick = runner.invoke(app, ["eval", str(root), "--tier", "quick", "--json-only"])
     assert quick.exit_code == 1
     assert json.loads(quick.stdout)["tier"] == "quick"
-    standard = runner.invoke(app, ["eval", str(root), "--tier", "standard"])
-    assert standard.exit_code == 2
-    assert "not available in this version" in standard.stderr
+    standard = runner.invoke(app, ["eval", str(root), "--tier", "standard", "--json-only"])
+    assert standard.exit_code == 1
+    assert json.loads(standard.stdout)["tier"] == "standard"
+
+
+def test_arsenal_eval_help_shows_the_options_it_forwards() -> None:
+    result = runner.invoke(app, ["eval", "--help"])
+    assert result.exit_code == 0
+    plain = re.sub(r"\x1b\[[0-9;]*m", "", result.output)  # CI terminals get styled help
+    assert "--tier" in plain and "--files" in plain
+
+
+def test_arsenal_eval_forwards_a_data_target(tmp_path: Path) -> None:
+    (tmp_path / "a.csv").write_text("id,v\n1,a\n1,b\n")
+    args = [str(tmp_path), "--files", str(tmp_path / "*.csv"), "--key", "id", "--json-only"]
+    via_arsenal = runner.invoke(app, ["eval", *args])
+    via_censor = runner.invoke(censor_app, ["audit", *args])
+    assert via_arsenal.exit_code == via_censor.exit_code == 1
+    assert _without_run_id(via_arsenal.stdout) == _without_run_id(via_censor.stdout)

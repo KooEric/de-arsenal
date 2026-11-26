@@ -11,7 +11,7 @@ from pathlib import Path
 import yaml
 from pydantic import ValidationError
 
-from arsenal_core.errors import FatalError
+from arsenal_core.errors import FatalError, MissingEnvError
 from arsenal_core.yaml_io import yaml_error_summary
 from gladius.spec import TransformSpec
 
@@ -22,7 +22,7 @@ def _substitute_env(text: str) -> str:
     def repl(m: re.Match[str]) -> str:
         value = os.environ.get(m.group(1))
         if value is None:
-            raise FatalError(f"environment variable not set: {m.group(1)}")
+            raise MissingEnvError(m.group(1))
         return value
 
     return _ENV_PATTERN.sub(repl, text)

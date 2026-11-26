@@ -8,6 +8,7 @@ from typing import Final
 
 from censor.context import ProjectContext
 from censor.model import CheckResult, Dimension, Status
+from censor.result import make_result
 
 # Fixed locations only: globbing the whole tree would walk data/ and .venv/.
 SCHEDULE_GLOBS: Final[tuple[str, ...]] = (
@@ -51,15 +52,7 @@ def _lineage_evidence(root: Path) -> str | None:
 def _r(
     check_id: str, weight: int, status: Status, subject: str, evidence: str, fix: str
 ) -> CheckResult:
-    return CheckResult(
-        id=check_id,
-        dimension=Dimension.OPERABILITY,
-        weight=weight,
-        status=status,
-        subject=subject,
-        evidence=evidence,
-        fix=fix if status != Status.PASS else "",
-    )
+    return make_result(check_id, Dimension.OPERABILITY, weight, status, subject, evidence, fix)
 
 
 def _declares_schedule(path: Path, text: str) -> bool:
@@ -68,8 +61,10 @@ def _declares_schedule(path: Path, text: str) -> bool:
         return any(m in ln for ln in lines for m in _SCHEDULE_MARKERS)
     if not any(marker in text for marker in _SCHEDULE_MARKERS):
         return False
-    trigger = _DAG_TRIGGER if path.suffix == ".py" else _WORKFLOW_TRIGGER
-    return trigger in text
+    if path.suffix != ".py":
+        return _WORKFLOW_TRIGGER in text
+    code = (ln.split("#", 1)[0] for ln in text.splitlines())  # a comment schedules nothing
+    return any(_DAG_TRIGGER in ln for ln in code)
 
 
 def _schedule_file(root: Path) -> Path | None:

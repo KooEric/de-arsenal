@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Any, cast
+from typing import Any, Literal, cast
 
 import yaml
 from arsenal.project import ArsenalProject, DbtProjectRef, load_project
@@ -39,6 +39,10 @@ class ProjectContext:
     transforms: tuple[Path | DbtProjectRef, ...]
     transform_files: tuple[SpecFile, ...]
 
+    @property
+    def kind(self) -> Literal["project"]:
+        return "project"
+
 
 def _reason(error: Exception) -> str:
     if isinstance(error, OSError) and error.strerror:
@@ -64,6 +68,10 @@ def load_context(root: Path) -> ProjectContext:
     manifest_path = root / MANIFEST_NAME
     if not manifest_path.is_file():
         raise FatalError(f"no {MANIFEST_NAME} in {root}; pass a DE Arsenal project directory")
+    try:
+        manifest_path.read_text(encoding="utf-8")
+    except (OSError, UnicodeDecodeError) as e:  # an unreadable target is a tool error (exit 2)
+        raise FatalError(f"cannot read {manifest_path}: {_reason(e)}") from e
     try:
         manifest = load_project(manifest_path)
     except ArsenalError as e:

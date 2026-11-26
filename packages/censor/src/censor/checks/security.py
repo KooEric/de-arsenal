@@ -10,6 +10,7 @@ import yaml
 
 from censor.context import ProjectContext, SpecFile
 from censor.model import CheckResult, Dimension, Status
+from censor.result import make_result
 
 _ENV_REF: Final = "${"
 _TOKEN_PATTERNS: Final[tuple[tuple[str, re.Pattern[str]], ...]] = (
@@ -162,28 +163,17 @@ def find_secrets(text: str) -> list[tuple[int, str]]:
 
 
 def _check_file(spec: SpecFile) -> CheckResult:
+    check_id = f"security.secrets:{spec.name}"
     if spec.read_error is not None:
-        return CheckResult(
-            id=f"security.secrets:{spec.name}",
-            dimension=Dimension.SECURITY,
-            weight=5,
-            status=Status.NA,
-            subject=spec.name,
-            evidence=f"could not read: {spec.read_error}",
-        )
+        evidence = f"could not read: {spec.read_error}"
+        return make_result(check_id, Dimension.SECURITY, 5, Status.NA, spec.name, evidence)
     found = find_secrets(spec.text)
     evidence = (
         "; ".join(f"line {n}: {kind}" for n, kind in found) if found else "no literal secrets"
     )
-    return CheckResult(
-        id=f"security.secrets:{spec.name}",
-        dimension=Dimension.SECURITY,
-        weight=5,
-        status=Status.FAIL if found else Status.PASS,
-        blocker=bool(found),
-        subject=spec.name,
-        evidence=evidence,
-        fix=_FIX if found else "",
+    status = Status.FAIL if found else Status.PASS
+    return make_result(
+        check_id, Dimension.SECURITY, 5, status, spec.name, evidence, _FIX, blocker=bool(found)
     )
 
 

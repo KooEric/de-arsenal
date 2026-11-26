@@ -144,3 +144,23 @@ def test_parquet_rows_carry_run_metadata(tmp_path: Path) -> None:
     assert {r["target_kind"] for r in rows} == {"project"}
     assert {r["target"] for r in rows} == {report.target}
     assert {r["censor_version"] for r in rows} == {report.censor_version}
+
+
+def test_a_failed_save_leaves_no_half_written_run(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    from censor import history
+
+    report = audit_project(minimal_project(tmp_path))
+    real = history._atomic_write  # pyright: ignore[reportPrivateUsage]
+
+    def fail_on_json(path: Path, write: object) -> None:
+        if path.suffix == ".json":
+            raise OSError("disk full")
+        real(path, write)  # type: ignore[arg-type]
+
+    monkeypatch.setattr(history, "_atomic_write", fail_on_json)
+    with pytest.raises(OSError, match="disk full"):
+        save_report(report, tmp_path, markdown="x")
+    censor = tmp_path / ".arsenal" / "censor"
+    assert not list((censor / "runs").iterdir()) and not list((censor / "reports").iterdir())

@@ -9,7 +9,7 @@ from pathlib import Path
 import yaml
 from pydantic import ValidationError
 
-from arsenal_core.errors import FatalError
+from arsenal_core.errors import FatalError, MissingEnvError
 from hasta.spec import StreamSpec
 
 _ENV_PATTERN = re.compile(r"\$\{(\w+)\}")
@@ -19,7 +19,7 @@ def _substitute_env(text: str) -> str:
     def replace(match: re.Match[str]) -> str:
         value = os.environ.get(match.group(1))
         if value is None:
-            raise FatalError(f"environment variable not set: {match.group(1)}")
+            raise MissingEnvError(match.group(1))
         return value
 
     return _ENV_PATTERN.sub(replace, text)

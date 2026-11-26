@@ -8,30 +8,22 @@ from typing import Final
 
 from arsenal.project import DbtProjectRef
 
-from arsenal_core.errors import ArsenalError
+from arsenal_core.errors import ArsenalError, MissingEnvError
 from arsenal_core.spec import load_pipeline
 from censor.context import ProjectContext
 from censor.model import CheckResult, Dimension, Status
+from censor.result import make_result
 from gladius.compile import compile_sql
 from gladius.loader import load_transform
 
 _DIM: Final = Dimension.CORRECTNESS
-_ENV_NOT_SET: Final = "environment variable not set"
 
 
 def _result(
     check_id: str, weight: int, status: Status, subject: str, evidence: str, fix: str = ""
 ) -> CheckResult:
-    return CheckResult(
-        id=check_id,
-        dimension=_DIM,
-        weight=weight,
-        status=status,
-        blocker=status == Status.FAIL,
-        subject=subject,
-        evidence=evidence,
-        fix=fix,
-    )
+    blocker = status == Status.FAIL
+    return make_result(check_id, _DIM, weight, status, subject, evidence, fix, blocker=blocker)
 
 
 def _name(ctx: ProjectContext, path: Path) -> str:
@@ -46,18 +38,17 @@ def _pipeline(ctx: ProjectContext, path: Path) -> CheckResult:
     check_id = f"correctness.pipeline:{name}"
     try:
         load_pipeline(path)
+    except MissingEnvError as e:
+        return _result(
+            check_id,
+            2,
+            Status.WARN,
+            name,
+            f"could not fully validate: {e}",
+            "set the variable in this shell to validate the whole spec",
+        )
     except ArsenalError as e:
-        message = str(e)
-        if message.startswith(_ENV_NOT_SET):
-            return _result(
-                check_id,
-                2,
-                Status.WARN,
-                name,
-                f"could not fully validate: {message}",
-                "set the variable in this shell to validate the whole spec",
-            )
-        return _result(check_id, 2, Status.FAIL, name, message, "fix the field the message names")
+        return _result(check_id, 2, Status.FAIL, name, str(e), "fix the field the message names")
     return _result(check_id, 2, Status.PASS, name, "spec is valid")
 
 

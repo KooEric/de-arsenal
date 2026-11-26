@@ -3,7 +3,11 @@
 from __future__ import annotations
 
 import os
-from collections.abc import Callable
+import secrets
+import shutil
+import tempfile
+from collections.abc import Callable, Generator
+from contextlib import contextmanager
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Final
@@ -31,7 +35,8 @@ def censor_dir(base: Path) -> Path:
 
 def _atomic_write(path: Path, write: Callable[[Path], object]) -> None:
     """Write via a temp file in the same directory, then replace; clean up on failure."""
-    tmp = path.with_name(f".{path.name}.tmp")
+    # A name no other audit of the same project uses, so two runs at once do not collide.
+    tmp = path.with_name(f".{path.name}.{os.getpid()}.{secrets.token_hex(4)}.tmp")
     tmp.unlink(missing_ok=True)  # never write through a planted temp symlink
     try:
         write(tmp)
@@ -67,6 +72,33 @@ def _ensure_inside(base: Path, root: Path, dirs: tuple[Path, ...]) -> None:
         raise OSError(f"{root} resolves outside {base}; refusing to write run history there")
 
 
+def _prepare_root(base: Path, dirs: tuple[Path, ...]) -> Path:
+    """Create `<base>/.arsenal/censor/` and `dirs` inside it, with a `.gitignore` on first use."""
+    root = censor_dir(base)
+    _ensure_inside(base, root, dirs)
+    for path in dirs:
+        path.mkdir(parents=True, exist_ok=True)
+    gitignore = root / ".gitignore"
+    if not gitignore.exists() and not gitignore.is_symlink():
+        gitignore.write_text("*\n", encoding="utf-8")
+    return root
+
+
+@contextmanager
+def scratch_dir(base: Path) -> Generator[Path]:
+    """A private directory under `<base>/.arsenal/censor/tmp/`, removed on exit.
+
+    Copies of state and DuckDB spill files go here: the one place Censor may write.
+    """
+    tmp = censor_dir(base) / "tmp"
+    _prepare_root(base, (tmp,))
+    path = Path(tempfile.mkdtemp(dir=tmp))
+    try:
+        yield path
+    finally:
+        shutil.rmtree(path, ignore_errors=True)
+
+
 def unique_run_id(base: Path, run_id: str) -> str:
     """`run_id`, or `run_id-2`, `-3`, ... when a saved run already has that id."""
     runs = censor_dir(base) / "runs"
@@ -82,19 +114,20 @@ def save_report(report: AuditReport, base: Path, *, markdown: str) -> Path:
     root = censor_dir(base)
     runs = root / "runs"
     reports = root / "reports"
-    _ensure_inside(base, root, (runs, reports))
-    runs.mkdir(parents=True, exist_ok=True)
-    reports.mkdir(parents=True, exist_ok=True)
-    gitignore = root / ".gitignore"
-    if not gitignore.exists() and not gitignore.is_symlink():
-        gitignore.write_text("*\n", encoding="utf-8")
+    _prepare_root(base, (runs, reports))
     json_path = runs / f"{report.run_id}.json"
-    _atomic_write(runs / f"{report.run_id}.parquet", lambda t: _write_parquet(report, t))
-    _atomic_write(
-        reports / f"{report.run_id}.md", lambda t: t.write_text(markdown, encoding="utf-8")
-    )
+    parquet_path = runs / f"{report.run_id}.parquet"
+    markdown_path = reports / f"{report.run_id}.md"
     body = report.model_dump_json(indent=2) + "\n"
-    _atomic_write(json_path, lambda t: t.write_text(body, encoding="utf-8"))
+    try:
+        _atomic_write(parquet_path, lambda t: _write_parquet(report, t))
+        _atomic_write(markdown_path, lambda t: t.write_text(markdown, encoding="utf-8"))
+        _atomic_write(json_path, lambda t: t.write_text(body, encoding="utf-8"))
+    except BaseException:
+        # Without its JSON a run does not exist: leave no half-saved Parquet for aggregates.
+        parquet_path.unlink(missing_ok=True)
+        markdown_path.unlink(missing_ok=True)
+        raise
     return json_path
 
 
