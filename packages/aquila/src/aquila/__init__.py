@@ -11,7 +11,7 @@ from importlib.metadata import PackageNotFoundError, version
 try:
     __version__ = version("de-aquila")
 except PackageNotFoundError:
-    __version__ = "0.7.1"
+    __version__ = "0.7.2"
 
 from aquila.uri import dataset_id, normalize_uri
 

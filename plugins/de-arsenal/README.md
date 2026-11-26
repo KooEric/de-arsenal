@@ -37,7 +37,7 @@ From the repository root run `python3 scripts/build_skill.py`. This builds
 - For Codex, extract the ZIP into the data project's `.agents/skills/` directory. Its entry point is `.agents/skills/de-arsenal/SKILL.md`.
 
 In a shell-enabled session, try “샘플 CSV로 프로젝트를 만들고 중복 제거 전후 건수를 보여 줘.”
-Install the CLI on the execution machine with `uv tool install de-arsenal==0.7.1`.
+Install the CLI on the execution machine with `uv tool install de-arsenal==0.7.2`.
 A recurring job needs a persistent project directory on that machine.
 
 ## What was checked
