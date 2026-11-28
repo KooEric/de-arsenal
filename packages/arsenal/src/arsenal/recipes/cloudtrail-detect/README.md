@@ -12,16 +12,27 @@ AWS CloudTrail 이벤트를 공통 `events` 테이블로 정리하고, 탐지 �
 
 ## 내 로그로
 
-CloudTrail이 S3에 남긴 파일(`*.json.gz`)을 한 디렉터리에 내려받은 뒤:
+CloudTrail이 S3에 남긴 파일(`*.json`, `*.json.gz`)을 한 디렉터리에 내려받은 뒤:
 
 ```bash
-rm input/sample.jsonl
+rm -rf data .arsenal input/sample.jsonl
 vigil unpack ./downloaded-logs --out input/cloudtrail.jsonl
 arsenal run
+vigil run --events data/events --out data/alerts
 ```
 
-`vigil unpack`은 이벤트 하나를 `{"raw": "..."}` 한 줄로 쓴다. 컬럼을 꺼내는 SQL은 `transform.yaml`에
+첫 줄은 샘플이 만든 결과를 지운다. `arsenal run`이 샘플을 `data/raw`에 이미 쌓았고, 변환은 `data/raw`
+전체를 읽으므로 `input/sample.jsonl`만 지우면 샘플 39행과 alert 6건이 내 로그와 섞여 남는다.
+`.arsenal/`에는 이미 읽은 입력 파일의 기록이 있다. 이것까지 지우지 않으면 `arsenal run`이 새 파일을
+읽지 않고 건너뛰어 `data/raw`가 비고 변환이 실패한다. `rm -rf`는 이 프로젝트 디렉터리 안에서만 실행한다.
+
+`vigil unpack`은 이벤트 하나를 `{"raw": "..."}` 한 줄로 쓴다. 로그 파일 검증을 켠 trail이 함께 남기는
+`CloudTrail-Digest/` 아래 파일(`Records`가 없다)은 건너뛴다. 컬럼을 꺼내는 SQL은 `transform.yaml`에
 그대로 있으니, 필요한 필드가 더 있으면 거기에 추가한다. `events`의 컬럼 13개는 지우거나 이름을 바꾸면 안 된다.
+
+S3 룰(`aws-s3-bucket-exposure-change`)이 보는 이벤트 이름은 `PutBucketAcl`, `PutBucketPolicy`,
+`DeleteBucketPublicAccessBlock`, `DeleteAccountPublicAccessBlock`, `PutBucketPublicAccessBlock`,
+`PutAccountPublicAccessBlock`이 전부다. 공개로 바뀌었는지는 확인하지 않는다.
 
 ## 룰 추가
 
