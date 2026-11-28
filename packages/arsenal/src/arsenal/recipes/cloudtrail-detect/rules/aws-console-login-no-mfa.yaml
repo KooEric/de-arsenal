@@ -14,3 +14,6 @@ tests:
     - { action: ConsoleLogin, actor_type: IAMUser, outcome: success, mfa_used: true }
     - { action: ConsoleLogin, actor_type: IAMUser, outcome: failure, mfa_used: false }
     - { action: ConsoleLogin, actor_type: IAMUser, outcome: success }
+    - { action: ConsoleLogin, actor_type: Root, outcome: success, mfa_used: false }
+    - { action: ConsoleLogin, actor_type: AssumedRole, outcome: success, mfa_used: false }
+    - { action: GetCallerIdentity, actor_type: IAMUser, outcome: success, mfa_used: false }

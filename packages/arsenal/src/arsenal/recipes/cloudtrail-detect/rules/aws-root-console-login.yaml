@@ -12,3 +12,4 @@ tests:
   no_match:
     - { action: ConsoleLogin, actor_type: IAMUser, outcome: success }
     - { action: ConsoleLogin, actor_type: Root, outcome: failure }
+    - { action: GetCallerIdentity, actor_type: Root, outcome: success }

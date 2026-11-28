@@ -15,11 +15,17 @@ steps:
         CASE
           WHEN json_extract_string(raw, '$.errorCode') IS NOT NULL THEN 'failure'
           WHEN json_extract_string(raw, '$.responseElements.ConsoleLogin') = 'Failure' THEN 'failure'
+          WHEN json_extract_string(raw, '$.responseElements.SwitchRole') = 'Failure' THEN 'failure'
+          WHEN json_extract_string(raw, '$.responseElements.CheckMfa') = 'Failure' THEN 'failure'
           ELSE 'success'
         END AS outcome,
-        CASE json_extract_string(raw, '$.additionalEventData.MFAUsed')
-          WHEN 'Yes' THEN true
-          WHEN 'No' THEN false
+        CASE
+          WHEN json_extract_string(raw, '$.additionalEventData.MFAUsed') = 'Yes' THEN true
+          WHEN json_extract_string(raw, '$.additionalEventData.MFAUsed') = 'No' THEN false
+          WHEN json_extract_string(
+            raw, '$.userIdentity.sessionContext.attributes.mfaAuthenticated') = 'true' THEN true
+          WHEN json_extract_string(
+            raw, '$.userIdentity.sessionContext.attributes.mfaAuthenticated') = 'false' THEN false
         END AS mfa_used,
         coalesce(
           json_extract_string(raw, '$.requestParameters.bucketName'),

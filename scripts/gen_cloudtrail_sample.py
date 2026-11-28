@@ -14,7 +14,10 @@ from pathlib import Path
 from typing import Any
 
 ACCOUNT = "123456789012"
-OUT = Path("packages/arsenal/src/arsenal/recipes/cloudtrail-detect/input/sample.jsonl")
+OUT = (
+    Path(__file__).resolve().parents[1]
+    / "packages/arsenal/src/arsenal/recipes/cloudtrail-detect/input/sample.jsonl"
+)
 START = datetime(2026, 11, 2, 9, 0, 0)
 OFFICE_IP = "192.0.2.10"
 OUTSIDE_IP = "198.51.100.7"
@@ -93,7 +96,8 @@ def build() -> list[dict[str, Any]]:
         requestParameters={"userName": "dave", "policyArn": READ_POLICY},
     )  # fmt: skip
 
-    # One event per rule, and two for the bucket rule.
+    # One event for each of the first three rules, a key and a policy event for the key rule,
+    # and two events for the bucket rule.
     s.login(60, ROOT, OUTSIDE_IP, "No", "Success")
     s.login(70, user("mallory"), OUTSIDE_IP, "No", "Success")
     s.add(75, "cloudtrail", "StopLogging", user("mallory"), OUTSIDE_IP,
@@ -104,7 +108,7 @@ def build() -> list[dict[str, Any]]:
           requestParameters={"userName": "mallory", "policyArn": ADMIN_POLICY})  # fmt: skip
     s.add(100, "s3", "PutBucketAcl", user("mallory"), OUTSIDE_IP,
           requestParameters={"bucketName": "customer-exports"})  # fmt: skip
-    s.add(101, "s3", "DeletePublicAccessBlock", user("mallory"), OUTSIDE_IP,
+    s.add(101, "s3", "DeleteBucketPublicAccessBlock", user("mallory"), OUTSIDE_IP,
           requestParameters={"bucketName": "customer-exports"})  # fmt: skip
 
     # CloudTrail can deliver an event twice; the transform removes the copy.

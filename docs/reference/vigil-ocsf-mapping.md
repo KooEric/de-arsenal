@@ -14,8 +14,8 @@ OCSF(API Activity, class 6003)로 옮길 때 어느 필드에 해당하는지 �
 | `actor_id` | varchar | `userIdentity.arn` | `actor.user.uid` |
 | `src_ip` | varchar | `sourceIPAddress` | `src_endpoint.ip` |
 | `region` | varchar | `awsRegion` | `cloud.region` |
-| `outcome` | varchar | `errorCode` 유무, 콘솔 로그인은 `responseElements.ConsoleLogin` | `status` |
-| `mfa_used` | boolean | `additionalEventData.MFAUsed` | `actor.session.is_mfa` |
+| `outcome` | varchar | `errorCode`가 있으면 `failure`. 로그인 계열은 `responseElements.ConsoleLogin`, `SwitchRole`, `CheckMfa`가 `Failure`일 때도 `failure`. 나머지는 `success` | `status` |
+| `mfa_used` | boolean | `additionalEventData.MFAUsed`(`Yes`/`No`), 없으면 `userIdentity.sessionContext.attributes.mfaAuthenticated`(`true`/`false`). 둘 다 없으면 NULL | `actor.session.is_mfa` |
 | `resource` | varchar | `requestParameters`의 `bucketName`, `userName`, `name` 중 처음 있는 값 | `resources[].name` |
 | `raw` | varchar (JSON) | 이벤트 전체 | `raw_data` |
 

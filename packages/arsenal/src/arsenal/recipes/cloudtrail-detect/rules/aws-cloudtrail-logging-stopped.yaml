@@ -12,6 +12,8 @@ tests:
   match:
     - { service: cloudtrail.amazonaws.com, action: StopLogging, outcome: success }
     - { service: cloudtrail.amazonaws.com, action: DeleteTrail, outcome: success }
+    - { service: cloudtrail.amazonaws.com, action: UpdateTrail, outcome: success }
   no_match:
     - { service: cloudtrail.amazonaws.com, action: DescribeTrails, outcome: success }
     - { service: cloudtrail.amazonaws.com, action: StopLogging, outcome: failure }
+    - { service: s3.amazonaws.com, action: StopLogging, outcome: success }
