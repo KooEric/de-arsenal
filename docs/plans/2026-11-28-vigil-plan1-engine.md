@@ -37,7 +37,7 @@ packages/vigil/
     coverage.py   Technique, CoverageReport (+ parts), load_techniques, build_coverage
     unpack.py     unpack_cloudtrail
     cli.py        app: test, run, coverage, unpack
-    data/cloudtrail-techniques.yaml
+    reference/cloudtrail-techniques.yaml
   tests/
     conftest.py, _events.py
     test_events.py, test_rule.py, test_testing.py, test_run.py, test_coverage.py, test_unpack.py, test_cli.py
@@ -1229,7 +1229,7 @@ git commit -m "feat(vigil): vigil run records new alerts once per rule and event
 ### Task 5: `vigil coverage`
 
 **Files:**
-- Create: `packages/vigil/src/vigil/coverage.py`, `packages/vigil/src/vigil/data/cloudtrail-techniques.yaml`, `packages/vigil/tests/test_coverage.py`, `schemas/vigil-coverage.json`
+- Create: `packages/vigil/src/vigil/coverage.py`, `packages/vigil/src/vigil/reference/cloudtrail-techniques.yaml`, `packages/vigil/tests/test_coverage.py`, `schemas/vigil-coverage.json`
 - Modify: `packages/vigil/src/vigil/cli.py`, `packages/vigil/tests/test_cli.py`
 
 **Interfaces:**
@@ -1240,13 +1240,14 @@ git commit -m "feat(vigil): vigil run records new alerts once per rule and event
 
 Check each name against https://attack.mitre.org/matrices/enterprise/cloud/iaas/ and fix any that differ before committing.
 
-`packages/vigil/src/vigil/data/cloudtrail-techniques.yaml`:
+`packages/vigil/src/vigil/reference/cloudtrail-techniques.yaml`:
 
 ```yaml
 # ATT&CK techniques that AWS CloudTrail management events can show.
-# Source: MITRE ATT&CK Enterprise, IaaS matrix. Hand-picked 2026-11-28; not the full matrix.
+# Source: MITRE ATT&CK Enterprise v20 (October 2026), IaaS matrix. Hand-picked 2026-11-28; not the full matrix.
 - { id: T1078.004, name: "Valid Accounts: Cloud Accounts" }
 - { id: T1098.001, name: "Account Manipulation: Additional Cloud Credentials" }
+- { id: T1087.004, name: "Account Discovery: Cloud Account" }
 - { id: T1098.003, name: "Account Manipulation: Additional Cloud Roles" }
 - { id: T1110, name: "Brute Force" }
 - { id: T1136.003, name: "Create Account: Cloud Account" }
@@ -1257,8 +1258,7 @@ Check each name against https://attack.mitre.org/matrices/enterprise/cloud/iaas/
 - { id: T1535, name: "Unused/Unsupported Cloud Regions" }
 - { id: T1537, name: "Transfer Data to Cloud Account" }
 - { id: T1556.006, name: "Modify Authentication Process: Multi-Factor Authentication" }
-- { id: T1562.007, name: "Impair Defenses: Disable or Modify Cloud Firewall" }
-- { id: T1562.008, name: "Impair Defenses: Disable or Modify Cloud Logs" }
+- { id: T1685.002, name: "Disable or Modify Tools: Disable or Modify Cloud Log" }
 - { id: T1578.001, name: "Modify Cloud Compute Infrastructure: Create Snapshot" }
 - { id: T1578.002, name: "Modify Cloud Compute Infrastructure: Create Cloud Instance" }
 - { id: T1580, name: "Cloud Infrastructure Discovery" }

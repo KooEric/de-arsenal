@@ -404,7 +404,7 @@ tests:
 id: aws-cloudtrail-logging-stopped
 title: CloudTrail 로깅 중지·삭제·변경
 severity: critical
-attack: [T1562.008]
+attack: [T1685.002]
 source: cloudtrail
 query: |
   SELECT * FROM events

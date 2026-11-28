@@ -117,7 +117,7 @@ tests:
 |---|---|---|
 | `aws-root-console-login` | T1078.004 | 루트 계정 콘솔 로그인 성공 |
 | `aws-console-login-no-mfa` | T1078.004 | IAM 사용자 콘솔 로그인 성공, `mfa_used = false` |
-| `aws-cloudtrail-logging-stopped` | T1562.008 | `StopLogging`, `DeleteTrail`, `UpdateTrail` 성공 |
+| `aws-cloudtrail-logging-stopped` | T1685.002 | `StopLogging`, `DeleteTrail`, `UpdateTrail` 성공 |
 | `aws-access-key-then-admin-policy` | T1098.001, T1098.003 | 같은 행위자가 `CreateAccessKey` 뒤 1시간 안에 `AdministratorAccess` 정책을 `AttachUserPolicy` |
 | `aws-s3-bucket-exposure-change` | T1530 | `PutBucketAcl`, `PutBucketPolicy`, `DeletePublicAccessBlock` 성공. 공개로 바뀌었는지는 확인하지 않고 공개 설정을 건드린 변경을 알린다 |
 
@@ -145,7 +145,7 @@ vigil unpack   SRC_DIR --out FILE.jsonl                       # CloudTrail 원�
 **`vigil coverage`**: 룰 파일만으로 기법별·로그 소스별 룰 수와 테스트 수를 낸다. `--events`를 주면
 룰이 참조하는 공통 컬럼의 NULL 비율과 로그 소스별 마지막 이벤트 시각을 더한다. "룰이 없는 기법"은
 패키지에 넣어 둔 기준 목록(CloudTrail로 관찰 가능한 ATT&CK 클라우드 기법)과 비교해 낸다.
-목록 파일은 `packages/vigil/src/vigil/data/cloudtrail-techniques.yaml`에 두고 출처와 작성일을 적는다.
+목록 파일은 `packages/vigil/src/vigil/reference/cloudtrail-techniques.yaml`에 두고 출처와 작성일을 적는다.
 
 **`vigil unpack`**: `SRC_DIR` 아래의 `*.json`, `*.json.gz`를 읽어 `Records`의 이벤트마다 한 줄씩 쓴다.
 `Records` 배열이 없는 파일이 있으면 그 파일을 알리고 종료 코드 2. 출력은 임시 파일에 쓰고 마지막에 옮긴다.

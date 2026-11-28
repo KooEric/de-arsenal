@@ -60,7 +60,7 @@ class CoverageReport(_Frozen):
 
 
 def load_techniques() -> list[Technique]:
-    text = (resources.files("vigil") / "data" / _TECHNIQUES_FILE).read_text(encoding="utf-8")
+    text = (resources.files("vigil") / "reference" / _TECHNIQUES_FILE).read_text(encoding="utf-8")
     raw: list[dict[str, Any]] = yaml.safe_load(text)
     return [Technique.model_validate(item) for item in raw]
 
