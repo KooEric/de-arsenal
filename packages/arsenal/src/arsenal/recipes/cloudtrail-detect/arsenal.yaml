@@ -1,0 +1,5 @@
+name: cloudtrail-detect
+pipelines:
+  - collect.yaml
+transforms:
+  - transform.yaml

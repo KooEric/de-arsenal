@@ -267,3 +267,38 @@ def test_csv_cleanup_recipe_standard_audit_scores_state_and_data(
     assert statuses["data_health.rows:transform.yaml"] == "pass"
     assert statuses["data_health.key_unique:transform.yaml"] == "pass"  # dedup: [id]
     assert snapshot() == before  # the audit wrote nothing outside .arsenal/censor/
+
+
+EVENT_COLUMNS = [
+    "event_id", "event_time", "source", "service", "action", "actor_type", "actor_id",
+    "src_ip", "region", "outcome", "mfa_used", "resource", "raw",
+]  # fmt: skip
+
+
+def _cloudtrail_project(tmp_path: Path) -> Path:
+    dest = tmp_path / "ct-proj"
+    init_result = runner.invoke(app, ["init", "cloudtrail-detect", "--dest", str(dest)])
+    assert init_result.exit_code == 0, init_result.output
+    run_result = runner.invoke(app, ["run", "--project", str(dest)])
+    assert run_result.exit_code == 0, run_result.output
+    return dest
+
+
+def test_cloudtrail_detect_recipe_builds_events(tmp_path: Path) -> None:
+    dest = _cloudtrail_project(tmp_path)
+    con = duckdb.connect()
+    try:
+        events = f"read_parquet('{dest}/data/events/*.parquet')"
+        columns = [row[0] for row in con.execute(f"DESCRIBE SELECT * FROM {events}").fetchall()]
+        total, distinct = con.execute(
+            f"SELECT count(*), count(DISTINCT event_id) FROM {events}"
+        ).fetchone() or (0, 0)
+        failed_login = con.execute(
+            f"SELECT outcome, mfa_used FROM {events} "
+            "WHERE action = 'ConsoleLogin' AND outcome = 'failure'"
+        ).fetchall()
+    finally:
+        con.close()
+    assert columns == EVENT_COLUMNS
+    assert (total, distinct) == (39, 39)  # the sample has 40 lines; one is a duplicate delivery
+    assert failed_login == [("failure", False)]

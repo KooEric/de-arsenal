@@ -1,0 +1,32 @@
+name: cloudtrail-events
+input: ./data/raw
+steps:
+  - sql: |
+      SELECT
+        json_extract_string(raw, '$.eventID') AS event_id,
+        CAST(json_extract_string(raw, '$.eventTime') AS TIMESTAMP) AS event_time,
+        'cloudtrail' AS source,
+        json_extract_string(raw, '$.eventSource') AS service,
+        json_extract_string(raw, '$.eventName') AS action,
+        json_extract_string(raw, '$.userIdentity.type') AS actor_type,
+        json_extract_string(raw, '$.userIdentity.arn') AS actor_id,
+        json_extract_string(raw, '$.sourceIPAddress') AS src_ip,
+        json_extract_string(raw, '$.awsRegion') AS region,
+        CASE
+          WHEN json_extract_string(raw, '$.errorCode') IS NOT NULL THEN 'failure'
+          WHEN json_extract_string(raw, '$.responseElements.ConsoleLogin') = 'Failure' THEN 'failure'
+          ELSE 'success'
+        END AS outcome,
+        CASE json_extract_string(raw, '$.additionalEventData.MFAUsed')
+          WHEN 'Yes' THEN true
+          WHEN 'No' THEN false
+        END AS mfa_used,
+        coalesce(
+          json_extract_string(raw, '$.requestParameters.bucketName'),
+          json_extract_string(raw, '$.requestParameters.userName'),
+          json_extract_string(raw, '$.requestParameters.name')
+        ) AS resource,
+        raw
+      FROM {input}
+  - dedup: [event_id]
+output: ./data/events
