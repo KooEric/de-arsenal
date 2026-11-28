@@ -16,6 +16,8 @@ from arsenal.cli import app
 from httpx import Response
 from typer.testing import CliRunner
 
+from vigil.cli import app as vigil_app
+
 runner = CliRunner()
 
 
@@ -302,3 +304,35 @@ def test_cloudtrail_detect_recipe_builds_events(tmp_path: Path) -> None:
     assert columns == EVENT_COLUMNS
     assert (total, distinct) == (39, 39)  # the sample has 40 lines; one is a duplicate delivery
     assert failed_login == [("failure", False)]
+
+
+def test_cloudtrail_detect_rules_pass_and_detect_once(tmp_path: Path) -> None:
+    dest = _cloudtrail_project(tmp_path)
+    rules = ["--rules", str(dest / "rules")]
+    run_args = ["run", *rules, "--events", str(dest / "data" / "events"),
+                "--out", str(dest / "data" / "alerts")]  # fmt: skip
+
+    tested = runner.invoke(vigil_app, ["test", *rules])
+    assert tested.exit_code == 0, tested.output
+    assert json.loads(tested.stdout) == {"rules": 5, "failed": {}}
+
+    first = runner.invoke(vigil_app, run_args)
+    assert first.exit_code == 0, first.output
+    assert json.loads(first.stdout)["by_rule"] == {
+        "aws-access-key-then-admin-policy": 1,
+        "aws-cloudtrail-logging-stopped": 1,
+        "aws-console-login-no-mfa": 1,
+        "aws-root-console-login": 1,
+        "aws-s3-bucket-exposure-change": 2,
+    }
+
+    second = runner.invoke(vigil_app, run_args)
+    assert json.loads(second.stdout)["new_alerts"] == 0
+
+    covered = runner.invoke(
+        vigil_app, ["coverage", *rules, "--events", str(dest / "data" / "events"), "--json-only"]
+    )
+    report = json.loads(covered.stdout)
+    assert report["unlisted"] == []
+    assert "T1078.004" not in report["uncovered"]
+    assert "T1110" in report["uncovered"]

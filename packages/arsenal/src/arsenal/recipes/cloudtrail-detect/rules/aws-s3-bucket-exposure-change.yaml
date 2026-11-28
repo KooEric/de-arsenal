@@ -1,0 +1,18 @@
+id: aws-s3-bucket-exposure-change
+title: S3 버킷 공개 설정 변경
+severity: medium
+attack: [T1530]
+source: cloudtrail
+# 공개로 바뀌었는지는 확인하지 않는다. 공개 여부를 좌우하는 설정을 바꾼 호출을 알린다.
+query: |
+  SELECT * FROM events
+  WHERE service = 's3.amazonaws.com'
+    AND action IN ('PutBucketAcl', 'PutBucketPolicy', 'DeletePublicAccessBlock')
+    AND outcome = 'success'
+tests:
+  match:
+    - { service: s3.amazonaws.com, action: PutBucketAcl, outcome: success }
+    - { service: s3.amazonaws.com, action: DeletePublicAccessBlock, outcome: success }
+  no_match:
+    - { service: s3.amazonaws.com, action: PutBucketAcl, outcome: failure }
+    - { service: s3.amazonaws.com, action: ListBuckets, outcome: success }

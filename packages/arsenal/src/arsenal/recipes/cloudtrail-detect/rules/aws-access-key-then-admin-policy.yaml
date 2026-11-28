@@ -1,0 +1,39 @@
+id: aws-access-key-then-admin-policy
+title: 액세스 키 생성 뒤 1시간 안에 관리자 정책 연결
+severity: high
+attack: [T1098.001, T1098.003]
+source: cloudtrail
+query: |
+  SELECT p.* FROM events AS p
+  JOIN events AS k ON k.actor_id = p.actor_id
+  WHERE k.action = 'CreateAccessKey' AND k.outcome = 'success'
+    AND p.action = 'AttachUserPolicy' AND p.outcome = 'success'
+    AND json_extract_string(p.raw, '$.requestParameters.policyArn')
+        LIKE '%:policy/AdministratorAccess'
+    AND p.event_time >= k.event_time
+    AND p.event_time <= k.event_time + INTERVAL 1 HOUR
+tests:
+  match:
+    - - { actor_id: u1, action: CreateAccessKey, outcome: success, event_time: "2026-01-01 10:00:00" }
+      - actor_id: u1
+        action: AttachUserPolicy
+        outcome: success
+        event_time: "2026-01-01 10:30:00"
+        raw: '{"requestParameters":{"policyArn":"arn:aws:iam::aws:policy/AdministratorAccess"}}'
+  no_match:
+    - - { actor_id: u1, action: CreateAccessKey, outcome: success, event_time: "2026-01-01 10:00:00" }
+      - actor_id: u1
+        action: AttachUserPolicy
+        outcome: success
+        event_time: "2026-01-01 12:00:00"
+        raw: '{"requestParameters":{"policyArn":"arn:aws:iam::aws:policy/AdministratorAccess"}}'
+    - - { actor_id: u1, action: CreateAccessKey, outcome: success, event_time: "2026-01-01 10:00:00" }
+      - actor_id: u1
+        action: AttachUserPolicy
+        outcome: success
+        event_time: "2026-01-01 10:30:00"
+        raw: '{"requestParameters":{"policyArn":"arn:aws:iam::aws:policy/ReadOnlyAccess"}}'
+    - actor_id: u1
+      action: AttachUserPolicy
+      outcome: success
+      raw: '{"requestParameters":{"policyArn":"arn:aws:iam::aws:policy/AdministratorAccess"}}'

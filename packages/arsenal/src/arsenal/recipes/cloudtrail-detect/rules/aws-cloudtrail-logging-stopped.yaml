@@ -1,0 +1,17 @@
+id: aws-cloudtrail-logging-stopped
+title: CloudTrail 로깅 중지·삭제·변경
+severity: critical
+attack: [T1685.002]
+source: cloudtrail
+query: |
+  SELECT * FROM events
+  WHERE service = 'cloudtrail.amazonaws.com'
+    AND action IN ('StopLogging', 'DeleteTrail', 'UpdateTrail')
+    AND outcome = 'success'
+tests:
+  match:
+    - { service: cloudtrail.amazonaws.com, action: StopLogging, outcome: success }
+    - { service: cloudtrail.amazonaws.com, action: DeleteTrail, outcome: success }
+  no_match:
+    - { service: cloudtrail.amazonaws.com, action: DescribeTrails, outcome: success }
+    - { service: cloudtrail.amazonaws.com, action: StopLogging, outcome: failure }

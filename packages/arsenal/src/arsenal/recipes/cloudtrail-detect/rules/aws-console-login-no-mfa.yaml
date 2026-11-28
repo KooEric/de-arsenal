@@ -1,0 +1,16 @@
+id: aws-console-login-no-mfa
+title: MFA 없는 IAM 사용자 콘솔 로그인
+severity: medium
+attack: [T1078.004]
+source: cloudtrail
+query: |
+  SELECT * FROM events
+  WHERE action = 'ConsoleLogin' AND actor_type = 'IAMUser'
+    AND outcome = 'success' AND mfa_used = false
+tests:
+  match:
+    - { action: ConsoleLogin, actor_type: IAMUser, outcome: success, mfa_used: false }
+  no_match:
+    - { action: ConsoleLogin, actor_type: IAMUser, outcome: success, mfa_used: true }
+    - { action: ConsoleLogin, actor_type: IAMUser, outcome: failure, mfa_used: false }
+    - { action: ConsoleLogin, actor_type: IAMUser, outcome: success }
