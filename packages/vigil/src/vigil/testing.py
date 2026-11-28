@@ -6,7 +6,7 @@ import duckdb
 
 from arsenal_core.errors import FatalError
 from vigil.events import fixture_events
-from vigil.rule import Case, Rule
+from vigil.rule import Case, Rule, detection_sql
 
 
 def check_rule(rule: Rule) -> list[str]:
@@ -47,7 +47,7 @@ def _run_case(rule: Rule, label: str, case: Case) -> tuple[int, str | None]:
     except duckdb.Error as e:
         return 0, f"{label}: error running case: {e}"
     try:
-        return len(con.execute(rule.query).fetchall()), None
+        return len(con.execute(detection_sql(rule.query)).fetchall()), None
     except duckdb.Error as e:
         return 0, f"{label}: error running case: {e}"
     finally:

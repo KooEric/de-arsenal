@@ -125,3 +125,15 @@ def test_query_reading_a_file_is_fatal(tmp_path: Path) -> None:
 
 def test_schema_file_matches_model() -> None:
     assert json.loads(SCHEMA.read_text(encoding="utf-8")) == Rule.model_json_schema()
+
+
+def test_yaml_and_yml_files_are_both_loaded(tmp_path: Path) -> None:
+    _write(tmp_path, "b.yaml", GOOD)
+    _write(tmp_path, "a.yml", GOOD.replace("aws-root-console-login", "other-rule"))
+    assert [rule.id for rule in load_rules(tmp_path)] == ["other-rule", "aws-root-console-login"]
+
+
+def test_directory_with_only_other_files_names_both_extensions(tmp_path: Path) -> None:
+    _write(tmp_path, "notes.txt", "x")
+    with pytest.raises(FatalError, match=r"\*\.yaml, \*\.yml"):
+        load_rules(tmp_path)

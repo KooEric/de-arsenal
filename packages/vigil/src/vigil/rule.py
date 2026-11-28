@@ -64,6 +64,19 @@ class Rule(BaseModel):
         return text
 
 
+def detection_sql(query: str) -> str:
+    """The statement that lists detected events for a rule query.
+
+    A detection is a row whose `event_id` is an event in `events`. `vigil test` and
+    `vigil run` both count detections with this statement, so they cannot disagree.
+    """
+    return (
+        "SELECT DISTINCT e.event_id, e.event_time, e.actor_id "
+        f"FROM ({query}\n) AS q JOIN events AS e ON e.event_id = q.event_id "
+        "ORDER BY e.event_time, e.event_id"
+    )
+
+
 def _drop_final_semicolon(text: str) -> str:
     """Remove a statement-ending `;` so the query can be embedded as a subquery.
 
@@ -82,9 +95,9 @@ def _drop_final_semicolon(text: str) -> str:
 def load_rules(rules_dir: Path) -> list[Rule]:
     if not rules_dir.is_dir():
         raise FatalError(f"rules directory not found: {rules_dir}")
-    paths = sorted(rules_dir.glob("*.yaml"))
+    paths = sorted([*rules_dir.glob("*.yaml"), *rules_dir.glob("*.yml")], key=lambda p: p.name)
     if not paths:
-        raise FatalError(f"no rule files (*.yaml) in {rules_dir}")
+        raise FatalError(f"no rule files (*.yaml, *.yml) in {rules_dir}")
     rules: list[Rule] = []
     seen: dict[str, Path] = {}
     for path in paths:

@@ -91,6 +91,8 @@ def run_command(
         raise _fail(e) from e
     try:
         summary = run_rules(loaded, con, out, datetime.now(UTC).replace(tzinfo=None))
+    except ArsenalError as e:
+        raise _fail(e) from e
     finally:
         con.close()
     for rule_id, count in summary.new_by_rule.items():

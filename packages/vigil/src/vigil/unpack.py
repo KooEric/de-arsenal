@@ -16,11 +16,18 @@ from typing import Any
 
 from arsenal_core.errors import FatalError
 
+# Trails with log file validation also write digest files here; they have no `Records`.
+DIGEST_DIR = "CloudTrail-Digest"
+
 
 def unpack_cloudtrail(src_dir: Path, out_file: Path) -> int:
     if not src_dir.is_dir():
         raise FatalError(f"source directory not found: {src_dir}")
-    files = sorted([*src_dir.rglob("*.json"), *src_dir.rglob("*.json.gz")])
+    files = sorted(
+        file
+        for file in [*src_dir.rglob("*.json"), *src_dir.rglob("*.json.gz")]
+        if DIGEST_DIR not in file.relative_to(src_dir).parts
+    )
     if not files:
         raise FatalError(f"no CloudTrail files (*.json, *.json.gz) under {src_dir}")
     out_file.parent.mkdir(parents=True, exist_ok=True)

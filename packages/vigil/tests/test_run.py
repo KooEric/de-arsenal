@@ -5,6 +5,7 @@ import pyarrow.parquet as pq
 import pytest
 from _events import write_events
 
+from arsenal_core.errors import FatalError
 from vigil.events import load_events
 from vigil.rule import Rule
 from vigil.run import ALERT_SCHEMA, alert_id, existing_alert_ids, run_rules
@@ -94,8 +95,39 @@ def test_failed_write_leaves_no_temp_file(tmp_path: Path, monkeypatch: pytest.Mo
         where.write_bytes(b"partial")
         raise OSError("disk full")
 
+    con = load_events(_lake(tmp_path))
     monkeypatch.setattr("vigil.run.pq.write_table", boom)
     out = tmp_path / "alerts"
-    with pytest.raises(OSError, match="disk full"):
-        run_rules([ROOT], load_events(_lake(tmp_path)), out, NOW)
+    with pytest.raises(FatalError, match="cannot write alerts to .*disk full"):
+        run_rules([ROOT], con, out, NOW)
     assert list(out.glob("*")) == [] and list(out.glob(".*")) == []
+
+
+def test_null_event_id_query_yields_no_alert(tmp_path: Path) -> None:
+    nulls = ROOT.model_copy(update={"query": "SELECT NULL AS event_id FROM events"})
+    summary = run_rules([nulls], load_events(_lake(tmp_path)), tmp_path / "alerts", NOW)
+    assert summary.new_by_rule == {"root-login": 0}
+
+
+def test_out_that_is_a_file_is_fatal_before_rules_run(tmp_path: Path) -> None:
+    out = tmp_path / "alerts"
+    out.write_text("x", encoding="utf-8")
+    with pytest.raises(FatalError, match="not a directory"):
+        existing_alert_ids(out)
+    with pytest.raises(FatalError, match=str(out)):
+        run_rules([ROOT], load_events(_lake(tmp_path)), out, NOW)
+
+
+def test_corrupt_parquet_in_out_is_fatal(tmp_path: Path) -> None:
+    out = tmp_path / "alerts"
+    out.mkdir()
+    (out / "junk.parquet").write_bytes(b"junk!")
+    with pytest.raises(FatalError, match="junk.parquet"):
+        existing_alert_ids(out)
+
+
+def test_parquet_without_alert_id_in_out_is_fatal(tmp_path: Path) -> None:
+    out = tmp_path / "alerts"
+    write_events(out / "events.parquet", [{"event_id": "e1"}])
+    with pytest.raises(FatalError, match="events.parquet"):
+        existing_alert_ids(out)

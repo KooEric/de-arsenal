@@ -1,11 +1,11 @@
-from datetime import datetime
+from datetime import UTC, datetime
 from pathlib import Path
 
 import duckdb
 import pyarrow as pa
 import pyarrow.parquet as pq
 import pytest
-from _events import write_events
+from _events import SCHEMA, write_events
 
 from arsenal_core.errors import FatalError
 from vigil.events import EVENT_COLUMNS, empty_events, fixture_events, load_events
@@ -66,3 +66,33 @@ def test_load_events_names_missing_columns(tmp_path: Path) -> None:
     pq.write_table(pa.table({"event_id": ["e1"]}), tmp_path / "thin.parquet")  # pyright: ignore[reportUnknownMemberType]
     with pytest.raises(FatalError, match="missing columns"):
         load_events(str(tmp_path / "thin.parquet"))
+
+
+def test_load_events_names_columns_with_the_wrong_type(tmp_path: Path) -> None:
+    columns: dict[str, list[object]] = {name: ["x"] for name in EVENT_COLUMNS}
+    columns["mfa_used"] = [True]
+    pq.write_table(pa.table(columns), tmp_path / "text-time.parquet")  # pyright: ignore[reportUnknownMemberType]
+    with pytest.raises(FatalError, match="event_time is VARCHAR, expected TIMESTAMP"):
+        load_events(str(tmp_path / "text-time.parquet"))
+
+
+def test_load_events_rejects_a_timezone_aware_event_time(tmp_path: Path) -> None:
+    aware = datetime(2026, 1, 1, tzinfo=UTC)
+    columns: dict[str, list[object]] = {name: ["x"] for name in EVENT_COLUMNS}
+    columns["mfa_used"] = [True]
+    columns["event_time"] = [aware]
+    pq.write_table(pa.table(columns), tmp_path / "tz.parquet")  # pyright: ignore[reportUnknownMemberType]
+    with pytest.raises(FatalError, match="event_time is TIMESTAMP WITH TIME ZONE"):
+        load_events(str(tmp_path / "tz.parquet"))
+
+
+def test_load_events_accepts_a_nanosecond_event_time(tmp_path: Path) -> None:
+    fields = [
+        pa.field(field.name, pa.timestamp("ns") if field.name == "event_time" else field.type)
+        for field in SCHEMA
+    ]
+    row = {**dict.fromkeys(SCHEMA.names), "event_id": "e1", "event_time": datetime(2026, 1, 1)}
+    table = pa.Table.from_pylist([row], schema=pa.schema(fields))
+    pq.write_table(table, tmp_path / "ns.parquet")  # pyright: ignore[reportUnknownMemberType]
+    con = load_events(str(tmp_path / "ns.parquet"))
+    assert con.execute("SELECT count(*) FROM events").fetchone() == (1,)

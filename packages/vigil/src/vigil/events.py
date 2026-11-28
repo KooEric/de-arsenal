@@ -32,6 +32,10 @@ EVENT_COLUMNS: Final[dict[str, str]] = {
     "raw": "VARCHAR",
 }
 
+# Other DuckDB types accepted for a column. A nanosecond timestamp (Parquet written by
+# pandas, for one) runs through `vigil run` end to end; alerts keep microsecond precision.
+ACCEPTED_TYPES: Final[dict[str, frozenset[str]]] = {"event_time": frozenset({"TIMESTAMP_NS"})}
+
 # event_time given to a fixture event that does not set one.
 FIXTURE_TIME: Final = datetime(2026, 1, 1)
 
@@ -97,10 +101,18 @@ def load_events(pattern: str) -> duckdb.DuckDBPyConnection:
     except duckdb.Error as e:
         con.close()
         raise FatalError(f"cannot read events from {pattern}: {e}") from e
-    present = {str(row[0]) for row in con.execute("DESCRIBE events").fetchall()}
-    missing = [name for name in EVENT_COLUMNS if name not in present]
+    found = {str(row[0]): str(row[1]) for row in con.execute("DESCRIBE events").fetchall()}
+    missing = [name for name in EVENT_COLUMNS if name not in found]
     if missing:
         con.close()
         raise FatalError(f"events is missing columns: {missing}")
+    wrong = [
+        f"{name} is {found[name]}, expected {kind}"
+        for name, kind in EVENT_COLUMNS.items()
+        if found[name] != kind and found[name] not in ACCEPTED_TYPES.get(name, frozenset())
+    ]
+    if wrong:
+        con.close()
+        raise FatalError(f"events column types differ: {'; '.join(wrong)}")
     _lock(con)
     return con

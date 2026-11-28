@@ -80,3 +80,20 @@ def test_unknown_fixture_column_names_rule_and_case() -> None:
     rule = _rule("SELECT * FROM events", RuleTests(match=[{"acton": "x"}], no_match=[{}]))
     with pytest.raises(FatalError, match=r"rule 'r' match\[0\]: fixture event has unknown columns"):
         check_rule(rule)
+
+
+def test_query_returning_null_event_id_fails_its_match_case() -> None:
+    rule = _rule(
+        "SELECT NULL AS event_id FROM events",
+        RuleTests(match=[{"actor_type": "Root"}], no_match=[{"actor_type": "IAMUser"}]),
+    )
+    failures = check_rule(rule)
+    assert failures[0] == "match[0]: expected a detection, got none"
+
+
+def test_fixture_with_null_event_id_is_not_a_detection() -> None:
+    rule = _rule(
+        "SELECT * FROM events WHERE actor_type = 'Root'",
+        RuleTests(match=[{"actor_type": "Root", "event_id": None}], no_match=[{"actor_type": "X"}]),
+    )
+    assert check_rule(rule) == ["match[0]: expected a detection, got none"]

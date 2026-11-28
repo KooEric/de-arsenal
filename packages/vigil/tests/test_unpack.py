@@ -65,8 +65,11 @@ def test_corrupt_gzip_is_fatal(tmp_path: Path) -> None:
     full = bytearray(gzip.compress(_records(*[f"e{i}" for i in range(200)]).encode()))
     full[20:40] = b"\xff" * 20
     (src / "bad.json.gz").write_bytes(bytes(full))
+    out = tmp_path / "events.jsonl"
     with pytest.raises(FatalError, match="cannot read .*bad.json.gz"):
-        unpack_cloudtrail(src, tmp_path / "events.jsonl")
+        unpack_cloudtrail(src, out)
+    assert not out.exists()
+    assert list(tmp_path.glob(".*.tmp")) == []
 
 
 def test_write_failure_is_fatal_and_leaves_no_temp_file(
@@ -85,3 +88,36 @@ def test_write_failure_is_fatal_and_leaves_no_temp_file(
         unpack_cloudtrail(src, out)
     assert not out.exists()
     assert list(tmp_path.glob(".*.tmp")) == []
+
+
+def test_failed_unpack_leaves_an_existing_output_unchanged(tmp_path: Path) -> None:
+    src = tmp_path / "src"
+    src.mkdir()
+    (src / "bad.json").write_text('{"events": []}', encoding="utf-8")
+    out = tmp_path / "events.jsonl"
+    out.write_text("previous\n", encoding="utf-8")
+    with pytest.raises(FatalError, match="bad.json"):
+        unpack_cloudtrail(src, out)
+    assert out.read_text(encoding="utf-8") == "previous\n"
+    assert list(tmp_path.glob(".*.tmp")) == []
+
+
+def test_digest_files_are_skipped(tmp_path: Path) -> None:
+    src = tmp_path / "src"
+    digest = src / "CloudTrail-Digest" / "us-east-1" / "2026"
+    logs = src / "CloudTrail" / "us-east-1" / "2026"
+    digest.mkdir(parents=True)
+    logs.mkdir(parents=True)
+    with gzip.open(digest / "d.json.gz", "wt", encoding="utf-8") as handle:
+        handle.write('{"digestPublicKeyFingerprint": "x"}')
+    (logs / "a.json").write_text(_records("e1"), encoding="utf-8")
+    out = tmp_path / "events.jsonl"
+    assert unpack_cloudtrail(src, out) == 1
+
+
+def test_only_digest_files_means_no_cloudtrail_files(tmp_path: Path) -> None:
+    digest = tmp_path / "src" / "CloudTrail-Digest"
+    digest.mkdir(parents=True)
+    (digest / "d.json").write_text('{"x": 1}', encoding="utf-8")
+    with pytest.raises(FatalError, match="no CloudTrail files"):
+        unpack_cloudtrail(tmp_path / "src", tmp_path / "o.jsonl")

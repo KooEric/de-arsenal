@@ -2,10 +2,13 @@ import json
 from datetime import datetime
 from pathlib import Path
 
+import pyarrow as pa
+import pyarrow.parquet as pq
 from _events import write_events
 from typer.testing import CliRunner, Result
 
 from vigil.cli import app
+from vigil.events import EVENT_COLUMNS
 
 runner = CliRunner()
 
@@ -82,11 +85,11 @@ def _lake(tmp_path: Path) -> str:
     return str(tmp_path / "events")
 
 
-def _run(tmp_path: Path, *extra: str) -> Result:
+def _run(tmp_path: Path, *extra: str, out: str = "alerts") -> Result:
     return runner.invoke(
         app,
         ["run", "--rules", str(tmp_path / "rules"), "--events", _lake(tmp_path),
-         "--out", str(tmp_path / "alerts"), *extra],
+         "--out", str(tmp_path / out), *extra],
     )  # fmt: skip
 
 
@@ -102,8 +105,7 @@ def test_run_command_reports_new_alerts_then_none(tmp_path: Path) -> None:
 def test_fail_on_exits_1_only_at_or_above_the_threshold(tmp_path: Path) -> None:
     write_rule(tmp_path / "rules", severity="medium")
     assert _run(tmp_path, "--fail-on", "high").exit_code == 0
-    (tmp_path / "alerts" / next(p.name for p in (tmp_path / "alerts").iterdir())).unlink()
-    assert _run(tmp_path, "--fail-on", "medium").exit_code == 1
+    assert _run(tmp_path, "--fail-on", "medium", out="alerts-2").exit_code == 1
 
 
 def test_run_without_event_files_is_exit_2(tmp_path: Path) -> None:
@@ -144,3 +146,38 @@ def test_unpack_command(tmp_path: Path) -> None:
     assert result.exit_code == 0, result.output
     assert json.loads(result.stdout) == {"events": 1, "out": str(out)}
     assert runner.invoke(app, ["unpack", str(tmp_path / "nope"), "--out", str(out)]).exit_code == 2
+
+
+def test_out_that_is_a_file_is_exit_2(tmp_path: Path) -> None:
+    write_rule(tmp_path / "rules")
+    (tmp_path / "alerts").write_text("x", encoding="utf-8")
+    result = _run(tmp_path)
+    assert result.exit_code == 2, result.output
+    assert "Traceback" not in result.output
+    assert str(tmp_path / "alerts") in result.output
+
+
+def test_corrupt_parquet_in_out_is_exit_2(tmp_path: Path) -> None:
+    write_rule(tmp_path / "rules")
+    (tmp_path / "alerts").mkdir()
+    (tmp_path / "alerts" / "junk.parquet").write_bytes(b"junk!")
+    result = _run(tmp_path)
+    assert result.exit_code == 2, result.output
+    assert "Traceback" not in result.output
+    assert "junk.parquet" in result.output
+
+
+def test_text_event_time_in_the_lake_is_exit_2(tmp_path: Path) -> None:
+    write_rule(tmp_path / "rules")
+    columns: dict[str, list[object]] = {name: ["x"] for name in EVENT_COLUMNS}
+    columns["mfa_used"] = [True]
+    (tmp_path / "events").mkdir()
+    pq.write_table(pa.table(columns), tmp_path / "events" / "a.parquet")  # pyright: ignore[reportUnknownMemberType]
+    result = runner.invoke(
+        app,
+        ["run", "--rules", str(tmp_path / "rules"), "--events", str(tmp_path / "events"),
+         "--out", str(tmp_path / "alerts")],
+    )  # fmt: skip
+    assert result.exit_code == 2, result.output
+    assert "Traceback" not in result.output
+    assert "event_time" in result.output

@@ -18,7 +18,8 @@ import duckdb
 import pyarrow as pa
 import pyarrow.parquet as pq
 
-from vigil.rule import Rule
+from arsenal_core.errors import FatalError
+from vigil.rule import Rule, detection_sql
 
 ALERT_SCHEMA: Final = pa.schema(
     [
@@ -50,10 +51,16 @@ def alert_id(rule_id: str, event_id: str) -> str:
 
 def existing_alert_ids(out_dir: Path) -> set[str]:
     ids: set[str] = set()
-    if not out_dir.is_dir():
+    if not out_dir.exists():
         return ids
+    if not out_dir.is_dir():
+        raise FatalError(f"alerts output is not a directory: {out_dir}")
     for file in sorted(out_dir.glob("*.parquet")):
-        ids.update(pq.read_table(file, columns=["alert_id"]).column("alert_id").to_pylist())  # pyright: ignore[reportUnknownArgumentType, reportUnknownMemberType]
+        try:
+            table = pq.read_table(file, columns=["alert_id"])  # pyright: ignore[reportUnknownMemberType, reportUnknownVariableType]
+            ids.update(table.column("alert_id").to_pylist())  # pyright: ignore[reportUnknownArgumentType, reportUnknownMemberType]
+        except (pa.ArrowException, OSError, KeyError) as e:
+            raise FatalError(f"cannot read alerts from {file}: {e}") from e
     return ids
 
 
@@ -66,11 +73,7 @@ def run_rules(
     failed: dict[str, str] = {}
     for rule in rules:
         try:
-            hits = con.execute(
-                "SELECT DISTINCT e.event_id, e.event_time, e.actor_id "
-                f"FROM ({rule.query}\n) AS q JOIN events AS e ON e.event_id = q.event_id "
-                "ORDER BY e.event_time, e.event_id"
-            ).fetchall()
+            hits = con.execute(detection_sql(rule.query)).fetchall()
         except duckdb.Error as e:
             failed[rule.id] = str(e)
             continue
@@ -101,13 +104,19 @@ def run_rules(
 
 def _write(out_dir: Path, rows: list[dict[str, Any]], detected_at: datetime) -> None:
     """Write to a temp name and rename, so a crash leaves the existing alerts untouched."""
-    out_dir.mkdir(parents=True, exist_ok=True)
+    try:
+        out_dir.mkdir(parents=True, exist_ok=True)
+    except OSError as e:
+        raise FatalError(f"cannot write alerts to {out_dir}: {e}") from e
     stamp = detected_at.strftime("%Y%m%dT%H%M%S")
     final = out_dir / f"alerts-{stamp}-{uuid4().hex[:8]}.parquet"
     temp = out_dir / f".{final.name}.tmp"
     try:
         pq.write_table(pa.Table.from_pylist(rows, schema=ALERT_SCHEMA), temp)  # pyright: ignore[reportUnknownMemberType]
         os.replace(temp, final)
+    except OSError as e:
+        temp.unlink(missing_ok=True)
+        raise FatalError(f"cannot write alerts to {out_dir}: {e}") from e
     except BaseException:
         temp.unlink(missing_ok=True)
         raise
