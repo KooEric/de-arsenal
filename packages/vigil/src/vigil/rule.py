@@ -80,10 +80,12 @@ def detection_sql(query: str) -> str:
 def _drop_final_semicolon(text: str) -> str:
     """Remove a statement-ending `;` so the query can be embedded as a subquery.
 
-    Comments after the `;` stay in the text. DuckDB's tokenizer skips comments and keeps
-    `;` inside strings as part of the string token, so the last token tells the truth.
+    Comments after the `;` stay in the text. The tokenizer keeps `;` inside strings as part
+    of the string token, so the last non-comment token tells the truth. DuckDB 2 returns
+    comments as tokens of their own; DuckDB 1 drops them and has no `comment` token type.
     """
-    tokens = duckdb.tokenize(text)
+    comment = getattr(duckdb.token_type, "comment", None)
+    tokens = [token for token in duckdb.tokenize(text) if token[1] != comment]
     if not tokens:
         return text
     offset, kind = tokens[-1]

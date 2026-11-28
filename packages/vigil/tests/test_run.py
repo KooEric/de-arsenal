@@ -1,3 +1,4 @@
+import re
 from datetime import datetime
 from pathlib import Path
 
@@ -114,7 +115,7 @@ def test_out_that_is_a_file_is_fatal_before_rules_run(tmp_path: Path) -> None:
     out.write_text("x", encoding="utf-8")
     with pytest.raises(FatalError, match="not a directory"):
         existing_alert_ids(out)
-    with pytest.raises(FatalError, match=str(out)):
+    with pytest.raises(FatalError, match=re.escape(str(out))):
         run_rules([ROOT], load_events(_lake(tmp_path)), out, NOW)
 
 
