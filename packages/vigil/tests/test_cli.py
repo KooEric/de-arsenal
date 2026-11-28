@@ -1,7 +1,9 @@
 import json
+from datetime import datetime
 from pathlib import Path
 
-from typer.testing import CliRunner
+from _events import write_events
+from typer.testing import CliRunner, Result
 
 from vigil.cli import app
 
@@ -68,4 +70,47 @@ def test_invalid_rule_file_is_exit_2(tmp_path: Path) -> None:
     write_rule(tmp_path / "rules")
     (tmp_path / "rules" / "bad.yaml").write_text("id: nope\n", encoding="utf-8")
     result = runner.invoke(app, ["test", "--rules", str(tmp_path / "rules")])
+    assert result.exit_code == 2, result.output
+
+
+def _lake(tmp_path: Path) -> str:
+    write_events(
+        tmp_path / "events" / "a.parquet",
+        [{"event_id": "e1", "actor_type": "Root", "action": "ConsoleLogin",
+          "event_time": datetime(2026, 11, 1, 10)}],
+    )  # fmt: skip
+    return str(tmp_path / "events")
+
+
+def _run(tmp_path: Path, *extra: str) -> Result:
+    return runner.invoke(
+        app,
+        ["run", "--rules", str(tmp_path / "rules"), "--events", _lake(tmp_path),
+         "--out", str(tmp_path / "alerts"), *extra],
+    )  # fmt: skip
+
+
+def test_run_command_reports_new_alerts_then_none(tmp_path: Path) -> None:
+    write_rule(tmp_path / "rules")
+    first = _run(tmp_path)
+    assert first.exit_code == 0, first.output
+    assert json.loads(first.stdout)["new_alerts"] == 1
+    second = _run(tmp_path)
+    assert json.loads(second.stdout)["new_alerts"] == 0
+
+
+def test_fail_on_exits_1_only_at_or_above_the_threshold(tmp_path: Path) -> None:
+    write_rule(tmp_path / "rules", severity="medium")
+    assert _run(tmp_path, "--fail-on", "high").exit_code == 0
+    (tmp_path / "alerts" / next(p.name for p in (tmp_path / "alerts").iterdir())).unlink()
+    assert _run(tmp_path, "--fail-on", "medium").exit_code == 1
+
+
+def test_run_without_event_files_is_exit_2(tmp_path: Path) -> None:
+    write_rule(tmp_path / "rules")
+    result = runner.invoke(
+        app,
+        ["run", "--rules", str(tmp_path / "rules"), "--events", str(tmp_path / "none"),
+         "--out", str(tmp_path / "alerts")],
+    )  # fmt: skip
     assert result.exit_code == 2, result.output
