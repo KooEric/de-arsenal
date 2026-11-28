@@ -11,6 +11,7 @@ from typing import Annotated
 import typer
 
 from arsenal_core.errors import ArsenalError
+from vigil.coverage import CoverageReport, build_coverage
 from vigil.events import load_events
 from vigil.rule import SEVERITY_ORDER, Rule, load_rules
 from vigil.run import run_rules
@@ -111,3 +112,43 @@ def run_command(
     )
     if summary.failed or over:
         raise typer.Exit(EXIT_FAILURES)
+
+
+def _print_coverage(report: CoverageReport) -> None:
+    _err(f"{report.rules} rules")
+    for technique in report.techniques:
+        mark = "    " if technique.rules else "GAP "
+        _err(f"{mark}{technique.id:<10} {len(technique.rules)} rules  {technique.name}")
+    for source in report.sources:
+        _err(f"source {source.source}: {source.rules} rules, last event {source.last_event_time}")
+    for column in report.columns:
+        ratio = "n/a" if column.null_ratio is None else f"{column.null_ratio:.1%}"
+        _err(f"column {column.column}: NULL {ratio}, used by {len(column.used_by)} rules")
+    if report.unlisted:
+        _err(f"techniques not in the reference list: {', '.join(report.unlisted)}")
+
+
+@app.command("coverage")
+def coverage_command(
+    rules: RulesOption = Path("rules"),
+    events: Annotated[
+        str | None, typer.Option("--events", help="Glob or directory of events Parquet.")
+    ] = None,
+    json_only: Annotated[bool, typer.Option("--json-only", help="Print JSON only.")] = False,
+) -> None:
+    """Report techniques without rules, and NULL ratios of the columns rules read."""
+    loaded = _load(rules)
+    con = None
+    if events is not None:
+        try:
+            con = load_events(events)
+        except ArsenalError as e:
+            raise _fail(e) from e
+    try:
+        report = build_coverage(loaded, con)
+    finally:
+        if con is not None:
+            con.close()
+    if not json_only:
+        _print_coverage(report)
+    typer.echo(report.model_dump_json())

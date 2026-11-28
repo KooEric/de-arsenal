@@ -114,3 +114,22 @@ def test_run_without_event_files_is_exit_2(tmp_path: Path) -> None:
          "--out", str(tmp_path / "alerts")],
     )  # fmt: skip
     assert result.exit_code == 2, result.output
+
+
+def test_coverage_command_prints_the_report(tmp_path: Path) -> None:
+    write_rule(tmp_path / "rules")
+    result = runner.invoke(
+        app, ["coverage", "--rules", str(tmp_path / "rules"), "--events", _lake(tmp_path)]
+    )
+    assert result.exit_code == 0, result.output
+    payload = json.loads(result.stdout)
+    assert payload["schema_version"] == 1
+    assert payload["rules"] == 1
+    assert "T1530" in payload["uncovered"]
+
+
+def test_coverage_json_only_keeps_stderr_empty(tmp_path: Path) -> None:
+    write_rule(tmp_path / "rules")
+    result = runner.invoke(app, ["coverage", "--rules", str(tmp_path / "rules"), "--json-only"])
+    assert result.exit_code == 0, result.output
+    assert result.stderr == ""
