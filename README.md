@@ -136,6 +136,7 @@ and they exchange data only as Parquet files.
 | **Augur** | Natural-language questions to SQL, with an eval harness | `de-augur` | experimental |
 | **Pilum** | Reverse ETL: send changed records to HTTP endpoints and Slack, once per change | `de-pilum` | experimental |
 | **Censor** | Audit: grades a project from its files (specs, validation rules, literal secrets, schedule, agent setup) and, with `--tier standard`, from its run state and data (failed units, freshness, duplicate keys, NULLs). Audits a bare file, DuckDB or Postgres dataset too. Read-only; names what to fix. Also runs as `arsenal eval` | `de-censor` | experimental |
+| **Vigil** | Detection: runs rule files (YAML with one SELECT and fixture cases) over a normalized security-log table, records each alert once, and reports ATT&CK techniques that have no rule. Rules without tests fail `vigil test`. Ships with a CloudTrail recipe | `de-vigil` | experimental |
 
 **stable**: YAML fields are only added within a minor series, and state files migrate
 forward. **beta**: works and is tested, but has little use outside this repo.

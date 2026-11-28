@@ -17,6 +17,7 @@ DE Arsenal은 하나의 거대한 프레임워크가 아니라, Arrow/Parquet와
 | [Aquila](../packages/aquila/README.md) | 어떤 데이터셋이 어디 있고 무엇이 무엇을 읽는지 찾을 때 | `aquila scan` → `aquila search` | 파일 하나, 다른 도구가 의존하지 않음 |
 | [Pilum](../packages/pilum/README.md) | 변환 결과의 변경분을 HTTP 끝점·Slack으로 보낼 때 (experimental) | `pilum plan` → `pilum run` | 바뀐 레코드만, 2xx 뒤에만 기록 |
 | [Censor](../packages/censor/README.md) | 프로젝트를 넘기기 전에 믿을 만한지 점검할 때 (experimental) | `censor audit .` 또는 `arsenal eval .` | 실행 없이 파일만 읽고 등급·근거·고칠 방법을 낸다 |
+| [Vigil](../packages/vigil/README.md) | 보안 로그에 탐지 룰을 실행하고 룰이 없는 곳을 볼 때 (experimental) | `arsenal init cloudtrail-detect` → `vigil test` → `vigil run` | 룰을 파일로 관리하고, 테스트 없는 룰은 통과하지 못한다 |
 | [arsenal-core](../packages/arsenal-core/README.md) | 자체 도구를 만들거나 상태·재시도 규약을 재사용할 때 | Python에서 `StateStore` 사용 | 결정적 unit ID와 SQLite 상태 저장소로 재개·멱등 기반을 제공한다. |
 
 ## 1. Arsenal — 대부분의 사용자에게 시작점
