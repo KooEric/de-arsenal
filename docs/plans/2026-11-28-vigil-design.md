@@ -18,13 +18,15 @@ DE Arsenal 사용자가 보안 로그를 수집해 둔 레이크에서 "무엇�
 |---|---|
 | 로그 소스 | AWS CloudTrail (관리 이벤트, JSON) |
 | 실행 방식 | 배치. Parquet 레이크를 DuckDB로 읽는다 |
-| 룰 | YAML 파일 하나에 메타데이터, SELECT 한 개, 테스트 픽스처 |
+| 룰 | YAML 파일(`.yaml`, `.yml`) 하나에 메타데이터, SELECT 한 개, 테스트 픽스처 |
 | 결과 | alerts Parquet, 커버리지 리포트(JSON과 표) |
 
 **하지 않는 것**
 
 - 실시간 처리와 스트리밍. `vigil run`은 그 시점의 레이크를 한 번 읽는다.
 - Sigma 룰 파일 호환. 메타데이터 구성만 참고한다.
+- 같은 `--out`에 대한 동시 실행 보호. 한 출력 디렉터리에는 한 번에 한 실행만 돌린다(동시에 돌리면 같은 alert가 두 번 남을 수 있다).
+- 룰 SQL의 메모리 한도와 시간 제한.
 - 알림 전송. alerts는 Parquet으로 남고, 전송은 이후 Pilum 스펙으로 연결한다.
 - Kubernetes 감사 로그 등 두 번째 로그 소스 (v0.8.0 범위 밖).
 - LLM을 쓰는 매핑 초안 작성 (v0.8.0 범위 밖, 다음 단계 후보).
@@ -44,8 +46,8 @@ docs/reference/vigil-ocsf-mapping.md    공통 컬럼 ↔ OCSF 필드명 대응�
 
 - `de-vigil` 의존: `arsenal-core`, `duckdb`, `pyarrow`, `pydantic`, `pyyaml`, `typer`. `de-arsenal`에 의존하지 않는다.
   레이크 경로와 룰 디렉터리를 인자로 받으므로 de-arsenal 프로젝트가 아니어도 동작한다.
-- `de-arsenal`은 `de-vigil`에 의존하지 않는다. 레시피는 스펙과 룰 파일만 담고, `arsenal init cloudtrail-detect`가
-  끝나면 `pip install de-vigil` 안내를 출력한다.
+- `de-arsenal`은 `de-vigil`에 의존하지 않는다. 레시피는 스펙과 룰 파일만 담고, Vigil 설치 안내는
+  레시피 README에 적는다(`arsenal` 코드는 Vigil을 알지 못한다).
 - Censor 연결은 v0.8.0에 넣지 않는다. 다음 릴리스에서 Censor가 Vigil의 룰과 결과 파일을 읽어
   "탐지 준비도" 차원으로 채점한다(§9).
 
@@ -76,8 +78,8 @@ CloudTrail 원본 ─ vigil unpack ─▶ input/*.jsonl ─ pugio run ─▶ dat
 | `actor_id` | varchar | `userIdentity.arn` | `actor.user.uid` |
 | `src_ip` | varchar | `sourceIPAddress` | `src_endpoint.ip` |
 | `region` | varchar | `awsRegion` | `cloud.region` |
-| `outcome` | varchar (`success`/`failure`) | `errorCode` 유무, 콘솔 로그인은 `responseElements.ConsoleLogin` | `status` |
-| `mfa_used` | boolean, NULL 허용 | `additionalEventData.MFAUsed` | `actor.session.is_mfa` |
+| `outcome` | varchar (`success`/`failure`) | `errorCode` 유무, 로그인 계열은 `responseElements`의 `ConsoleLogin`·`SwitchRole`·`CheckMfa` | `status` |
+| `mfa_used` | boolean, NULL 허용 | `additionalEventData.MFAUsed`, 없으면 `userIdentity.sessionContext.attributes.mfaAuthenticated` | `actor.session.is_mfa` |
 | `resource` | varchar, NULL 허용 | `requestParameters`의 대상 이름 | `resources[].name` |
 | `raw` | varchar (JSON) | 이벤트 전체 | `raw_data` |
 
@@ -106,8 +108,9 @@ tests:
 - `events` 외에는 읽지 못한다. `events`를 메모리 DuckDB 테이블로 올린 뒤 `enable_external_access=false`로
   잠근 연결에서 룰을 돌린다. 그래서 한 번에 읽는 이벤트는 그 기계의 메모리와 임시 공간에 들어가야 한다.
 - 로드할 때 빈 `events`에 `query`를 돌려 본다. 없는 컬럼을 참조하거나 `event_id`를 내지 않으면 여기서 걸린다.
+- 탐지는 `query` 결과의 `event_id`가 `events`의 이벤트와 이어지는 것을 말한다. `vigil test`와 `vigil run`이 같은 기준으로 센다.
 - 케이스는 이벤트 하나(매핑)이거나 이벤트 여러 개(매핑의 목록)다. 케이스마다 그 이벤트만 든 `events`에
-  `query`를 돌린다. `match` 케이스는 결과가 한 행 이상, `no_match` 케이스는 0행이어야 통과한다.
+  `query`를 돌린다. `match` 케이스는 탐지가 한 건 이상, `no_match` 케이스는 0건이어야 통과한다.
 - 픽스처에 적지 않은 컬럼은 NULL로 채우고, `event_id`와 `event_time`은 적지 않으면 자동으로 채운다.
 - 여러 이벤트를 묶는 룰(집계, 시간 창)은 `query` 안에서 SQL로 쓴다. 결과 행마다 대표 `event_id`를 낸다.
 
@@ -119,7 +122,7 @@ tests:
 | `aws-console-login-no-mfa` | T1078.004 | IAM 사용자 콘솔 로그인 성공, `mfa_used = false` |
 | `aws-cloudtrail-logging-stopped` | T1685.002 | `StopLogging`, `DeleteTrail`, `UpdateTrail` 성공 |
 | `aws-access-key-then-admin-policy` | T1098.001, T1098.003 | 같은 행위자가 `CreateAccessKey` 뒤 1시간 안에 `AdministratorAccess` 정책을 `AttachUserPolicy` |
-| `aws-s3-bucket-exposure-change` | T1530 | `PutBucketAcl`, `PutBucketPolicy`, `DeletePublicAccessBlock` 성공. 공개로 바뀌었는지는 확인하지 않고 공개 설정을 건드린 변경을 알린다 |
+| `aws-s3-bucket-exposure-change` | T1530 | `PutBucketAcl`, `PutBucketPolicy`, `DeleteBucketPublicAccessBlock`, `DeleteAccountPublicAccessBlock`, `PutBucketPublicAccessBlock`, `PutAccountPublicAccessBlock` 성공. 공개로 바뀌었는지는 확인하지 않고 공개 설정을 건드린 변경을 알린다 |
 
 ## 5. CLI
 
@@ -148,7 +151,7 @@ vigil unpack   SRC_DIR --out FILE.jsonl                       # CloudTrail 원�
 목록 파일은 `packages/vigil/src/vigil/reference/cloudtrail-techniques.yaml`에 두고 출처와 작성일을 적는다.
 
 **`vigil unpack`**: `SRC_DIR` 아래의 `*.json`, `*.json.gz`를 읽어 `Records`의 이벤트마다 한 줄씩 쓴다.
-`Records` 배열이 없는 파일이 있으면 그 파일을 알리고 종료 코드 2. 출력은 임시 파일에 쓰고 마지막에 옮긴다.
+`CloudTrail-Digest` 디렉터리 아래의 다이제스트 파일은 건너뛴다. 그 밖에 `Records` 배열이 없는 파일이 있으면 그 파일을 알리고 종료 코드 2. 출력은 임시 파일에 쓰고 마지막에 옮긴다.
 
 ## 6. 레시피 `cloudtrail-detect`
 
@@ -181,7 +184,8 @@ README에 붙여 넣을 내용으로 둔다(패키지 리소스에 점으로 시
 | `id` 중복 | 두 파일 경로를 알리고 종료 코드 2 |
 | `query`가 SELECT 한 개가 아니거나, 없는 컬럼을 참조하거나, `event_id`를 내지 않음 | 로드 단계에서 종료 코드 2 |
 | `--events`에 맞는 파일이 없음 | 종료 코드 2 |
-| `events`에 필수 컬럼이 없음 | 없는 컬럼 이름을 알리고 종료 코드 2 |
+| `events`에 필수 컬럼이 없거나 타입이 다름 | 컬럼 이름(과 타입)을 알리고 종료 코드 2 |
+| `--out`이 디렉터리가 아니거나 그 안의 Parquet을 alerts로 읽을 수 없음 | 룰을 실행하기 전에 경로를 알리고 종료 코드 2 |
 | 실행 중 룰 하나의 SQL이 실패 | 그 룰을 실패로 기록하고 나머지를 계속 실행, 끝에 종료 코드 1 |
 | alerts 쓰기 도중 실패 | 임시 파일에 쓰고 마지막에 옮기므로 기존 alerts는 그대로 남는다 |
 
