@@ -24,7 +24,8 @@ vigil run --events data/events --out data/alerts
 첫 줄은 샘플이 만든 결과를 지운다. `arsenal run`이 샘플을 `data/raw`에 이미 쌓았고, 변환은 `data/raw`
 전체를 읽으므로 `input/sample.jsonl`만 지우면 샘플 39행과 alert 6건이 내 로그와 섞여 남는다.
 `.arsenal/`에는 이미 읽은 입력 파일의 기록이 있다. 이것까지 지우지 않으면 `arsenal run`이 새 파일을
-읽지 않고 건너뛰어 `data/raw`가 비고 변환이 실패한다. `rm -rf`는 이 프로젝트 디렉터리 안에서만 실행한다.
+읽지 않고 건너뛰어 `data/raw`가 비고 변환이 실패한다. `.arsenal/`에 Censor 감사 이력(`.arsenal/censor/`)처럼
+남겨 둘 것이 있으면 먼저 옮겨 둔다. `rm -rf`는 이 프로젝트 디렉터리 안에서만 실행한다.
 
 `vigil unpack`은 이벤트 하나를 `{"raw": "..."}` 한 줄로 쓴다. 로그 파일 검증을 켠 trail이 함께 남기는
 `CloudTrail-Digest/` 아래 파일(`Records`가 없다)은 건너뛴다. 컬럼을 꺼내는 SQL은 `transform.yaml`에
