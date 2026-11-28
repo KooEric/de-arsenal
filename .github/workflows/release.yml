@@ -32,6 +32,7 @@ on:
           - de-aquila
           - de-pilum
           - de-censor
+          - de-vigil
 
 jobs:
   verify-and-build:
@@ -100,6 +101,7 @@ jobs:
             de-aquila) package_prefix="de_aquila" ;;
             de-pilum) package_prefix="de_pilum" ;;
             de-censor) package_prefix="de_censor" ;;
+            de-vigil) package_prefix="de_vigil" ;;
             pugio|spatha) package_prefix="$PUBLISH_PACKAGE" ;;
             *) echo "Unsupported package: $PUBLISH_PACKAGE" >&2; exit 1 ;;
           esac
