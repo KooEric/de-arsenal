@@ -16,6 +16,7 @@ from vigil.events import load_events
 from vigil.rule import SEVERITY_ORDER, Rule, load_rules
 from vigil.run import run_rules
 from vigil.testing import check_rules
+from vigil.unpack import unpack_cloudtrail
 
 app = typer.Typer(
     help="Vigil — detection rules over normalized security logs.", no_args_is_help=True
@@ -152,3 +153,17 @@ def coverage_command(
     if not json_only:
         _print_coverage(report)
     typer.echo(report.model_dump_json())
+
+
+@app.command("unpack")
+def unpack_command(
+    src: Annotated[Path, typer.Argument(help="Directory of CloudTrail *.json / *.json.gz files.")],
+    out: Annotated[Path, typer.Option("--out", help="JSONL file to write.")],
+) -> None:
+    """Unpack CloudTrail log files into JSONL, one event per line."""
+    try:
+        count = unpack_cloudtrail(src, out)
+    except ArsenalError as e:
+        raise _fail(e) from e
+    _err(f"{count} events -> {out}")
+    typer.echo(json.dumps({"events": count, "out": str(out)}))

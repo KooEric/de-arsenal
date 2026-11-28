@@ -133,3 +133,14 @@ def test_coverage_json_only_keeps_stderr_empty(tmp_path: Path) -> None:
     result = runner.invoke(app, ["coverage", "--rules", str(tmp_path / "rules"), "--json-only"])
     assert result.exit_code == 0, result.output
     assert result.stderr == ""
+
+
+def test_unpack_command(tmp_path: Path) -> None:
+    src = tmp_path / "src"
+    src.mkdir()
+    (src / "a.json").write_text(json.dumps({"Records": [{"eventID": "e1"}]}), encoding="utf-8")
+    out = tmp_path / "events.jsonl"
+    result = runner.invoke(app, ["unpack", str(src), "--out", str(out)])
+    assert result.exit_code == 0, result.output
+    assert json.loads(result.stdout) == {"events": 1, "out": str(out)}
+    assert runner.invoke(app, ["unpack", str(tmp_path / "nope"), "--out", str(out)]).exit_code == 2
