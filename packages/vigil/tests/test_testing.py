@@ -1,3 +1,6 @@
+import pytest
+
+from arsenal_core.errors import FatalError
 from vigil.rule import Rule, RuleTests
 from vigil.testing import check_rule
 
@@ -48,3 +51,32 @@ def test_multi_event_case_runs_in_isolation() -> None:
     late = {"actor_id": "u1", "action": "AttachUserPolicy", "event_time": "2026-01-01 12:00:00"}
     rule = _rule(PAIR_QUERY, RuleTests(match=[[key, soon]], no_match=[[key, late], soon]))
     assert check_rule(rule) == []
+
+
+def test_bad_fixture_value_is_a_case_failure_not_a_crash() -> None:
+    rule = _rule(
+        "SELECT * FROM events",
+        RuleTests(
+            match=[{"mfa_used": "maybe"}, {"actor_type": "Root"}], no_match=[{"mfa_used": "maybe"}]
+        ),
+    )
+    failures = check_rule(rule)
+    assert len(failures) == 2
+    assert failures[0].startswith("match[0]: error running case: ")
+    assert failures[1].startswith("no_match[0]: error running case: ")
+
+
+def test_query_runtime_error_is_a_case_failure_and_later_cases_still_run() -> None:
+    rule = _rule(
+        "SELECT event_id FROM events WHERE CAST(action AS INTEGER) = 1",
+        RuleTests(match=[{"action": "abc"}, {"action": "1"}], no_match=[{"action": "2"}]),
+    )
+    failures = check_rule(rule)
+    assert len(failures) == 1
+    assert failures[0].startswith("match[0]: error running case: ")
+
+
+def test_unknown_fixture_column_names_rule_and_case() -> None:
+    rule = _rule("SELECT * FROM events", RuleTests(match=[{"acton": "x"}], no_match=[{}]))
+    with pytest.raises(FatalError, match=r"rule 'r' match\[0\]: fixture event has unknown columns"):
+        check_rule(rule)

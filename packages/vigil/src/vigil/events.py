@@ -49,7 +49,11 @@ def empty_events() -> duckdb.DuckDBPyConnection:
 
 
 def fixture_events(rows: list[dict[str, Any]]) -> duckdb.DuckDBPyConnection:
-    """`events` holding exactly `rows`. Columns a row leaves out are NULL."""
+    """`events` holding exactly `rows`. Columns a row leaves out are NULL.
+
+    Raises FatalError for an unknown column and duckdb.Error for a value of the wrong type;
+    the connection is closed first in both cases.
+    """
     con = empty_events()
     placeholders = ", ".join("?" for _ in EVENT_COLUMNS)
     for index, row in enumerate(rows):
@@ -61,7 +65,11 @@ def fixture_events(rows: list[dict[str, Any]]) -> duckdb.DuckDBPyConnection:
         full["event_id"] = f"fixture-{index}"
         full["event_time"] = FIXTURE_TIME
         full.update(row)
-        con.execute(f"INSERT INTO events VALUES ({placeholders})", list(full.values()))
+        try:
+            con.execute(f"INSERT INTO events VALUES ({placeholders})", list(full.values()))
+        except duckdb.Error:
+            con.close()
+            raise
     return con
 
 

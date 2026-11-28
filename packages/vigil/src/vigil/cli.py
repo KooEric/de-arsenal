@@ -46,7 +46,11 @@ def _load(rules_dir: Path) -> list[Rule]:
 @app.command("test")
 def test_command(rules: RulesOption = Path("rules")) -> None:
     """Check every rule against its fixture cases."""
-    results = check_rules(_load(rules))
+    loaded = _load(rules)
+    try:
+        results = check_rules(loaded)
+    except ArsenalError as e:
+        raise _fail(e) from e
     for rule_id, failures in results.items():
         _err(f"{'FAIL' if failures else 'ok  '} {rule_id}")
         for failure in failures:

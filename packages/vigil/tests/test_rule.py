@@ -89,9 +89,37 @@ def test_query_must_return_event_id(tmp_path: Path) -> None:
         load_rules(tmp_path)
 
 
-def test_bad_technique_id_is_fatal(tmp_path: Path) -> None:
-    _write(tmp_path, "bad.yaml", GOOD.replace("[T1078.004]", "[cloud-accounts]"))
+@pytest.mark.parametrize("technique", ["cloud-accounts", '"T1078\\n"'])
+def test_bad_technique_id_is_fatal(tmp_path: Path, technique: str) -> None:
+    _write(tmp_path, "bad.yaml", GOOD.replace("[T1078.004]", f"[{technique}]"))
     with pytest.raises(FatalError, match="attack"):
+        load_rules(tmp_path)
+
+
+@pytest.mark.parametrize(
+    "query",
+    [
+        "SELECT * FROM events WHERE action = 'X' -- note",
+        "SELECT * FROM events; -- note",
+        "SELECT * FROM events WHERE action = 'a;b' ;",
+    ],
+)
+def test_trailing_comment_and_semicolon_load(tmp_path: Path, query: str) -> None:
+    text = (
+        GOOD.split("query:")[0] + "query: |\n  " + query + "\n" + "tests:" + GOOD.split("tests:")[1]
+    )
+    _write(tmp_path, "ok.yaml", text)
+    (rule,) = load_rules(tmp_path)
+    assert not rule.query.rstrip().endswith(";")
+
+
+def test_query_reading_a_file_is_fatal(tmp_path: Path) -> None:
+    text = GOOD.replace(
+        "SELECT * FROM events WHERE action = 'ConsoleLogin' AND actor_type = 'Root';",
+        "SELECT 'x' AS event_id FROM read_csv('/etc/hosts')",
+    )
+    _write(tmp_path, "bad.yaml", text)
+    with pytest.raises(FatalError, match="fails against events"):
         load_rules(tmp_path)
 
 

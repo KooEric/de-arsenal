@@ -39,6 +39,14 @@ def test_connections_cannot_read_outside_events(tmp_path: Path) -> None:
         con.execute("SET enable_external_access=true")
 
 
+def test_load_events_connection_is_locked(tmp_path: Path) -> None:
+    write_events(tmp_path / "a.parquet", [{"event_id": "e1"}])
+    con = load_events(str(tmp_path))
+    with pytest.raises(duckdb.Error):
+        con.execute(f"SELECT * FROM read_csv('{tmp_path / 'a.parquet'}')")
+    con.close()
+
+
 def test_load_events_reads_a_directory(tmp_path: Path) -> None:
     write_events(tmp_path / "events" / "a.parquet", [{"event_id": "e1", "action": "A"}])
     write_events(

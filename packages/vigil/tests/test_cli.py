@@ -47,3 +47,25 @@ def test_test_command_fails_with_exit_1(tmp_path: Path) -> None:
 def test_missing_rules_directory_is_exit_2(tmp_path: Path) -> None:
     result = runner.invoke(app, ["test", "--rules", str(tmp_path / "nope")])
     assert result.exit_code == 2, result.output
+
+
+def test_fixture_typo_is_exit_2_and_names_the_rule(tmp_path: Path) -> None:
+    write_rule(tmp_path / "rules")
+    path = tmp_path / "rules" / "root-login.yaml"
+    path.write_text(
+        path.read_text(encoding="utf-8").replace(
+            "{ action: ConsoleLogin, actor_type: Root }", "{ acton: ConsoleLogin }"
+        ),
+        encoding="utf-8",
+    )
+    result = runner.invoke(app, ["test", "--rules", str(tmp_path / "rules")])
+    assert result.exit_code == 2, result.output
+    assert "root-login" in result.output
+    assert "Traceback" not in result.output
+
+
+def test_invalid_rule_file_is_exit_2(tmp_path: Path) -> None:
+    write_rule(tmp_path / "rules")
+    (tmp_path / "rules" / "bad.yaml").write_text("id: nope\n", encoding="utf-8")
+    result = runner.invoke(app, ["test", "--rules", str(tmp_path / "rules")])
+    assert result.exit_code == 2, result.output

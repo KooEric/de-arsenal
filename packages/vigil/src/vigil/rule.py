@@ -20,7 +20,7 @@ Event = dict[str, Any]
 # One event, or several events that must be looked at together (correlation rules).
 Case = Event | list[Event]
 
-_TECHNIQUE: Final = re.compile(r"^T\d{4}(\.\d{3})?$")
+_TECHNIQUE: Final = re.compile(r"T\d{4}(\.\d{3})?")
 
 
 class RuleTests(BaseModel):
@@ -46,7 +46,7 @@ class Rule(BaseModel):
     @field_validator("attack")
     @classmethod
     def _technique_ids(cls, value: list[str]) -> list[str]:
-        bad = [item for item in value if not _TECHNIQUE.match(item)]
+        bad = [item for item in value if not _TECHNIQUE.fullmatch(item)]
         if bad:
             raise ValueError(f"not ATT&CK technique ids (T1234 or T1234.001): {bad}")
         return value
@@ -54,7 +54,7 @@ class Rule(BaseModel):
     @field_validator("query")
     @classmethod
     def _one_select(cls, value: str) -> str:
-        text = value.strip().rstrip(";").strip()
+        text = _drop_final_semicolon(value.strip())
         try:
             statements = duckdb.extract_statements(text)
         except duckdb.Error as e:
@@ -62,6 +62,21 @@ class Rule(BaseModel):
         if len(statements) != 1 or statements[0].type != duckdb.StatementType.SELECT:
             raise ValueError("must be exactly one SELECT statement")
         return text
+
+
+def _drop_final_semicolon(text: str) -> str:
+    """Remove a statement-ending `;` so the query can be embedded as a subquery.
+
+    Comments after the `;` stay in the text. DuckDB's tokenizer skips comments and keeps
+    `;` inside strings as part of the string token, so the last token tells the truth.
+    """
+    tokens = duckdb.tokenize(text)
+    if not tokens:
+        return text
+    offset, kind = tokens[-1]
+    if kind == duckdb.token_type.operator and text[offset] == ";":
+        return (text[:offset] + text[offset + 1 :]).strip()
+    return text
 
 
 def load_rules(rules_dir: Path) -> list[Rule]:
@@ -102,7 +117,7 @@ def _check_against_events(path: Path, rule: Rule) -> None:
     """Run the query on an empty `events`: catches unknown columns and a missing event_id."""
     con = empty_events()
     try:
-        description = con.execute(f"SELECT * FROM ({rule.query}) LIMIT 0").description
+        description = con.execute(f"SELECT * FROM ({rule.query}\n) LIMIT 0").description
     except duckdb.Error as e:
         raise FatalError(f"{path}: query fails against events: {e}") from e
     finally:
