@@ -1,0 +1,103 @@
+{
+  "$defs": {
+    "RuleTests": {
+      "additionalProperties": false,
+      "properties": {
+        "match": {
+          "items": {
+            "anyOf": [
+              {
+                "additionalProperties": true,
+                "type": "object"
+              },
+              {
+                "items": {
+                  "additionalProperties": true,
+                  "type": "object"
+                },
+                "type": "array"
+              }
+            ]
+          },
+          "title": "Match",
+          "type": "array"
+        },
+        "no_match": {
+          "items": {
+            "anyOf": [
+              {
+                "additionalProperties": true,
+                "type": "object"
+              },
+              {
+                "items": {
+                  "additionalProperties": true,
+                  "type": "object"
+                },
+                "type": "array"
+              }
+            ]
+          },
+          "title": "No Match",
+          "type": "array"
+        }
+      },
+      "title": "RuleTests",
+      "type": "object"
+    }
+  },
+  "additionalProperties": false,
+  "description": "The rule file contract (schemas/vigil-rule.json).",
+  "properties": {
+    "id": {
+      "pattern": "^[a-z0-9][a-z0-9-]*$",
+      "title": "Id",
+      "type": "string"
+    },
+    "title": {
+      "minLength": 1,
+      "title": "Title",
+      "type": "string"
+    },
+    "severity": {
+      "enum": [
+        "low",
+        "medium",
+        "high",
+        "critical"
+      ],
+      "title": "Severity",
+      "type": "string"
+    },
+    "attack": {
+      "items": {
+        "type": "string"
+      },
+      "minItems": 1,
+      "title": "Attack",
+      "type": "array"
+    },
+    "source": {
+      "minLength": 1,
+      "title": "Source",
+      "type": "string"
+    },
+    "query": {
+      "title": "Query",
+      "type": "string"
+    },
+    "tests": {
+      "$ref": "#/$defs/RuleTests"
+    }
+  },
+  "required": [
+    "id",
+    "title",
+    "severity",
+    "attack",
+    "source",
+    "query"
+  ],
+  "title": "Rule",
+  "type": "object"
+}

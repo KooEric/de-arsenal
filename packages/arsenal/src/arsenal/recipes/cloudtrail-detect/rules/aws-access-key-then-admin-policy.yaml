@@ -1,0 +1,84 @@
+id: aws-access-key-then-admin-policy
+title: 액세스 키 생성 뒤 1시간 안에 관리자 정책 연결
+severity: high
+attack: [T1098.001, T1098.003]
+source: cloudtrail
+# 범위: AttachUserPolicy 호출 중 정책 ARN이 ':policy/AdministratorAccess'로 끝나는 것만 본다.
+# 같은 이름의 고객 관리형 정책도 걸린다. AttachRolePolicy, PutUserPolicy는 보지 않는다.
+# 키 생성과 정책 연결을 '호출한 주체(actor_id)'로 묶는다. 정책이 붙은 대상 사용자는 보지 않는다.
+query: |
+  SELECT p.* FROM events AS p
+  JOIN events AS k ON k.actor_id = p.actor_id
+  WHERE k.action = 'CreateAccessKey' AND k.outcome = 'success'
+    AND p.action = 'AttachUserPolicy' AND p.outcome = 'success'
+    AND json_extract_string(p.raw, '$.requestParameters.policyArn')
+        LIKE '%:policy/AdministratorAccess'
+    AND p.event_time >= k.event_time
+    AND p.event_time <= k.event_time + INTERVAL 1 HOUR
+tests:
+  match:
+    - - { actor_id: u1, action: CreateAccessKey, outcome: success, event_time: "2026-01-01 10:00:00" }
+      - actor_id: u1
+        action: AttachUserPolicy
+        outcome: success
+        event_time: "2026-01-01 10:30:00"
+        raw: '{"requestParameters":{"policyArn":"arn:aws:iam::aws:policy/AdministratorAccess"}}'
+    - - { actor_id: u1, action: CreateAccessKey, outcome: success, event_time: "2026-01-01 10:00:00" }
+      - actor_id: u1
+        action: AttachUserPolicy
+        outcome: success
+        event_time: "2026-01-01 11:00:00"
+        raw: '{"requestParameters":{"policyArn":"arn:aws:iam::aws:policy/AdministratorAccess"}}'
+  no_match:
+    - - { actor_id: u1, action: CreateAccessKey, outcome: success, event_time: "2026-01-01 10:00:00" }
+      - actor_id: u1
+        action: AttachUserPolicy
+        outcome: success
+        event_time: "2026-01-01 11:00:01"
+        raw: '{"requestParameters":{"policyArn":"arn:aws:iam::aws:policy/AdministratorAccess"}}'
+    - - { actor_id: u1, action: CreateAccessKey, outcome: success, event_time: "2026-01-01 10:00:00" }
+      - actor_id: u1
+        action: AttachUserPolicy
+        outcome: success
+        event_time: "2026-01-01 11:01:00"
+        raw: '{"requestParameters":{"policyArn":"arn:aws:iam::aws:policy/AdministratorAccess"}}'
+    - - { actor_id: u1, action: CreateAccessKey, outcome: success, event_time: "2026-01-01 10:00:00" }
+      - actor_id: u1
+        action: AttachUserPolicy
+        outcome: success
+        event_time: "2026-01-01 10:30:00"
+        raw: '{"requestParameters":{"policyArn":"arn:aws:iam::aws:policy/ReadOnlyAccess"}}'
+    - - { actor_id: u1, action: CreateAccessKey, outcome: success, event_time: "2026-01-01 10:00:00" }
+      - actor_id: u1
+        action: AttachUserPolicy
+        outcome: success
+        event_time: "2026-01-01 09:30:00"
+        raw: '{"requestParameters":{"policyArn":"arn:aws:iam::aws:policy/AdministratorAccess"}}'
+    - - { actor_id: u1, action: CreateAccessKey, outcome: success, event_time: "2026-01-01 10:00:00" }
+      - actor_id: u2
+        action: AttachUserPolicy
+        outcome: success
+        event_time: "2026-01-01 10:30:00"
+        raw: '{"requestParameters":{"policyArn":"arn:aws:iam::aws:policy/AdministratorAccess"}}'
+    - - { actor_id: u1, action: CreateAccessKey, outcome: failure, event_time: "2026-01-01 10:00:00" }
+      - actor_id: u1
+        action: AttachUserPolicy
+        outcome: success
+        event_time: "2026-01-01 10:30:00"
+        raw: '{"requestParameters":{"policyArn":"arn:aws:iam::aws:policy/AdministratorAccess"}}'
+    - - { actor_id: u1, action: CreateAccessKey, outcome: success, event_time: "2026-01-01 10:00:00" }
+      - actor_id: u1
+        action: AttachUserPolicy
+        outcome: failure
+        event_time: "2026-01-01 10:30:00"
+        raw: '{"requestParameters":{"policyArn":"arn:aws:iam::aws:policy/AdministratorAccess"}}'
+    - actor_id: u1
+      action: AttachUserPolicy
+      outcome: success
+      raw: '{"requestParameters":{"policyArn":"arn:aws:iam::aws:policy/AdministratorAccess"}}'
+    - - { actor_id: u1, action: CreateAccessKey, outcome: success, event_time: "2026-01-01 10:00:00" }
+      - actor_id: u1
+        action: AttachRolePolicy
+        outcome: success
+        event_time: "2026-01-01 10:30:00"
+        raw: '{"requestParameters":{"policyArn":"arn:aws:iam::aws:policy/AdministratorAccess"}}'

@@ -1,0 +1,160 @@
+{
+  "$defs": {
+    "ColumnHealth": {
+      "additionalProperties": false,
+      "properties": {
+        "column": {
+          "title": "Column",
+          "type": "string"
+        },
+        "used_by": {
+          "items": {
+            "type": "string"
+          },
+          "title": "Used By",
+          "type": "array"
+        },
+        "null_ratio": {
+          "anyOf": [
+            {
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Null Ratio"
+        }
+      },
+      "required": [
+        "column",
+        "used_by",
+        "null_ratio"
+      ],
+      "title": "ColumnHealth",
+      "type": "object"
+    },
+    "SourceCoverage": {
+      "additionalProperties": false,
+      "properties": {
+        "source": {
+          "title": "Source",
+          "type": "string"
+        },
+        "rules": {
+          "title": "Rules",
+          "type": "integer"
+        },
+        "last_event_time": {
+          "anyOf": [
+            {
+              "format": "date-time",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Last Event Time"
+        }
+      },
+      "required": [
+        "source",
+        "rules",
+        "last_event_time"
+      ],
+      "title": "SourceCoverage",
+      "type": "object"
+    },
+    "TechniqueCoverage": {
+      "additionalProperties": false,
+      "properties": {
+        "id": {
+          "title": "Id",
+          "type": "string"
+        },
+        "name": {
+          "title": "Name",
+          "type": "string"
+        },
+        "rules": {
+          "items": {
+            "type": "string"
+          },
+          "title": "Rules",
+          "type": "array"
+        },
+        "tests": {
+          "title": "Tests",
+          "type": "integer"
+        }
+      },
+      "required": [
+        "id",
+        "name",
+        "rules",
+        "tests"
+      ],
+      "title": "TechniqueCoverage",
+      "type": "object"
+    }
+  },
+  "additionalProperties": false,
+  "properties": {
+    "schema_version": {
+      "const": 1,
+      "default": 1,
+      "title": "Schema Version",
+      "type": "integer"
+    },
+    "rules": {
+      "title": "Rules",
+      "type": "integer"
+    },
+    "techniques": {
+      "items": {
+        "$ref": "#/$defs/TechniqueCoverage"
+      },
+      "title": "Techniques",
+      "type": "array"
+    },
+    "uncovered": {
+      "items": {
+        "type": "string"
+      },
+      "title": "Uncovered",
+      "type": "array"
+    },
+    "unlisted": {
+      "items": {
+        "type": "string"
+      },
+      "title": "Unlisted",
+      "type": "array"
+    },
+    "sources": {
+      "items": {
+        "$ref": "#/$defs/SourceCoverage"
+      },
+      "title": "Sources",
+      "type": "array"
+    },
+    "columns": {
+      "items": {
+        "$ref": "#/$defs/ColumnHealth"
+      },
+      "title": "Columns",
+      "type": "array"
+    }
+  },
+  "required": [
+    "rules",
+    "techniques",
+    "uncovered",
+    "unlisted",
+    "sources",
+    "columns"
+  ],
+  "title": "CoverageReport",
+  "type": "object"
+}

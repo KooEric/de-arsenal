@@ -27,6 +27,7 @@ members = [
     "de-pilum",
     "de-scorpio",
     "de-scutum",
+    "de-vigil",
     "pugio",
     "spatha",
 ]
@@ -931,6 +932,7 @@ dependencies = [
     { name = "de-pilum" },
     { name = "de-scorpio" },
     { name = "de-scutum" },
+    { name = "de-vigil" },
     { name = "pugio", extra = ["postgres"] },
     { name = "spatha" },
 ]
@@ -974,6 +976,7 @@ requires-dist = [
     { name = "de-pilum", editable = "packages/pilum" },
     { name = "de-scorpio", editable = "packages/scorpio" },
     { name = "de-scutum", editable = "packages/scutum" },
+    { name = "de-vigil", editable = "packages/vigil" },
     { name = "pugio", extras = ["postgres"], editable = "packages/pugio" },
     { name = "spatha", editable = "packages/spatha" },
 ]
@@ -1207,6 +1210,29 @@ requires-dist = [
     { name = "arsenal-core", editable = "packages/arsenal-core" },
     { name = "pyarrow", specifier = ">=17" },
     { name = "pydantic", specifier = ">=2.7" },
+]
+
+[[package]]
+name = "de-vigil"
+version = "0.7.3"
+source = { editable = "packages/vigil" }
+dependencies = [
+    { name = "arsenal-core" },
+    { name = "duckdb" },
+    { name = "pyarrow" },
+    { name = "pydantic" },
+    { name = "pyyaml" },
+    { name = "typer" },
+]
+
+[package.metadata]
+requires-dist = [
+    { name = "arsenal-core", editable = "packages/arsenal-core" },
+    { name = "duckdb", specifier = ">=1.0" },
+    { name = "pyarrow", specifier = ">=17" },
+    { name = "pydantic", specifier = ">=2" },
+    { name = "pyyaml", specifier = ">=6" },
+    { name = "typer", specifier = ">=0.12" },
 ]
 
 [[package]]

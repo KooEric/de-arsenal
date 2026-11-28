@@ -16,6 +16,8 @@ from arsenal.cli import app
 from httpx import Response
 from typer.testing import CliRunner
 
+from vigil.cli import app as vigil_app
+
 runner = CliRunner()
 
 
@@ -267,3 +269,149 @@ def test_csv_cleanup_recipe_standard_audit_scores_state_and_data(
     assert statuses["data_health.rows:transform.yaml"] == "pass"
     assert statuses["data_health.key_unique:transform.yaml"] == "pass"  # dedup: [id]
     assert snapshot() == before  # the audit wrote nothing outside .arsenal/censor/
+
+
+EVENT_COLUMNS = [
+    "event_id", "event_time", "source", "service", "action", "actor_type", "actor_id",
+    "src_ip", "region", "outcome", "mfa_used", "resource", "raw",
+]  # fmt: skip
+
+
+def _cloudtrail_project(tmp_path: Path) -> Path:
+    dest = tmp_path / "ct-proj"
+    init_result = runner.invoke(app, ["init", "cloudtrail-detect", "--dest", str(dest)])
+    assert init_result.exit_code == 0, init_result.output
+    run_result = runner.invoke(app, ["run", "--project", str(dest)])
+    assert run_result.exit_code == 0, run_result.output
+    return dest
+
+
+def test_cloudtrail_detect_recipe_builds_events(tmp_path: Path) -> None:
+    dest = _cloudtrail_project(tmp_path)
+    con = duckdb.connect()
+    try:
+        events = f"read_parquet('{dest}/data/events/*.parquet')"
+        columns = [row[0] for row in con.execute(f"DESCRIBE SELECT * FROM {events}").fetchall()]
+        total, distinct = con.execute(
+            f"SELECT count(*), count(DISTINCT event_id) FROM {events}"
+        ).fetchone() or (0, 0)
+        failed_login = con.execute(
+            f"SELECT outcome, mfa_used FROM {events} "
+            "WHERE action = 'ConsoleLogin' AND outcome = 'failure'"
+        ).fetchall()
+    finally:
+        con.close()
+    assert columns == EVENT_COLUMNS
+    assert (total, distinct) == (39, 39)  # the sample has 40 lines; one is a duplicate delivery
+    assert failed_login == [("failure", False)]
+
+
+def test_cloudtrail_detect_rules_pass_and_detect_once(tmp_path: Path) -> None:
+    dest = _cloudtrail_project(tmp_path)
+    rules = ["--rules", str(dest / "rules")]
+    run_args = ["run", *rules, "--events", str(dest / "data" / "events"),
+                "--out", str(dest / "data" / "alerts")]  # fmt: skip
+
+    tested = runner.invoke(vigil_app, ["test", *rules])
+    assert tested.exit_code == 0, tested.output
+    assert json.loads(tested.stdout) == {"rules": 5, "failed": {}}
+
+    first = runner.invoke(vigil_app, run_args)
+    assert first.exit_code == 0, first.output
+    assert json.loads(first.stdout)["by_rule"] == {
+        "aws-access-key-then-admin-policy": 1,
+        "aws-cloudtrail-logging-stopped": 1,
+        "aws-console-login-no-mfa": 1,
+        "aws-root-console-login": 1,
+        "aws-s3-bucket-exposure-change": 2,
+    }
+
+    second = runner.invoke(vigil_app, run_args)
+    assert second.exit_code == 0, second.output
+    assert json.loads(second.stdout)["new_alerts"] == 0
+
+    covered = runner.invoke(
+        vigil_app, ["coverage", *rules, "--events", str(dest / "data" / "events"), "--json-only"]
+    )
+    assert covered.exit_code == 0, covered.output
+    report = json.loads(covered.stdout)
+    assert report["unlisted"] == []
+    assert "T1078.004" not in report["uncovered"]
+    assert "T1110" in report["uncovered"]
+
+
+def test_cloudtrail_detect_readme_query_reads_the_alerts(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    dest = _cloudtrail_project(tmp_path)
+    run_args = ["run", "--rules", str(dest / "rules"), "--events", str(dest / "data" / "events"),
+                "--out", str(dest / "data" / "alerts")]  # fmt: skip
+    assert runner.invoke(vigil_app, run_args).exit_code == 0
+    monkeypatch.chdir(dest)
+    queried = runner.invoke(
+        app,
+        ["query", "SELECT rule_id, event_id, actor_id FROM './data/alerts/*.parquet'",
+         "--format", "jsonl"],
+    )  # fmt: skip
+    assert queried.exit_code == 0, queried.output
+    assert len(queried.output.strip().splitlines()) == 6
+
+
+def _real_log_line(**event: object) -> str:
+    base: dict[str, object] = {
+        "eventTime": "2026-11-20T08:00:00Z",
+        "eventSource": "signin.amazonaws.com",
+        "awsRegion": "us-east-1",
+        "sourceIPAddress": "192.0.2.1",
+    }
+    return json.dumps({"raw": json.dumps({**base, **event})})
+
+
+def test_cloudtrail_detect_transform_reads_real_event_shapes(tmp_path: Path) -> None:
+    dest = tmp_path / "ct-real"
+    assert runner.invoke(app, ["init", "cloudtrail-detect", "--dest", str(dest)]).exit_code == 0
+    (dest / "input" / "sample.jsonl").unlink()
+    session = {"attributes": {"mfaAuthenticated": "true"}}
+    lines = [
+        _real_log_line(eventID="switch-fail", eventName="SwitchRole",
+                       responseElements={"SwitchRole": "Failure"},
+                       userIdentity={"type": "IAMUser", "arn": "a1"}),
+        _real_log_line(eventID="mfa-fail", eventName="CheckMfa",
+                       responseElements={"CheckMfa": "Failure"},
+                       userIdentity={"type": "IAMUser", "arn": "a1"}),
+        _real_log_line(eventID="switch-ok", eventName="SwitchRole",
+                       responseElements={"SwitchRole": "Success"},
+                       userIdentity={"type": "IAMUser", "arn": "a1"}),
+        _real_log_line(eventID="api-mfa", eventName="ListBuckets",
+                       userIdentity={"type": "AssumedRole", "arn": "a2",
+                                     "sessionContext": session}),
+        _real_log_line(eventID="api-no-mfa", eventName="ListBuckets",
+                       userIdentity={"type": "IAMUser", "arn": "a3", "sessionContext":
+                                     {"attributes": {"mfaAuthenticated": "false"}}}),
+        _real_log_line(eventID="login", eventName="ConsoleLogin",
+                       userIdentity={"type": "IAMUser", "arn": "a1"},
+                       additionalEventData={"MFAUsed": "Yes"},
+                       responseElements={"ConsoleLogin": "Success"}),
+        _real_log_line(eventID="no-info", eventName="ListBuckets",
+                       userIdentity={"type": "IAMUser", "arn": "a1"}),
+    ]  # fmt: skip
+    (dest / "input" / "real.jsonl").write_text("\n".join(lines) + "\n", encoding="utf-8")
+    run_result = runner.invoke(app, ["run", "--project", str(dest)])
+    assert run_result.exit_code == 0, run_result.output
+
+    con = duckdb.connect()
+    try:
+        rows = con.execute(
+            f"SELECT event_id, outcome, mfa_used FROM read_parquet('{dest}/data/events/*.parquet')"
+        ).fetchall()
+    finally:
+        con.close()
+    assert {row[0]: (row[1], row[2]) for row in rows} == {
+        "switch-fail": ("failure", None),
+        "mfa-fail": ("failure", None),
+        "switch-ok": ("success", None),
+        "api-mfa": ("success", True),
+        "api-no-mfa": ("success", False),
+        "login": ("success", True),
+        "no-info": ("success", None),
+    }

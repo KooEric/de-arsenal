@@ -1,0 +1,15 @@
+id: aws-root-console-login
+title: 루트 계정 콘솔 로그인
+severity: high
+attack: [T1078.004]
+source: cloudtrail
+query: |
+  SELECT * FROM events
+  WHERE action = 'ConsoleLogin' AND actor_type = 'Root' AND outcome = 'success'
+tests:
+  match:
+    - { action: ConsoleLogin, actor_type: Root, outcome: success }
+  no_match:
+    - { action: ConsoleLogin, actor_type: IAMUser, outcome: success }
+    - { action: ConsoleLogin, actor_type: Root, outcome: failure }
+    - { action: GetCallerIdentity, actor_type: Root, outcome: success }

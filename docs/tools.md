@@ -17,6 +17,7 @@ DE Arsenal은 하나의 거대한 프레임워크가 아니라, Arrow/Parquet와
 | [Aquila](../packages/aquila/README.md) | 어떤 데이터셋이 어디 있고 무엇이 무엇을 읽는지 찾을 때 | `aquila scan` → `aquila search` | 파일 하나, 다른 도구가 의존하지 않음 |
 | [Pilum](../packages/pilum/README.md) | 변환 결과의 변경분을 HTTP 끝점·Slack으로 보낼 때 (experimental) | `pilum plan` → `pilum run` | 바뀐 레코드만, 2xx 뒤에만 기록 |
 | [Censor](../packages/censor/README.md) | 프로젝트를 넘기기 전에 믿을 만한지 점검할 때 (experimental) | `censor audit .` 또는 `arsenal eval .` | 실행 없이 파일만 읽고 등급·근거·고칠 방법을 낸다 |
+| [Vigil](../packages/vigil/README.md) | 보안 로그에 탐지 룰을 실행하고 룰이 없는 곳을 볼 때 (experimental) | `arsenal init cloudtrail-detect` → `vigil test` → `vigil run` | 룰을 파일로 관리하고, 테스트 없는 룰은 통과하지 못한다 |
 | [arsenal-core](../packages/arsenal-core/README.md) | 자체 도구를 만들거나 상태·재시도 규약을 재사용할 때 | Python에서 `StateStore` 사용 | 결정적 unit ID와 SQLite 상태 저장소로 재개·멱등 기반을 제공한다. |
 
 ## 1. Arsenal — 대부분의 사용자에게 시작점
@@ -213,7 +214,35 @@ Standard 단계는 읽기만 한다. 실행 상태는 `.arsenal/censor/tmp/`에 
 리포트 형식은 0.x에서 필드가 추가될 수 있다.
 상세는 [packages/censor/README.md](../packages/censor/README.md).
 
-## 11. arsenal-core — 확장 도구를 위한 신뢰성 기반
+## 11. Vigil (`de-vigil`) — 탐지 룰 실행·커버리지 (experimental)
+
+정규화된 보안 로그(`events` 테이블, 컬럼 13개)에 탐지 룰을 실행한다. 룰은 YAML 파일 하나이고, 메타데이터와
+`events`를 읽는 SELECT 한 개, 걸려야 하는 케이스와 걸리면 안 되는 케이스를 담는다. 케이스가 없는 룰은
+`vigil test`를 통과하지 못한다. 로그 소스는 CloudTrail 관리 이벤트 하나다.
+
+```bash
+pip install de-vigil                                  # de-arsenal은 필요 없다
+arsenal init cloudtrail-detect && arsenal run         # 합성 샘플 → data/events
+vigil test                                            # 룰마다 픽스처로 검증
+vigil run --events data/events --out data/alerts      # 새 alert만 Parquet에 추가
+vigil run --events data/events --out data/alerts --fail-on high   # high 이상이 새로 생기면 종료 코드 1
+vigil coverage --events data/events                   # 룰이 없는 ATT&CK 기법, 컬럼 NULL 비율
+vigil unpack ./cloudtrail-logs --out input/ct.jsonl  # CloudTrail 원본(*.json, *.json.gz)을 JSONL로
+```
+
+alert는 (룰, 이벤트) 쌍마다 한 번만 기록한다. 같은 이벤트에 다시 실행하면 0건이다. 룰의 케이스는 이벤트를
+하나씩 넣은 빈 `events`에서 따로 실행하고, `vigil run`과 같은 방식으로 "탐지된 이벤트"를 센다.
+룰 SQL은 `events`만 읽을 수 있고, 파일이나 네트워크는 막혀 있다. `.yaml`과 `.yml` 룰 파일을 모두 읽는다.
+
+종료 코드는 0(정상), 1(룰 테스트 실패, 실행 중 룰 오류, 또는 `--fail-on` 이상의 새 alert), 2(룰 파일 오류,
+이벤트 파일 없음, 컬럼이나 자료형 불일치, `--out`을 읽거나 쓸 수 없음)다. stdout에는 JSON 하나, 사람이 읽는
+내용은 stderr에 나온다.
+
+한계: 배치만 하고, `events`를 메모리에 올려 읽는다. 같은 `--out`에 `vigil run`을 동시에 두 개 돌리면 alert가
+중복될 수 있다. 룰 SQL에는 메모리 한도와 시간 제한이 없다. 커버리지의 기준 기법 목록은 직접 고른 20개다.
+상세는 [packages/vigil/README.md](../packages/vigil/README.md).
+
+## 12. arsenal-core — 확장 도구를 위한 신뢰성 기반
 
 일반 사용자는 직접 설치할 필요가 없지만, DE Arsenal에 새 source/sink/도구를
 붙일 때 공통 상태 모델과 재시도 규약을 재사용할 수 있다.

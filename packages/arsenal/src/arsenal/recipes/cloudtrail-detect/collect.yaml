@@ -1,0 +1,8 @@
+name: cloudtrail-detect
+source:
+  type: file
+  path: ./input/*.jsonl   # <- `vigil unpack`으로 만든 JSONL을 이 디렉터리에 넣으세요
+  format: jsonl
+sink:
+  type: parquet
+  path: ./data/raw
