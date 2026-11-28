@@ -1,6 +1,7 @@
 import gzip
 import json
 from pathlib import Path
+from typing import Any
 
 import pytest
 
@@ -44,3 +45,43 @@ def test_missing_or_empty_source_is_fatal(tmp_path: Path) -> None:
     (tmp_path / "empty").mkdir()
     with pytest.raises(FatalError, match="no CloudTrail files"):
         unpack_cloudtrail(tmp_path / "empty", tmp_path / "o.jsonl")
+
+
+def test_truncated_gzip_is_fatal_and_writes_nothing(tmp_path: Path) -> None:
+    src = tmp_path / "src"
+    src.mkdir()
+    full = gzip.compress(_records(*[f"e{i}" for i in range(200)]).encode())
+    (src / "cut.json.gz").write_bytes(full[: len(full) // 2])
+    out = tmp_path / "events.jsonl"
+    with pytest.raises(FatalError, match="cannot read .*cut.json.gz"):
+        unpack_cloudtrail(src, out)
+    assert not out.exists()
+    assert list(tmp_path.glob(".*.tmp")) == []
+
+
+def test_corrupt_gzip_is_fatal(tmp_path: Path) -> None:
+    src = tmp_path / "src"
+    src.mkdir()
+    full = bytearray(gzip.compress(_records(*[f"e{i}" for i in range(200)]).encode()))
+    full[20:40] = b"\xff" * 20
+    (src / "bad.json.gz").write_bytes(bytes(full))
+    with pytest.raises(FatalError, match="cannot read .*bad.json.gz"):
+        unpack_cloudtrail(src, tmp_path / "events.jsonl")
+
+
+def test_write_failure_is_fatal_and_leaves_no_temp_file(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    src = tmp_path / "src"
+    src.mkdir()
+    (src / "a.json").write_text(_records("e1"), encoding="utf-8")
+    out = tmp_path / "events.jsonl"
+
+    def boom(*_args: Any, **_kwargs: Any) -> None:
+        raise OSError("disk full")
+
+    monkeypatch.setattr("vigil.unpack.os.replace", boom)
+    with pytest.raises(FatalError, match="cannot write .*disk full"):
+        unpack_cloudtrail(src, out)
+    assert not out.exists()
+    assert list(tmp_path.glob(".*.tmp")) == []

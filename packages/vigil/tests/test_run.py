@@ -2,6 +2,7 @@ from datetime import datetime
 from pathlib import Path
 
 import pyarrow.parquet as pq
+import pytest
 from _events import write_events
 
 from vigil.events import load_events
@@ -76,3 +77,25 @@ def test_no_detections_writes_no_file(tmp_path: Path) -> None:
     quiet = ROOT.model_copy(update={"query": "SELECT * FROM events WHERE actor_type = 'Nobody'"})
     run_rules([quiet], load_events(_lake(tmp_path)), out, NOW)
     assert not out.exists() or not list(out.iterdir())
+
+
+def test_rule_query_ending_in_line_comment_still_runs(tmp_path: Path) -> None:
+    commented = Rule(
+        id="commented", title="t", severity="high", attack=["T1078.004"], source="cloudtrail",
+        query="SELECT * FROM events WHERE actor_type = 'Root' -- note",
+    )  # fmt: skip
+    summary = run_rules([commented], load_events(_lake(tmp_path)), tmp_path / "alerts", NOW)
+    assert summary.failed == {}
+    assert summary.new_by_rule == {"commented": 1}
+
+
+def test_failed_write_leaves_no_temp_file(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    def boom(_table: object, where: Path) -> None:
+        where.write_bytes(b"partial")
+        raise OSError("disk full")
+
+    monkeypatch.setattr("vigil.run.pq.write_table", boom)
+    out = tmp_path / "alerts"
+    with pytest.raises(OSError, match="disk full"):
+        run_rules([ROOT], load_events(_lake(tmp_path)), out, NOW)
+    assert list(out.glob("*")) == [] and list(out.glob(".*")) == []

@@ -25,6 +25,10 @@ def test_technique_list_is_valid_and_unique() -> None:
     techniques = load_techniques()
     assert len(techniques) == 20
     assert len({t.id for t in techniques}) == 20
+    ids = [t.id for t in techniques]
+    assert "T1685.002" in ids
+    assert not any(i.startswith("T1562") for i in ids)
+    assert ids == sorted(ids)
 
 
 def test_coverage_from_rules_only() -> None:

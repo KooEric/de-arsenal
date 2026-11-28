@@ -10,6 +10,7 @@ from __future__ import annotations
 import gzip
 import json
 import os
+import zlib
 from pathlib import Path
 from typing import Any
 
@@ -32,10 +33,16 @@ def unpack_cloudtrail(src_dir: Path, out_file: Path) -> int:
                     raw = json.dumps(record, ensure_ascii=False, separators=(",", ":"))
                     handle.write(json.dumps({"raw": raw}, ensure_ascii=False) + "\n")
                     count += 1
+        os.replace(temp, out_file)
     except FatalError:
         temp.unlink(missing_ok=True)
         raise
-    os.replace(temp, out_file)
+    except OSError as e:
+        temp.unlink(missing_ok=True)
+        raise FatalError(f"cannot write {out_file}: {e}") from e
+    except BaseException:
+        temp.unlink(missing_ok=True)
+        raise
     return count
 
 
@@ -44,7 +51,7 @@ def _records(file: Path) -> list[Any]:
     try:
         with opener(file, "rt", encoding="utf-8") as handle:
             document: Any = json.load(handle)
-    except (OSError, ValueError) as e:
+    except (OSError, ValueError, EOFError, zlib.error) as e:
         raise FatalError(f"cannot read {file}: {e}") from e
     records: Any = document.get("Records") if isinstance(document, dict) else None  # pyright: ignore[reportUnknownMemberType, reportUnknownVariableType]
     if not isinstance(records, list):

@@ -68,7 +68,7 @@ def run_rules(
         try:
             hits = con.execute(
                 "SELECT DISTINCT e.event_id, e.event_time, e.actor_id "
-                f"FROM ({rule.query}) AS q JOIN events AS e ON e.event_id = q.event_id "
+                f"FROM ({rule.query}\n) AS q JOIN events AS e ON e.event_id = q.event_id "
                 "ORDER BY e.event_time, e.event_id"
             ).fetchall()
         except duckdb.Error as e:
@@ -105,5 +105,9 @@ def _write(out_dir: Path, rows: list[dict[str, Any]], detected_at: datetime) -> 
     stamp = detected_at.strftime("%Y%m%dT%H%M%S")
     final = out_dir / f"alerts-{stamp}-{uuid4().hex[:8]}.parquet"
     temp = out_dir / f".{final.name}.tmp"
-    pq.write_table(pa.Table.from_pylist(rows, schema=ALERT_SCHEMA), temp)  # pyright: ignore[reportUnknownMemberType]
-    os.replace(temp, final)
+    try:
+        pq.write_table(pa.Table.from_pylist(rows, schema=ALERT_SCHEMA), temp)  # pyright: ignore[reportUnknownMemberType]
+        os.replace(temp, final)
+    except BaseException:
+        temp.unlink(missing_ok=True)
+        raise
